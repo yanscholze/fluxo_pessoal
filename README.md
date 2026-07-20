@@ -1,108 +1,80 @@
-# vinext-starter
+# Fluxo Pessoal
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+O Fluxo é um assistente financeiro pessoal pensado para transformar dados em decisões. O projeto reúne uma aplicação Web para configuração e administração e um aplicativo Android para o uso financeiro diário.
 
-## Prerequisites
+## Estado atual
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+- Dashboard financeiro responsivo, com temas claro e escuro.
+- Contas, cartões, faturas, compras, parcelas, recorrências, reservas e planejamento.
+- Importação de faturas e extratos, além da base de OCR para leitura de cupons.
+- Autenticação própria com isolamento dos dados por usuário.
+- Sincronização entre Web e Android.
+- Assistente financeiro na Home, com dicas contextuais e perguntas sobre os dados do usuário.
+- Perfil com foto, nome, alteração de senha, exportação de dados e recomendações.
+- Caixa de sugestões para a conta desenvolvedora.
 
-## Sites Lifecycle
+O build público do Android ainda não foi gerado. Antes de cada envio para o Expo/EAS, as funcionalidades devem ser validadas manualmente na Web e no ambiente de desenvolvimento mobile.
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+## Arquitetura
 
-This starter does not use `wrangler.jsonc`.
+| Caminho | Responsabilidade |
+| --- | --- |
+| `app/` | Interface Web e rotas HTTP da API |
+| `app/api/v1/` | Autenticação, sincronização, perfil, IA e OCR |
+| `lib/` | Regras financeiras, importação, recompensas, calendário e autenticação |
+| `db/` | Schema Drizzle e acesso ao banco D1 |
+| `drizzle/` | Migrações versionadas do banco |
+| `mobile/` | Aplicativo Android em Expo/React Native |
+| `tests/` | Testes de regras e contratos da Web/API |
+| `docs/` | Documentação técnica complementar |
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+## Tecnologias
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+- Next.js 16, React 19 e TypeScript
+- Vinext/Vite sobre Cloudflare Workers
+- Cloudflare D1 com Drizzle ORM
+- Expo 57 e React Native para Android
+- OpenAI Responses API no backend para os recursos de IA
 
-## Included Shape
+## Desenvolvimento Web
 
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+Requisitos: Node.js 22.13 ou mais recente e npm.
 
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm ci
+npm run dev
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Comandos principais:
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+```bash
+npm run lint
+npm run build
+npm run test:imports
+npm run test:rewards
+npm run test:layout
+npm run test:mobile-auth
+npm run test:sync
+npm run test:theme
+npm run test:ocr
+```
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+As credenciais, a chave da OpenAI e os bindings do banco não fazem parte do repositório. Eles devem ser configurados como secrets no ambiente de hospedagem.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Desenvolvimento Android
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+```bash
+cd mobile
+npm ci
+npm run typecheck
+npm test
+npm start
+```
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+O app utiliza armazenamento local seguro e sincronização autenticada com a API. A publicação por EAS só deve ocorrer após a validação funcional solicitada pelo responsável pelo projeto.
 
-## Diagnostic Commands
+## Segurança dos dados
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build, validate, and verify the rendered development-preview metadata
-- `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Cada registro financeiro é associado ao identificador do proprietário. As rotas protegidas resolvem a sessão no servidor e não aceitam um proprietário arbitrário enviado pelo cliente. Alterar a senha revoga as sessões Web e os dispositivos móveis autorizados.
 
-Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
-
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Não envie tokens, senhas, arquivos `.env` ou chaves de API para o GitHub.
