@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { PeriodSwitcher } from "../components/PeriodSwitcher";
-import { accountBalanceAtMonth, defaultInvoiceMonthForCard, invoiceClosingDate, invoiceDueDate, transactionsForInvoiceMonth } from "../finance-period";
+import { accountBalanceAtMonth, cardLimitUsage, defaultInvoiceMonthForCard, invoiceClosingDate, invoiceDueDate, transactionsForInvoiceMonth } from "../finance-period";
 import type { Palette } from "../theme";
 import type { FinanceCard, FinanceSnapshot } from "../types";
 
@@ -33,7 +33,7 @@ export function CardsScreen({ snapshot, month, onMonth, palette, onImport, onPay
   const purchases = related.filter((item) => item.type === "expense" && item.paymentMethod === "credit");
   const invoice = purchases.reduce((sum, item) => sum + item.amount, 0);
   const paid = related.filter((item) => item.type === "transfer" && item.source === "invoice-payment").reduce((sum, item) => sum + item.amount, 0);
-  const remaining = Math.max(0, invoice - paid); const usage = card?.limit ? Math.min(100, remaining / card.limit * 100) : 0;
+  const remaining = Math.max(0, invoice - paid); const limitUsed = card ? cardLimitUsage(snapshot.transactions, card, month) : 0; const usage = card?.limit ? Math.min(100, limitUsed / card.limit * 100) : 0;
   const linked = card ? snapshot.accounts.find((item) => item.name === card.linkedAccount) : undefined;
   const debitBalance = linked ? accountBalanceAtMonth(linked, snapshot.transactions, month, currentMonth) : 0;
   const rewardRows = card ? snapshot.transactions.filter((item) => item.cardId === card.id && item.type === "expense" && item.status !== "planned" && (item.invoiceMonth ?? item.date.slice(0, 7)) <= month) : [];
@@ -60,11 +60,11 @@ export function CardsScreen({ snapshot, month, onMonth, palette, onImport, onPay
         }}
       />
       {card && <>
-        <View style={styles.cardIdentity}><View><Text style={styles.cardName}>{card.name}</Text><Text style={styles.cardMeta}>{card.brand} · Final {card.last4 || "••••"} · {card.kind === "credit" ? "Crédito" : "Débito"}</Text></View><View style={styles.position}><Text style={styles.positionText}>{selectedIndex + 1}/{snapshot.cards.length}</Text></View></View>
+        <View style={styles.cardIdentity}><View><Text style={styles.cardName}>{card.name}{card.favorite ? "  ★" : ""}</Text><Text style={styles.cardMeta}>{card.brand} · Final {card.last4 || "••••"} · {card.kind === "credit" ? "Crédito" : "Débito"}</Text></View><View style={styles.position}><Text style={styles.positionText}>{selectedIndex + 1}/{snapshot.cards.length}</Text></View></View>
         {card.kind === "credit" ? <View style={styles.invoiceCard}>
           <View style={styles.invoiceTop}><View><Text style={styles.label}>FATURA DE {month.slice(5, 7)}/{month.slice(0, 4)}</Text><Text style={styles.invoiceValue}>{currency.format(invoice)}</Text><Text style={styles.remaining}>{remaining ? `${currency.format(remaining)} ainda em aberto` : invoice ? "Fatura paga" : "Nenhuma compra nesta competência"}</Text></View><View style={[styles.status, remaining === 0 && invoice > 0 && styles.statusPaid]}><Text style={[styles.statusText, remaining === 0 && invoice > 0 && styles.statusTextPaid]}>{remaining ? "ABERTA" : invoice ? "PAGA" : "SEM FATURA"}</Text></View></View>
           <View style={styles.progress}><View style={[styles.progressFill, { width: `${usage}%` }]} /></View>
-          <View style={styles.metrics}><Metric label="Já pago" value={currency.format(paid)} palette={palette} /><Metric label="Compras" value={String(purchases.length)} palette={palette} /><Metric label="Limite usado" value={`${Math.round(usage)}%`} palette={palette} /><Metric label="Disponível" value={currency.format(Math.max(0, card.limit - remaining))} palette={palette} /></View>
+          <View style={styles.metrics}><Metric label="Já pago" value={currency.format(paid)} palette={palette} /><Metric label="Compras" value={String(purchases.length)} palette={palette} /><Metric label="Limite usado" value={currency.format(limitUsed)} palette={palette} /><Metric label="Disponível" value={currency.format(Math.max(0, card.limit - limitUsed))} palette={palette} /></View>
           <View style={styles.dates}><View><Text style={styles.dateLabel}>FECHA EM</Text><Text style={styles.dateValue}>{shortDate(invoiceClosingDate(card, month))}</Text></View><View><Text style={styles.dateLabel}>VENCE EM</Text><Text style={styles.dateValue}>{shortDate(invoiceDueDate(card, month))}</Text></View></View>
         </View> : <View style={styles.invoiceCard}><Text style={styles.label}>SALDO DA CONTA VINCULADA</Text><Text style={styles.invoiceValue}>{currency.format(debitBalance)}</Text><Text style={styles.remaining}>{linked?.name ?? card.linkedAccount}</Text><View style={styles.debitNote}><Text style={styles.debitNoteText}>As compras deste cartão abatem diretamente deste saldo.</Text></View></View>}
         <View style={styles.actions}>

@@ -5,17 +5,17 @@ import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRe
 import { createPortal } from "react-dom";
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Award, Banknote, Bell, CalendarDays,
-  ChartNoAxesCombined, Check, ChevronLeft, ChevronRight,
+  ChartNoAxesCombined, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   Camera, CircleDollarSign, Cloud, CloudOff, Coins, CreditCard, Download, FileJson, FileUp, Gift, GripVertical,
   Landmark, LayoutDashboard, LockKeyhole, LogOut, MapPin, Menu, Moon, MoreHorizontal, Pencil, PiggyBank, Plane, Plus, RotateCcw,
   History, KeyRound, MessageSquare, ReceiptText, RefreshCw, Search, Send, Settings2, Sparkles, Sun,
-  Tags, Target, Trash2, TrendingUp, UserPlus, WalletCards, X, Repeat2,
+  Star, Tags, Target, Trash2, TrendingUp, UserPlus, WalletCards, X, Repeat2,
 } from "lucide-react";
 import { clearFinanceLocalData, useFinanceSync, type SyncStatus } from "./use-finance-sync";
 import { businessDaysInMonth, effectiveRecurringDate } from "../lib/brazil-calendar";
 import { parseCsv, parseOfx } from "../lib/import-parser";
 import { rewardFor, rewardSnapshot } from "../lib/rewards";
-import { accountBalanceAtMonth, calendarMonthOf, contextualFinancialTip, defaultInvoiceMonthForCard, financialMonthOf, invoiceClosingDate, invoiceDueDate, transactionsForCommitmentMonth, transactionsForMonth } from "../lib/finance-period";
+import { accountBalanceAtMonth, calendarMonthOf, cardLimitUsage, contextualFinancialTip, defaultInvoiceMonthForCard, financialMonthOf, invoiceClosingDate, invoiceDueDate, transactionsForCommitmentMonth, transactionsForMonth } from "../lib/finance-period";
 import { DEFAULT_DASHBOARD_WIDGET_ORDER, normalizeDashboardWidgetOrder, reorderDashboardWidgets, type DashboardWidgetId } from "../lib/dashboard-layout";
 import { tripExpenseSummary, tripTotalInCurrency } from "../lib/travel";
 import type {
@@ -335,6 +335,7 @@ function FinanceApplication({ user, onLogout }: { user: SessionUser; onLogout: (
         onSelectMonth={selectMonth}
         onPayInvoice={async (payment) => { const result = await finance.payInvoice(payment); flash(`Fatura paga. Restante: ${brl.format(result.remaining)}`); }}
         onRedeemReward={async (redemption) => { await finance.redeemReward(redemption); flash(redemption.kind === "points" ? "Pontos resgatados e saldo atualizado" : "Cashback transferido para a conta selecionada"); }}
+        onSaveCardOrder={async (ids, favoriteId) => { const ordered = await finance.saveCardOrder(ids, favoriteId); flash("Ordem e cartão favorito atualizados"); return ordered; }}
       />}
     </main>
 
@@ -640,7 +641,7 @@ function ProductView(props: {
   view: View; transactions: FinanceTransaction[]; monthTransactions: FinanceTransaction[]; accounts: FinanceAccount[]; categories: FinanceCategory[]; cards: FinanceCard[]; trips: FinanceTrip[]; rewardRedemptions: FinanceRewardRedemption[]; recurringRules: FinanceRecurringRule[];
   salaryRule: FinanceSalaryRule | null; benefitRule: FinanceBenefitRule | null; exchangeRate: FinanceExchangeRate | null;
   selectedMonth: MonthOption; totals: ReturnType<typeof totalsFor>; onNew: () => void; onImport: () => void; onConfigureIncome: () => void;
-  onCategories: () => void; onRecurring: () => void; onEditTransaction: (item: FinanceTransaction) => void; onEditAccount: (account: FinanceAccount | null) => void; onEditCard: (card: FinanceCard | null) => void; onEditTrip: (trip: FinanceTrip | null) => void; onSelectMonth: (month: string) => void; onPayInvoice: (payment: { cardId: string; invoiceMonth: string; sourceAccount: string; amount: number; date?: string }) => Promise<void>; onRedeemReward: (redemption: Omit<FinanceRewardRedemption, "id" | "createdAt">) => Promise<void>;
+  onCategories: () => void; onRecurring: () => void; onEditTransaction: (item: FinanceTransaction) => void; onEditAccount: (account: FinanceAccount | null) => void; onEditCard: (card: FinanceCard | null) => void; onEditTrip: (trip: FinanceTrip | null) => void; onSelectMonth: (month: string) => void; onPayInvoice: (payment: { cardId: string; invoiceMonth: string; sourceAccount: string; amount: number; date?: string }) => Promise<void>; onRedeemReward: (redemption: Omit<FinanceRewardRedemption, "id" | "createdAt">) => Promise<void>; onSaveCardOrder: (ids: string[], favoriteId?: string) => Promise<FinanceCard[]>;
 }) {
   if (props.view === "Lançamentos") return <TransactionsView {...props} transactions={props.monthTransactions} />;
   if (props.view === "Contas") return <AccountsView accounts={props.accounts} transactions={props.transactions} categories={props.categories} selectedMonth={props.selectedMonth} onNew={props.onNew} onEdit={props.onEditAccount} onEditTransaction={props.onEditTransaction} />;
@@ -704,19 +705,24 @@ function AccountsView({ accounts, transactions, categories, selectedMonth, onNew
 
 function CardArtwork({ card }: { card: FinanceCard }) {
   const knownArtwork = card.color === "uv" || card.color === "caju";
-  return <article className={`credit-card-visual card-photo ${card.color === "uv" ? "uv-photo" : card.color === "caju" ? "caju-photo" : "custom-card"}`} role="img" aria-label={`${card.name}, ${card.brand} ${card.tier}`}>
-    {card.imageData ? <NextImage className="custom-card-image" src={card.imageData} alt="" fill unoptimized /> : !knownArtwork && <><div className="credit-card-top"><strong>{card.name}</strong><span>{card.brand}</span></div><span className="card-chip" /><div className="card-owner"><small>Cartão personalizado</small><strong>•••• {card.last4}</strong></div></>}
+  return <article className={`credit-card-visual card-photo ${card.color === "uv" ? "uv-photo" : card.color === "caju" ? "caju-photo" : "custom-card"}`} role="img" aria-label={`${card.name}, ${card.brand} ${card.tier}`} onDragStart={(event) => event.preventDefault()}>
+    {card.imageData ? <NextImage className="custom-card-image" src={card.imageData} alt="" fill unoptimized draggable={false} /> : !knownArtwork && <><div className="credit-card-top"><strong>{card.name}</strong><span>{card.brand}</span></div><span className="card-chip" /><div className="card-owner"><small>Cartão personalizado</small><strong>•••• {card.last4}</strong></div></>}
   </article>;
 }
 
-function CardsView({ cards, accounts, transactions, rewardRedemptions, selectedMonth, exchangeRate, onNew, onImport, onEditTransaction, onEditCard, onSelectMonth, onPayInvoice, onRedeemReward }: {
+function CardThumbnail({ card }: { card: FinanceCard }) {
+  return <span className={`mini-card ${card.color}`}>{card.imageData ? <NextImage src={card.imageData} alt="" width={84} height={53} unoptimized draggable={false} /> : <CreditCard size={16} />}</span>;
+}
+
+function CardsView({ cards, accounts, transactions, rewardRedemptions, selectedMonth, exchangeRate, onNew, onImport, onEditTransaction, onEditCard, onSelectMonth, onPayInvoice, onRedeemReward, onSaveCardOrder }: {
   cards: FinanceCard[]; accounts: FinanceAccount[]; transactions: FinanceTransaction[]; rewardRedemptions: FinanceRewardRedemption[]; selectedMonth: MonthOption; exchangeRate: FinanceExchangeRate | null;
-  onNew: () => void; onImport: () => void; onEditTransaction: (item: FinanceTransaction) => void; onEditCard: (card: FinanceCard | null) => void; onSelectMonth: (month: string) => void; onPayInvoice: (payment: { cardId: string; invoiceMonth: string; sourceAccount: string; amount: number; date?: string }) => Promise<void>; onRedeemReward: (redemption: Omit<FinanceRewardRedemption, "id" | "createdAt">) => Promise<void>;
+  onNew: () => void; onImport: () => void; onEditTransaction: (item: FinanceTransaction) => void; onEditCard: (card: FinanceCard | null) => void; onSelectMonth: (month: string) => void; onPayInvoice: (payment: { cardId: string; invoiceMonth: string; sourceAccount: string; amount: number; date?: string }) => Promise<void>; onRedeemReward: (redemption: Omit<FinanceRewardRedemption, "id" | "createdAt">) => Promise<void>; onSaveCardOrder: (ids: string[], favoriteId?: string) => Promise<FinanceCard[]>;
 }) {
-  const [selectedId, setSelectedId] = useState(cards[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(cards.find((item) => item.favorite)?.id ?? cards[0]?.id ?? "");
   const [payOpen, setPayOpen] = useState(false);
   const [rewardsOpen, setRewardsOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragDelta, setDragDelta] = useState(0);
   const card = cards.find((item) => item.id === selectedId) ?? cards[0];
@@ -741,16 +747,18 @@ function CardsView({ cards, accounts, transactions, rewardRedemptions, selectedM
   const linkedAccount = accounts.find((item) => item.name === card.linkedAccount);
   const accountBalance = linkedAccount ? accountBalanceAtMonth(linkedAccount, transactions, selectedMonth.key) : 0;
   const futureMap = new Map<string, number>();
-  transactions.filter((item) => item.type === "expense" && belongsToCard(item) && (item.invoiceMonth ?? item.date.slice(0, 7)) > selectedMonth.key).forEach((item) => { const key = item.invoiceMonth ?? item.date.slice(0, 7); futureMap.set(key, (futureMap.get(key) ?? 0) + item.amount); });
-  const future = [...futureMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(0, 4);
-  const futureTotal = [...futureMap.values()].reduce((sum, amount) => sum + amount, 0);
+  transactions.filter((item) => item.status !== "planned" && belongsToCard(item) && (item.invoiceMonth ?? item.date.slice(0, 7)) > selectedMonth.key).forEach((item) => { const key = item.invoiceMonth ?? item.date.slice(0, 7); const current = futureMap.get(key) ?? 0; if (item.type === "expense") futureMap.set(key, current + item.amount); else if (item.type === "transfer" && item.source === "invoice-payment" && item.cardId === card.id) futureMap.set(key, current - item.amount); });
+  const future = [...futureMap.entries()].map(([key, amount]) => [key, Math.max(0, amount)] as const).filter(([, amount]) => amount > .005).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 4);
+  const futureTotal = [...futureMap.values()].reduce((sum, amount) => sum + Math.max(0, amount), 0);
   const usdRate = exchangeRate?.sell || card.manualUsdRate;
   const rewardTransactions = transactions.filter((item) => item.type === "expense" && item.status !== "planned" && belongsToCard(item) && (item.invoiceMonth ?? item.date.slice(0, 7)) <= selectedMonth.key);
   const rewardTotals = rewardTransactions.reduce((totals, item) => { const reward = rewardFor(item, card, usdRate); return { points: totals.points + reward.points, cashback: totals.cashback + reward.cashback }; }, { points: 0, cashback: 0 });
   const cardRedemptions = rewardRedemptions.filter((item) => item.cardId === card.id && item.date.slice(0, 7) <= selectedMonth.key);
   const points = Math.max(0, rewardTotals.points - cardRedemptions.filter((item) => item.kind === "points").reduce((sum, item) => sum + item.amount, 0));
   const cashback = Math.max(0, rewardTotals.cashback - cardRedemptions.filter((item) => item.kind === "cashback").reduce((sum, item) => sum + item.amount, 0));
-  const limitPercent = card.limit > 0 ? Math.min(100, remainingInvoice / card.limit * 100) : 0;
+  const limitUsed = cardLimitUsage(transactions, card, selectedMonth.key);
+  const availableLimit = Math.max(0, card.limit - limitUsed);
+  const limitPercent = card.limit > 0 ? Math.min(100, limitUsed / card.limit * 100) : 0;
   const closingDate = invoiceClosingDate(card, selectedMonth.key);
   const dueDate = invoiceDueDate(card, selectedMonth.key);
 
@@ -775,23 +783,72 @@ function CardsView({ cards, accounts, transactions, rewardRedemptions, selectedM
   }
 
   return <div className="product-page page-enter cards-page">
-    <section className="card-carousel-head"><div className="card-tabs" aria-label="Selecionar cartão">{cards.map((item, index) => <button key={item.id} className={item.id === card.id ? "active" : ""} onClick={() => selectIndex(index)}><span className={`mini-card ${item.color}`}><CreditCard size={16} /></span><span><strong>{item.name}</strong><small>{item.kind === "credit" ? `${item.brand} ${item.tier}` : "Débito no saldo"}</small></span></button>)}</div><button className="secondary-button" onClick={() => onEditCard(null)}><Plus size={16} /> Novo cartão</button></section>
+    <section className="card-carousel-head"><div className="card-tabs" aria-label="Selecionar cartão">{cards.map((item, index) => <button key={item.id} className={item.id === card.id ? "active" : ""} onClick={() => selectIndex(index)}><CardThumbnail card={item} /><span><strong>{item.name}{item.favorite && <Star className="card-tab-favorite" size={11} fill="currentColor" />}</strong><small>{item.kind === "credit" ? `${item.brand} ${item.tier}` : "Débito no saldo"}</small></span></button>)}</div><div className="card-head-actions"><button className="secondary-button" onClick={() => setOrderOpen(true)}><GripVertical size={16} /> Organizar</button><button className="secondary-button" onClick={() => onEditCard(null)}><Plus size={16} /> Novo cartão</button></div></section>
     <section className="card-overview-grid">
       <div className="card-visual-column">
-        <div className="card-visual-viewport" tabIndex={0} aria-label={`Cartão ${selectedIndex + 1} de ${cards.length}. Arraste para trocar.`} onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={() => { setDragStart(null); setDragDelta(0); }} onKeyDown={(event) => { if (event.key === "ArrowLeft") selectIndex(selectedIndex - 1); if (event.key === "ArrowRight") selectIndex(selectedIndex + 1); }}>
+        <div className="card-visual-viewport" tabIndex={0} aria-label={`Cartão ${selectedIndex + 1} de ${cards.length}. Arraste para trocar.`} onDragStart={(event) => event.preventDefault()} onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={() => { setDragStart(null); setDragDelta(0); }} onKeyDown={(event) => { if (event.key === "ArrowLeft") selectIndex(selectedIndex - 1); if (event.key === "ArrowRight") selectIndex(selectedIndex + 1); }}>
           <div className={`card-visual-track ${dragStart == null ? "animated" : "dragging"}`} style={{ transform: `translate3d(calc(${-selectedIndex * 100}% + ${dragDelta}px),0,0)` }}>{cards.map((item, index) => <div className={`card-artwork-slide ${index === selectedIndex ? "active" : ""}`} key={item.id}><CardArtwork card={item} /></div>)}</div>
         </div>
         <div className="card-carousel-controls"><button onClick={() => selectIndex(selectedIndex - 1)} disabled={selectedIndex === 0} aria-label="Cartão anterior"><ChevronLeft size={18} /></button><div>{cards.map((item, index) => <button key={item.id} className={index === selectedIndex ? "active" : ""} onClick={() => selectIndex(index)} aria-label={`Abrir ${item.name}`} />)}</div><button onClick={() => selectIndex(selectedIndex + 1)} disabled={selectedIndex === cards.length - 1} aria-label="Próximo cartão"><ChevronRight size={18} /></button></div>
-        <div className="card-stage-caption"><span>{card.name}</span><small>{card.kind === "credit" ? `${card.brand} ${card.tier} · final ${card.last4}` : `${card.brand} · débito no saldo`}</small></div>
+        <div className="card-stage-caption"><span>{card.name}{card.favorite && <em><Star size={11} fill="currentColor" /> Favorito</em>}</span><small>{card.kind === "credit" ? `${card.brand} ${card.tier} · final ${card.last4}` : `${card.brand} · débito no saldo`}</small></div>
       </div>
-      <article key={`invoice-${card.id}`} className="panel invoice-overview card-panel-enter"><div className="invoice-title-row"><span>{card.kind === "credit" ? `Fatura de ${selectedMonth.label}` : "Saldo disponível no Caju"}</span><button className="icon-button compact" onClick={() => onEditCard(card)} aria-label="Configurar cartão"><Settings2 size={17} /></button></div><strong>{brl.format(card.kind === "credit" ? remainingInvoice : accountBalance)}</strong><small>{card.kind === "credit" && paid > 0 ? `${brl.format(paid)} já pagos · ${purchases.length} ${purchases.length === 1 ? "compra" : "compras"}` : `${purchases.length} ${purchases.length === 1 ? "compra registrada" : "compras registradas"}`}</small>{card.kind === "credit" ? <><div className="limit-row"><span>Limite livre e editável</span><strong>{card.limit ? `${brl.format(Math.max(0, card.limit - remainingInvoice))} de ${brl.format(card.limit)}` : "Ainda não informado"}</strong></div><div className="progress"><i style={{ width: `${limitPercent}%` }} /></div></> : <div className="debit-callout"><Gift size={17} /> Toda compra reduz diretamente o saldo da conta Caju VA.</div>}<div className="date-rules"><span><small>Fecha em dia útil</small><strong>{dateLabel(closingDate)}</strong></span><span><small>Vence em dia útil</small><strong>{dateLabel(dueDate)}</strong></span></div><div className="invoice-actions"><button className="secondary-button" onClick={onImport}><FileUp size={16} /> Importar</button>{card.kind === "credit" && remainingInvoice > 0 && <button className="secondary-button pay-invoice-button" onClick={() => setPayOpen(true)}><Check size={16} /> Pagar fatura</button>}<button className="primary-button" onClick={onNew}><Plus size={16} /> Nova compra</button></div></article>
+      <article key={`invoice-${card.id}`} className="panel invoice-overview card-panel-enter"><div className="invoice-title-row"><span>{card.kind === "credit" ? `Fatura de ${selectedMonth.label}` : "Saldo disponível no Caju"}</span><button className="icon-button compact" onClick={() => onEditCard(card)} aria-label="Configurar cartão"><Settings2 size={17} /></button></div><strong>{brl.format(card.kind === "credit" ? remainingInvoice : accountBalance)}</strong><small>{card.kind === "credit" && paid > 0 ? `${brl.format(paid)} já pagos · ${purchases.length} ${purchases.length === 1 ? "compra" : "compras"}` : `${purchases.length} ${purchases.length === 1 ? "compra registrada" : "compras registradas"}`}</small>{card.kind === "credit" ? <><div className="limit-row"><span>Limite disponível</span><strong>{card.limit ? brl.format(availableLimit) : "Ainda não informado"}</strong></div><div className="progress"><i style={{ width: `${limitPercent}%` }} /></div>{card.limit > 0 && <small className="limit-breakdown">{brl.format(limitUsed)} usados de {brl.format(card.limit)} · inclui esta fatura e parcelas futuras</small>}</> : <div className="debit-callout"><Gift size={17} /> Toda compra reduz diretamente o saldo da conta Caju VA.</div>}<div className="date-rules"><span><small>Fecha em dia útil</small><strong>{dateLabel(closingDate)}</strong></span><span><small>Vence em dia útil</small><strong>{dateLabel(dueDate)}</strong></span></div><div className="invoice-actions"><button className="secondary-button" onClick={onImport}><FileUp size={16} /> Importar</button>{card.kind === "credit" && remainingInvoice > 0 && <button className="secondary-button pay-invoice-button" onClick={() => setPayOpen(true)}><Check size={16} /> Pagar fatura</button>}<button className="primary-button" onClick={onNew}><Plus size={16} /> Nova compra</button></div></article>
       <article key={`rewards-${card.id}`} className="panel rewards-card card-panel-enter" role="button" tabIndex={0} onClick={() => setRewardsOpen(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setRewardsOpen(true); }}><div className="reward-title"><span><Award size={20} /></span><div><small>Recompensas acumuladas</small><strong>{card.rewardMode === "cashback" ? brl.format(cashback) : `${pointsNumber.format(points)} pontos`}</strong></div><ChevronRight className="reward-open-arrow" size={19} /></div><div className="points-target"><span>Meta de pontos</span><strong>{card.pointsGoal ? `${pointsNumber.format(points)} / ${card.pointsGoal.toLocaleString("pt-BR")}` : "Não configurada"}</strong></div><div className="progress"><i style={{ width: `${card.pointsGoal ? Math.min(100, points / card.pointsGoal * 100) : 0}%` }} /></div><div className="cashback-row"><span>Cashback calculado em {card.cashbackPercent.toLocaleString("pt-BR")}%</span><strong>{brl.format(cashback)}</strong></div><small>{usdRate ? `${card.pointsPerDollar.toLocaleString("pt-BR")} pts/US$ · dólar ${exchangeRate ? "PTAX BCB" : "manual"} em ${brl.format(usdRate)}` : "Informe uma cotação manual caso a PTAX esteja indisponível."}</small><div className="reward-history-callout"><History size={16} /><span><strong>Abrir extrato de pontos</strong><small>{rewardTransactions.length} transações com detalhamento individual</small></span></div><button className="text-button" onClick={(event) => { event.stopPropagation(); onEditCard(card); }}>Editar regras e meta</button></article>
     </section>
     <section key={`details-${card.id}`} className="card-detail-grid card-panel-enter"><article className="panel purchases-panel"><PanelHeader title={card.kind === "credit" ? "Últimas compras da fatura" : "Últimas compras no débito"} action={purchases.length ? `Ver extrato (${purchases.length})` : "Adicionar"} onAction={purchases.length ? () => setInvoiceOpen(true) : onNew} />{purchases.length ? purchases.slice(0, 5).map((purchase) => <button className="purchase-row" key={purchase.id} onClick={() => onEditTransaction(purchase)}><span className="purchase-icon"><CreditCard size={17} /></span><span><strong>{purchase.description}</strong><small>{shortDate(purchase.date)} · {purchase.category}</small></span><span><small>{purchase.installments ? `Parcela ${purchase.installments}` : card.kind === "credit" ? "À vista" : "Débito"}</small><strong>{brl.format(purchase.amount)}</strong></span><Pencil size={15} /></button>) : <EmptyState icon={CreditCard} title="Nenhuma compra" text="Cadastre uma compra ou importe um arquivo." />}{purchases.length > 5 && <button className="invoice-more-button" onClick={() => setInvoiceOpen(true)}>Ver mais {purchases.length - 5} transações <ChevronRight size={16} /></button>}</article><article className="panel future-invoices"><PanelHeader title="Compromissos futuros" action="Nova compra" onAction={onNew} />{card.kind === "credit" && future.length ? future.map(([key, value]) => <div className="future-row" key={key}><span>{shortMonthFormatter.format(new Date(`${key}-01T12:00:00Z`))}</span><span className="progress"><i style={{ width: `${futureTotal ? value / futureTotal * 100 : 0}%` }} /></span><strong>{brl.format(value)}</strong></div>) : <EmptyState icon={CalendarDays} title="Sem compromissos futuros" text={card.kind === "credit" ? "Parcelas futuras aparecerão aqui." : "Cartões de débito não geram faturas futuras."} />}<div className="commitment-total"><span>Total ainda comprometido</span><strong>{brl.format(card.kind === "credit" ? futureTotal : 0)}</strong></div></article></section>
     {payOpen && <PayInvoiceModal card={card} month={selectedMonth} remaining={remainingInvoice} accounts={accounts.filter((item) => item.kind !== "credit-card")} onClose={() => setPayOpen(false)} onPay={async (payment) => { await onPayInvoice(payment); setPayOpen(false); }} />}
     {rewardsOpen && <RewardsStatementModal card={card} transactions={transactions} redemptions={rewardRedemptions} accounts={accounts.filter((item) => item.kind !== "credit-card")} selectedMonth={selectedMonth} fallbackUsdRate={usdRate} onRedeem={onRedeemReward} onClose={() => setRewardsOpen(false)} onEditTransaction={(item) => { setRewardsOpen(false); onEditTransaction(item); }} />}
     {invoiceOpen && <InvoiceStatementModal card={card} month={selectedMonth} purchases={purchases} paid={paid} onClose={() => setInvoiceOpen(false)} onEditTransaction={(item) => { setInvoiceOpen(false); onEditTransaction(item); }} />}
+    {orderOpen && <CardOrderModal cards={cards} onClose={() => setOrderOpen(false)} onSave={async (ids, favoriteId) => { await onSaveCardOrder(ids, favoriteId); setSelectedId(favoriteId ?? ids[0] ?? ""); setOrderOpen(false); }} />}
   </div>;
+}
+
+function CardOrderModal({ cards, onClose, onSave }: { cards: FinanceCard[]; onClose: () => void; onSave: (ids: string[], favoriteId?: string) => Promise<void> }) {
+  const initialFavorite = cards.find((item) => item.favorite)?.id ?? cards[0]?.id ?? "";
+  const [favoriteId, setFavoriteId] = useState(initialFavorite);
+  const [draft, setDraft] = useState(() => {
+    const favorite = cards.find((item) => item.id === initialFavorite);
+    return favorite ? [favorite, ...cards.filter((item) => item.id !== favorite.id)] : cards;
+  });
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function chooseFavorite(id: string) {
+    setFavoriteId(id);
+    setDraft((current) => {
+      const selected = current.find((item) => item.id === id);
+      return selected ? [selected, ...current.filter((item) => item.id !== id)] : current;
+    });
+  }
+  function move(id: string, direction: -1 | 1) {
+    setDraft((current) => {
+      const from = current.findIndex((item) => item.id === id);
+      if (from < 0 || id === favoriteId) return current;
+      const to = Math.max(1, Math.min(current.length - 1, from + direction));
+      if (to === from) return current;
+      const next = [...current]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next;
+    });
+  }
+  function dropBefore(targetId: string) {
+    if (!draggedId || draggedId === favoriteId || draggedId === targetId) return setDraggedId(null);
+    setDraft((current) => {
+      const moving = current.find((item) => item.id === draggedId);
+      if (!moving) return current;
+      const without = current.filter((item) => item.id !== draggedId);
+      const target = Math.max(1, without.findIndex((item) => item.id === targetId));
+      without.splice(target, 0, moving);
+      return without;
+    });
+    setDraggedId(null);
+  }
+  async function save() {
+    setBusy(true); setError("");
+    try { await onSave(draft.map((item) => item.id), favoriteId || undefined); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar a carteira"); setBusy(false); }
+  }
+
+  return <div className="modal-layer global-modal-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal card-order-modal" role="dialog" aria-modal="true" aria-labelledby="card-order-title"><div className="modal-header"><div><span className="eyebrow">CARTEIRA PERSONALIZADA</span><h2 id="card-order-title">Organizar cartões</h2><p>O favorito fica sempre em primeiro. Arraste os demais ou use as setas para definir a ordem.</p></div><button className="icon-button" onClick={onClose} aria-label="Fechar"><X size={19} /></button></div><div className="card-order-list">{draft.map((item, index) => <article key={item.id} draggable={item.id !== favoriteId} className={`${draggedId === item.id ? "dragging" : ""} ${item.id === favoriteId ? "favorite" : ""}`} onDragStart={() => setDraggedId(item.id)} onDragEnd={() => setDraggedId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropBefore(item.id)}><GripVertical className="card-order-grip" size={18} /><CardThumbnail card={item} /><span><strong>{item.name}</strong><small>{item.id === favoriteId ? "Abre primeiro na carteira" : `${item.brand} · posição ${index + 1}`}</small></span><button className={`favorite-card-button ${item.id === favoriteId ? "active" : ""}`} type="button" onClick={() => chooseFavorite(item.id)} aria-label={`Definir ${item.name} como favorito`}><Star size={17} fill={item.id === favoriteId ? "currentColor" : "none"} /></button><span className="card-order-arrows"><button type="button" disabled={item.id === favoriteId || index <= 1} onClick={() => move(item.id, -1)} aria-label={`Mover ${item.name} para cima`}><ChevronUp size={16} /></button><button type="button" disabled={item.id === favoriteId || index === draft.length - 1} onClick={() => move(item.id, 1)} aria-label={`Mover ${item.name} para baixo`}><ChevronDown size={16} /></button></span></article>)}</div>{error && <div className="import-error"><AlertTriangle size={16} />{error}</div>}<div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Cancelar</button><button className="primary-button" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : "Salvar carteira"}</button></div></section></div>;
 }
 
 function InvoiceStatementModal({ card, month, purchases, paid, onClose, onEditTransaction }: { card: FinanceCard; month: MonthOption; purchases: FinanceTransaction[]; paid: number; onClose: () => void; onEditTransaction: (item: FinanceTransaction) => void }) {

@@ -235,6 +235,8 @@ export function ensureFinanceSchema() {
         manual_usd_rate_micros INTEGER NOT NULL DEFAULT 0,
         color TEXT NOT NULL DEFAULT 'black',
         image_data TEXT,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -292,6 +294,8 @@ export function ensureFinanceSchema() {
     const cardInfo = await env.DB.prepare("PRAGMA table_info(cards)").all<{ name: string }>();
     const cardColumns = new Set(cardInfo.results.map((column) => column.name));
     if (!cardColumns.has("image_data")) await env.DB.prepare("ALTER TABLE cards ADD COLUMN image_data TEXT").run();
+    if (!cardColumns.has("is_favorite")) await env.DB.prepare("ALTER TABLE cards ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0").run();
+    if (!cardColumns.has("sort_order")) await env.DB.prepare("ALTER TABLE cards ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0").run();
     const feedbackInfo = await env.DB.prepare("PRAGMA table_info(developer_feedback)").all<{ name: string }>();
     const feedbackColumns = new Set(feedbackInfo.results.map((column) => column.name));
     if (!feedbackColumns.has("developer_comment")) await env.DB.prepare("ALTER TABLE developer_feedback ADD COLUMN developer_comment TEXT").run();

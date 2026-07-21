@@ -104,6 +104,8 @@ export type FinanceCard = {
   manualUsdRate: number;
   color: string;
   imageData?: string;
+  favorite?: boolean;
+  sortOrder?: number;
 };
 
 export type FinanceRewardRedemption = {

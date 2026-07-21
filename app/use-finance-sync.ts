@@ -14,6 +14,7 @@ import type {
   FinanceTrip,
   FinanceTransaction,
 } from "../lib/finance-types";
+import { sortFinanceCards } from "../lib/card-management";
 
 export type SyncStatus = "connecting" | "synced" | "saving" | "offline" | "error";
 
@@ -81,7 +82,7 @@ export function useFinanceSync(ownerKey: string) {
   const applySnapshot = useCallback((snapshot: FinanceSnapshot, queued: FinanceTransaction[] = []) => {
     setAccounts(snapshot.accounts);
     setCategories(snapshot.categories);
-    setCards([...snapshot.cards].sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1));
+    setCards(sortFinanceCards(snapshot.cards));
     setTrips([...(snapshot.trips ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate)));
     setRewardRedemptions([...(snapshot.rewardRedemptions ?? [])].sort((a, b) => b.date.localeCompare(a.date)));
     setSalaryRule(snapshot.salaryRule);
@@ -253,10 +254,22 @@ export function useFinanceSync(ownerKey: string) {
     setStatus("saving");
     try {
       const payload = await postFinance<{ card: FinanceCard }>({ card });
-      setCards((current) => [...current.filter((item) => item.id !== payload.card.id), payload.card].sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1));
+      setCards((current) => sortFinanceCards([...current.filter((item) => item.id !== payload.card.id), payload.card]));
       await refreshSnapshot();
       setStatus("synced");
       return payload.card;
+    } catch (error) { setStatus("error"); throw error; }
+  }, [refreshSnapshot]);
+
+  const saveCardOrder = useCallback(async (ids: string[], favoriteId?: string) => {
+    setStatus("saving");
+    try {
+      const payload = await postFinance<{ cards: FinanceCard[] }>({ cardOrder: { ids, favoriteId } });
+      const ordered = sortFinanceCards(payload.cards);
+      setCards(ordered);
+      await refreshSnapshot();
+      setStatus("synced");
+      return ordered;
     } catch (error) { setStatus("error"); throw error; }
   }, [refreshSnapshot]);
 
@@ -341,7 +354,7 @@ export function useFinanceSync(ownerKey: string) {
 
   return {
     transactions, accounts, categories, cards, trips, rewardRedemptions, salaryRule, benefitRule, recurringRules, exchangeRate, status,
-    addTransactions, removeTransaction, saveAccount, removeAccount, saveCategory, saveCard, saveIncomeRules,
+    addTransactions, removeTransaction, saveAccount, removeAccount, saveCategory, saveCard, saveCardOrder, saveIncomeRules,
     saveRecurringRule, saveTrip, removeTrip, payInvoice, redeemReward, confirmSalary, retrySync: flushQueue,
   };
 }

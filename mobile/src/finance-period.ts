@@ -59,6 +59,19 @@ export function defaultInvoiceMonthForCard(card: FinanceCard, transactions: Fina
   return unpaid ?? activeMonth;
 }
 
+export function cardLimitUsage(transactions: FinanceTransaction[], card: FinanceCard, fromInvoiceMonth: string) {
+  if (card.kind !== "credit") return 0;
+  const invoices = new Map<string, number>();
+  transactions.filter((item) => !item.deletedAt && item.status !== "planned" && belongsToCard(item, card)).forEach((item) => {
+    const invoiceMonth = item.invoiceMonth ?? item.date.slice(0, 7);
+    if (invoiceMonth < fromInvoiceMonth) return;
+    const current = invoices.get(invoiceMonth) ?? 0;
+    if (item.type === "expense" && (item.paymentMethod === "credit" || item.cardId === card.id)) invoices.set(invoiceMonth, current + item.amount);
+    else if (item.type === "transfer" && item.source === "invoice-payment" && item.cardId === card.id) invoices.set(invoiceMonth, current - item.amount);
+  });
+  return [...invoices.values()].reduce((sum, amount) => sum + Math.max(0, amount), 0);
+}
+
 export function flowTotals(items: FinanceTransaction[]) {
   const confirmed = items.filter((item) => item.status !== "planned" && item.type !== "transfer");
   const income = confirmed.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);

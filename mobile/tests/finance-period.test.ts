@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountBalanceAtMonth, defaultInvoiceMonthForCard, financialMonthOf, flowTotals, invoiceDueDate, transactionsForInvoiceMonth, transactionsForMonth } from "../src/finance-period.ts";
+import { accountBalanceAtMonth, cardLimitUsage, defaultInvoiceMonthForCard, financialMonthOf, flowTotals, invoiceDueDate, transactionsForInvoiceMonth, transactionsForMonth } from "../src/finance-period.ts";
 
 const transactions = [
   { id: "credit", description: "Compra", category: "Casa", account: "Cartão", date: "2026-07-28", amount: 200, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-08" },
@@ -36,4 +36,12 @@ test("transferência reconstrói os dois saldos históricos", () => {
   const destination = { ...source, id: "cash", name: "Dinheiro", balance: 600 };
   assert.equal(accountBalanceAtMonth(source, [transfer], "2026-07", "2026-08"), 1000);
   assert.equal(accountBalanceAtMonth(destination, [transfer], "2026-07", "2026-08"), 500);
+});
+
+test("limite do cartão inclui parcelas futuras e desconta a fatura paga", () => {
+  const card = { id: "uv", name: "UV", linkedAccount: "Cartão", kind: "credit" as const, brand: "Mastercard", tier: "Black", last4: "0000", limit: 10000, closingDay: 29, dueDay: 4, dueAdjustment: "next" as const, pointsPerDollar: 0, cashbackPercent: 0, rewardMode: "none", pointsGoal: 0, manualUsdRate: 0, color: "uv" };
+  const purchase = { id: "p1", description: "Compra", category: "Outros", account: "Cartão", cardId: "uv", date: "2026-07-20", amount: 500, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-07", status: "confirmed" as const };
+  const payment = { ...purchase, id: "pay", description: "Pagamento", type: "transfer" as const, paymentMethod: "transfer" as const, source: "invoice-payment" as const, amount: 200 };
+  const future = { ...purchase, id: "future", invoiceMonth: "2026-08", amount: 400 };
+  assert.equal(cardLimitUsage([purchase, payment, future], card, "2026-07"), 700);
 });

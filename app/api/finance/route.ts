@@ -4,7 +4,8 @@ import { ensureFinanceSchema } from "../../../db/ensure-schema";
 import { getDb } from "../../../db";
 import { businessDaysInMonth, effectiveRecurringDate } from "../../../lib/brazil-calendar";
 import { scopedImportFingerprint } from "../../../lib/import-fingerprint";
-import type { PaymentMethod, TransactionType } from "../../../lib/finance-types";
+import { normalizeCardOrder, sortFinanceCards } from "../../../lib/card-management";
+import type { FinanceCard, PaymentMethod, TransactionType } from "../../../lib/finance-types";
 import { cleanInstallmentDescription } from "../../../lib/import-parser";
 import { webIdentityFrom } from "../../../lib/app-auth";
 
@@ -64,6 +65,8 @@ function cardJson(row: typeof cards.$inferSelect) {
     manualUsdRate: row.manualUsdRateMicros / 1_000_000,
     color: row.color,
     imageData: row.imageData ?? undefined,
+    favorite: row.favorite,
+    sortOrder: row.sortOrder,
   };
 }
 
@@ -125,12 +128,12 @@ async function seedDefaults(ownerId: string) {
       id: stableId(ownerId, "card-nubank-ultravioleta"), ownerId, name: "Nubank Ultravioleta",
       linkedAccount: "Nubank Ultravioleta", kind: "credit", brand: "Mastercard", tier: "Black",
       last4: "0000", closingDay: 1, dueDay: 8, dueAdjustment: "next",
-      pointsPerDollarMilli: 2200, cashbackBasisPoints: 125, rewardMode: "both", color: "uv",
+      pointsPerDollarMilli: 2200, cashbackBasisPoints: 125, rewardMode: "both", color: "uv", favorite: true, sortOrder: 0,
     },
     {
       id: stableId(ownerId, "card-caju-va"), ownerId, name: "Caju VA",
       linkedAccount: "Caju VA", kind: "debit", brand: "Visa", tier: "Benefícios", last4: "0000",
-      closingDay: 1, dueDay: 1, dueAdjustment: "next", color: "caju",
+      closingDay: 1, dueDay: 1, dueAdjustment: "next", color: "caju", sortOrder: 1,
     },
   ]).onConflictDoNothing();
   await db.insert(recurringEntries).values([
@@ -247,7 +250,7 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
     return Response.json({
       accounts: accountRows.map((row) => ({ id: row.id, name: row.name, institution: row.institution, kind: row.kind, balance: row.balanceCents / 100, goal: row.goalCents / 100, monthlyYieldPercent: row.monthlyYieldBasisPoints / 100, fixed: row.fixed, color: row.color })),
       categories: categoryRows,
-      cards: cardRows.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1).map(cardJson),
+      cards: sortFinanceCards(cardRows.map(cardJson) as FinanceCard[]),
       trips: tripRows.map(tripJson),
       transactions: transactionRows.map(transactionJson),
       rewardRedemptions: redemptionRows.map(rewardRedemptionJson),
@@ -280,6 +283,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       account?: { id?: string; name?: string; institution?: string; kind?: string; balance?: number; goal?: number; monthlyYieldPercent?: number; fixed?: boolean; color?: string };
       category?: { id?: string; name?: string; originalName?: string; kind?: string; color?: string; icon?: string; essential?: boolean };
       card?: { id?: string; name?: string; linkedAccount?: string; kind?: string; brand?: string; tier?: string; last4?: string; limit?: number; closingDay?: number; dueDay?: number; dueAdjustment?: string; pointsPerDollar?: number; cashbackPercent?: number; rewardMode?: string; pointsGoal?: number; manualUsdRate?: number; color?: string; imageData?: string };
+      cardOrder?: { ids?: string[]; favoriteId?: string };
       rewardRedemption?: { id?: string; cardId?: string; kind?: string; amount?: number; account?: string; date?: string; note?: string };
       trip?: { id?: string; name?: string; startDate?: string; endDate?: string; currency?: string; exchangeRate?: number };
       incomeRules?: { salary?: RuleInput; benefit?: RuleInput };
@@ -290,6 +294,23 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       transaction?: { id?: string; description?: string; category?: string; account?: string; destinationAccount?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
     };
     const db = getDb();
+
+    if (payload.cardOrder) {
+      const rows = await db.select().from(cards).where(eq(cards.ownerId, ownerId));
+      const ids = Array.isArray(payload.cardOrder.ids) ? payload.cardOrder.ids.map((id) => String(id)) : [];
+      const unique = new Set(ids);
+      if (ids.length !== rows.length || unique.size !== rows.length || rows.some((row) => !unique.has(row.id))) {
+        return Response.json({ error: "A ordem deve incluir todos os cartões desta conta" }, { status: 400 });
+      }
+      const favoriteId = payload.cardOrder.favoriteId?.trim();
+      if (favoriteId && !unique.has(favoriteId)) return Response.json({ error: "Cartão favorito inválido" }, { status: 400 });
+      const normalized = normalizeCardOrder(rows.map(cardJson) as FinanceCard[], ids, favoriteId);
+      const now = new Date().toISOString();
+      for (const item of normalized) {
+        await db.update(cards).set({ favorite: Boolean(item.favorite), sortOrder: item.sortOrder ?? 0, updatedAt: now }).where(and(eq(cards.ownerId, ownerId), eq(cards.id, item.id)));
+      }
+      return Response.json({ cards: normalized });
+    }
 
     if (payload.trip) {
       const item = payload.trip;
@@ -387,6 +408,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       if (imageData && (!/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(imageData) || imageData.length > 2_000_000)) {
         return Response.json({ error: "A imagem do cartão deve ser PNG, JPG ou WebP e ter até 1,5 MB" }, { status: 400 });
       }
+      const maxOrder = existing ? existing.sortOrder : (await db.select({ sortOrder: cards.sortOrder }).from(cards).where(eq(cards.ownerId, ownerId))).reduce((maximum, row) => Math.max(maximum, row.sortOrder), -1) + 1;
       const values = {
         name, linkedAccount, kind: item.kind === "debit" ? "debit" : "credit",
         brand: item.brand?.trim() || "Mastercard", tier: item.tier?.trim() || "Black",
@@ -398,7 +420,8 @@ export async function financePostForOwner(request: Request, ownerId: string) {
         rewardMode: ["points", "cashback", "both"].includes(item.rewardMode ?? "") ? String(item.rewardMode) : "none",
         pointsGoal: Math.max(0, Math.trunc(Number(item.pointsGoal ?? 0))),
         manualUsdRateMicros: Math.round(Math.max(0, Number(item.manualUsdRate ?? 0)) * 1_000_000),
-        color: item.color?.trim() || "black", imageData, updatedAt: now,
+        color: item.color?.trim() || "black", imageData,
+        favorite: existing?.favorite ?? false, sortOrder: maxOrder, updatedAt: now,
       };
       if (existing) await db.update(cards).set(values).where(and(eq(cards.ownerId, ownerId), eq(cards.id, existing.id)));
       else await db.insert(cards).values({ id, ownerId, ...values });

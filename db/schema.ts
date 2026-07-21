@@ -310,6 +310,8 @@ export const cards = sqliteTable(
     manualUsdRateMicros: integer("manual_usd_rate_micros").notNull().default(0),
     color: text("color").notNull().default("black"),
     imageData: text("image_data"),
+    favorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
