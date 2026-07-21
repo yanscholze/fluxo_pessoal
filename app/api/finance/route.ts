@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { accounts, cards, categories, recurringEntries, transactions } from "../../../db/schema";
+import { accounts, cards, categories, recurringEntries, transactions, trips } from "../../../db/schema";
 import { ensureFinanceSchema } from "../../../db/ensure-schema";
 import { getDb } from "../../../db";
 import { businessDaysInMonth, effectiveRecurringDate } from "../../../lib/brazil-calendar";
@@ -62,6 +62,19 @@ function cardJson(row: typeof cards.$inferSelect) {
     pointsGoal: row.pointsGoal,
     manualUsdRate: row.manualUsdRateMicros / 1_000_000,
     color: row.color,
+  };
+}
+
+function tripJson(row: typeof trips.$inferSelect) {
+  return {
+    id: row.id,
+    name: row.name,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    currency: row.currency,
+    exchangeRate: row.exchangeRateMicros / 1_000_000,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -145,7 +158,7 @@ function transactionJson(row: typeof transactions.$inferSelect) {
   return {
     id: row.id, description: row.description, category: row.category, account: row.account,
     date: row.occurredAt, amount: row.amountCents / 100, type: row.type,
-    paymentMethod: row.paymentMethod, cardId: row.cardId ?? undefined,
+    paymentMethod: row.paymentMethod, cardId: row.cardId ?? undefined, tripId: row.tripId ?? undefined,
     invoiceMonth: row.invoiceMonth ?? undefined, installments: row.installments ?? undefined,
     rewardPoints: row.rewardPointsMilli == null ? undefined : row.rewardPointsMilli / 1000,
     rewardCashback: row.rewardCashbackCents == null ? undefined : row.rewardCashbackCents / 100,
@@ -193,10 +206,11 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
     await seedDefaults(ownerId);
     const db = getDb();
     const month = new Date().toISOString().slice(0, 7);
-    const [accountRows, categoryRows, cardRows, recurringRows] = await Promise.all([
+    const [accountRows, categoryRows, cardRows, tripRows, recurringRows] = await Promise.all([
       db.select().from(accounts).where(eq(accounts.ownerId, ownerId)).orderBy(accounts.name),
       db.select().from(categories).where(eq(categories.ownerId, ownerId)).orderBy(categories.kind, categories.name),
       db.select().from(cards).where(eq(cards.ownerId, ownerId)).orderBy(cards.name),
+      db.select().from(trips).where(eq(trips.ownerId, ownerId)).orderBy(desc(trips.startDate)),
       db.select().from(recurringEntries).where(eq(recurringEntries.ownerId, ownerId)),
     ]);
     await materializeRecurring(ownerId, recurringRows, month);
@@ -208,6 +222,7 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
       accounts: accountRows.map((row) => ({ id: row.id, name: row.name, institution: row.institution, kind: row.kind, balance: row.balanceCents / 100, goal: row.goalCents / 100, monthlyYieldPercent: row.monthlyYieldBasisPoints / 100, fixed: row.fixed, color: row.color })),
       categories: categoryRows,
       cards: cardRows.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1).map(cardJson),
+      trips: tripRows.map(tripJson),
       transactions: transactionRows.map(transactionJson),
       salaryRule: salary ? recurringJson(salary, month) : null,
       benefitRule: benefit ? recurringJson(benefit, month) : null,
@@ -238,14 +253,34 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       account?: { id?: string; name?: string; institution?: string; kind?: string; balance?: number; goal?: number; monthlyYieldPercent?: number; fixed?: boolean; color?: string };
       category?: { id?: string; name?: string; originalName?: string; kind?: string; color?: string; icon?: string; essential?: boolean };
       card?: { id?: string; name?: string; linkedAccount?: string; kind?: string; brand?: string; tier?: string; last4?: string; limit?: number; closingDay?: number; dueDay?: number; dueAdjustment?: string; pointsPerDollar?: number; cashbackPercent?: number; rewardMode?: string; pointsGoal?: number; manualUsdRate?: number; color?: string };
+      trip?: { id?: string; name?: string; startDate?: string; endDate?: string; currency?: string; exchangeRate?: number };
       incomeRules?: { salary?: RuleInput; benefit?: RuleInput };
       salaryRule?: RuleInput;
       confirmSalary?: { month?: string };
       recurringRule?: { id?: string; description?: string; category?: string; account?: string; amount?: number; type?: string; dayOfMonth?: number; calculationMode?: string; scheduleMode?: string; dateAdjustment?: string; paymentMethod?: PaymentMethod; cardId?: string; active?: boolean };
       payInvoice?: { id?: string; cardId?: string; invoiceMonth?: string; sourceAccount?: string; amount?: number; date?: string };
-      transaction?: { id?: string; description?: string; category?: string; account?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
+      transaction?: { id?: string; description?: string; category?: string; account?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
     };
     const db = getDb();
+
+    if (payload.trip) {
+      const item = payload.trip;
+      const name = item.name?.trim().slice(0, 100) || "";
+      const startDate = item.startDate?.trim() || "";
+      const endDate = item.endDate?.trim() || "";
+      const currency = item.currency?.trim().toUpperCase() || "BRL";
+      const exchangeRate = Number(item.exchangeRate ?? (currency === "BRL" ? 1 : 0));
+      if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) return Response.json({ error: "Período da viagem inválido" }, { status: 400 });
+      if (!/^[A-Z]{3}$/.test(currency) || !Number.isFinite(exchangeRate) || exchangeRate <= 0) return Response.json({ error: "Moeda ou cotação inválida" }, { status: 400 });
+      const requestedId = item.id?.trim() || "";
+      const existing = requestedId ? (await db.select().from(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, requestedId))).limit(1))[0] : null;
+      const id = existing?.id ?? freshEntityId(ownerId, "trip", name);
+      const values = { name, startDate, endDate, currency, exchangeRateMicros: Math.round(exchangeRate * 1_000_000), updatedAt: new Date().toISOString() };
+      if (existing) await db.update(trips).set(values).where(and(eq(trips.ownerId, ownerId), eq(trips.id, existing.id)));
+      else await db.insert(trips).values({ id, ownerId, ...values });
+      const saved = (await db.select().from(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, id))).limit(1))[0];
+      return Response.json({ trip: tripJson(saved) }, { status: existing ? 200 : 201 });
+    }
 
     if (payload.account) {
       const item = payload.account;
@@ -472,6 +507,11 @@ export async function financePostForOwner(request: Request, ownerId: string) {
     const paymentMethod = ["credit", "debit", "cash", "transfer"].includes(item.paymentMethod ?? "") ? String(item.paymentMethod) : "other";
     let resolvedAccount = item.account?.trim() || "Nubank";
     let resolvedCardId = item.cardId?.trim() || null;
+    const requestedTripId = item.tripId?.trim() || null;
+    const resolvedTripId = requestedTripId
+      ? (await db.select({ id: trips.id }).from(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, requestedTripId))).limit(1))[0]?.id ?? null
+      : null;
+    if (requestedTripId && !resolvedTripId) return Response.json({ error: "A viagem selecionada não pertence a esta conta" }, { status: 400 });
     let resolvedInvoiceMonth = /^\d{4}-\d{2}$/.test(item.invoiceMonth?.trim() || "") ? item.invoiceMonth!.trim() : null;
     if (transactionType === "expense" && (paymentMethod === "credit" || resolvedCardId)) {
       const ownerCards = await db.select().from(cards).where(eq(cards.ownerId, ownerId));
@@ -490,7 +530,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       description: item.description.trim(), category: item.category?.trim() || "Outros",
       account: resolvedAccount, occurredAt: item.date,
       amountCents: Math.round(Number(item.amount) * 100), type: transactionType,
-      paymentMethod, cardId: resolvedCardId,
+      paymentMethod, cardId: resolvedCardId, tripId: resolvedTripId,
       invoiceMonth: resolvedInvoiceMonth,
       rewardPointsMilli: item.rewardPoints == null ? previous?.rewardPointsMilli ?? null : Math.round(Math.max(0, Number(item.rewardPoints)) * 1000),
       rewardCashbackCents: item.rewardCashback == null ? previous?.rewardCashbackCents ?? null : Math.round(Math.max(0, Number(item.rewardCashback)) * 100),
@@ -508,7 +548,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao salvar os dados";
     if (message.includes("transactions_owner_fingerprint_idx")) return Response.json({ ok: true, duplicate: true });
-    if (/accounts_owner_name_idx|categories_owner_name_idx|cards_owner_name_idx/.test(message)) return Response.json({ error: "Já existe um item com este nome" }, { status: 409 });
+    if (/accounts_owner_name_idx|categories_owner_name_idx|cards_owner_name_idx|trips_owner_name_dates_idx/.test(message)) return Response.json({ error: "Já existe um item com este nome e período" }, { status: 409 });
     return Response.json({ error: message }, { status: message === "Regra de receita inválida" ? 400 : 500 });
   }
 }
@@ -539,6 +579,14 @@ export async function financeDeleteForOwner(request: Request, ownerId: string) {
         return Response.json({ error: "Esta conta possui lançamentos, cartões ou recorrências vinculados. Realoque-os antes de excluir." }, { status: 409 });
       }
       await db.delete(accounts).where(and(eq(accounts.ownerId, ownerId), eq(accounts.id, id)));
+      return Response.json({ ok: true });
+    }
+    if (url.searchParams.get("entity") === "trip") {
+      const trip = (await db.select().from(trips).where(and(eq(trips.id, id), eq(trips.ownerId, ownerId))).limit(1))[0];
+      if (!trip) return Response.json({ ok: true });
+      const linked = await db.select({ id: transactions.id }).from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.tripId, id), isNull(transactions.deletedAt))).limit(1);
+      if (linked.length) return Response.json({ error: "A viagem possui lançamentos vinculados. Remova a tag deles antes de excluir." }, { status: 409 });
+      await db.delete(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, id)));
       return Response.json({ ok: true });
     }
     const existing = (await db.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.ownerId, ownerId))).limit(1))[0];

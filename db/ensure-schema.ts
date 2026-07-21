@@ -120,6 +120,19 @@ export function ensureFinanceSchema() {
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS categories_owner_name_idx ON categories (owner_id, name)`,
       `CREATE INDEX IF NOT EXISTS categories_owner_idx ON categories (owner_id)`,
+      `CREATE TABLE IF NOT EXISTS trips (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'BRL',
+        exchange_rate_micros INTEGER NOT NULL DEFAULT 1000000,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS trips_owner_dates_idx ON trips (owner_id, start_date, end_date)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS trips_owner_name_dates_idx ON trips (owner_id, name, start_date)`,
       `CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY NOT NULL,
         owner_id TEXT NOT NULL,
@@ -134,6 +147,7 @@ export function ensureFinanceSchema() {
         source TEXT NOT NULL DEFAULT 'manual',
         payment_method TEXT NOT NULL DEFAULT 'other',
         card_id TEXT,
+        trip_id TEXT,
         invoice_month TEXT,
         reward_points_milli INTEGER,
         reward_cashback_cents INTEGER,
@@ -231,6 +245,8 @@ export function ensureFinanceSchema() {
     const transactionColumns = new Set(transactionInfo.results.map((column) => column.name));
     if (!transactionColumns.has("payment_method")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'other'").run();
     if (!transactionColumns.has("card_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN card_id TEXT").run();
+    if (!transactionColumns.has("trip_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN trip_id TEXT").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS transactions_owner_trip_idx ON transactions (owner_id, trip_id)").run();
     if (!transactionColumns.has("invoice_month")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN invoice_month TEXT").run();
     if (!transactionColumns.has("reward_points_milli")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN reward_points_milli INTEGER").run();
     if (!transactionColumns.has("reward_cashback_cents")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN reward_cashback_cents INTEGER").run();

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
-import { cards, syncMutations, transactions } from "../../../../db/schema";
+import { cards, syncMutations, transactions, trips } from "../../../../db/schema";
 import { ensureFinanceSchema } from "../../../../db/ensure-schema";
 import { getDb } from "../../../../db";
 import { apiIdentityFrom, apiUnauthorized } from "../../../../lib/api-v1-auth";
@@ -23,6 +23,7 @@ function transactionJson(row: TransactionRow): FinanceTransaction {
     type: row.type as TransactionType,
     paymentMethod: row.paymentMethod as PaymentMethod,
     cardId: row.cardId ?? undefined,
+    tripId: row.tripId ?? undefined,
     invoiceMonth: row.invoiceMonth ?? undefined,
     installments: row.installments ?? undefined,
     status: row.status === "planned" ? "planned" : "confirmed",
@@ -211,6 +212,15 @@ export async function POST(request: Request) {
       const source = (["import", "recurring", "invoice-payment"].includes(item!.source ?? "") ? item!.source : "manual") as NonNullable<FinanceTransaction["source"]>;
       let resolvedAccount = item!.account.trim();
       let resolvedCardId = item!.cardId?.trim() || null;
+      const requestedTripId = item!.tripId?.trim() || null;
+      const resolvedTripId = requestedTripId ? (await db.select({ id: trips.id }).from(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, requestedTripId))).limit(1))[0]?.id ?? null : null;
+      if (requestedTripId && !resolvedTripId) {
+        results.push(await rememberResult(ownerId, parsed.value.device.id, {
+          mutationId: mutation.mutationId, entity: "transaction", entityId: mutation.entityId,
+          status: "rejected", message: "A viagem selecionada não pertence a esta conta",
+        }, mutation.operation));
+        continue;
+      }
       let resolvedInvoiceMonth = /^\d{4}-\d{2}$/.test(item!.invoiceMonth ?? "") ? item!.invoiceMonth! : null;
       if (item!.type === "expense" && (paymentMethod === "credit" || resolvedCardId)) {
         const ownerCards = await db.select().from(cards).where(eq(cards.ownerId, ownerId));
@@ -233,7 +243,7 @@ export async function POST(request: Request) {
       const values = {
         description: item!.description.trim(), category: item!.category.trim(), account: resolvedAccount, occurredAt: item!.date,
         amountCents: Math.round(item!.amount * 100), type: item!.type, paymentMethod,
-        cardId: resolvedCardId, invoiceMonth: resolvedInvoiceMonth,
+        cardId: resolvedCardId, tripId: resolvedTripId, invoiceMonth: resolvedInvoiceMonth,
         installments: item!.installments?.trim() || null, status: (item!.status === "planned" ? "planned" : "confirmed") as "planned" | "confirmed", source,
         fingerprint: importFingerprint || null,
         rewardPointsMilli: item!.rewardPoints == null ? existing?.rewardPointsMilli ?? null : Math.round(Math.max(0, item!.rewardPoints) * 1000),
@@ -243,7 +253,7 @@ export async function POST(request: Request) {
       const savedData: FinanceTransaction = {
         id: mutation.entityId, description: values.description, category: values.category, account: values.account,
         date: values.occurredAt, amount: values.amountCents / 100, type: values.type, paymentMethod: values.paymentMethod,
-        cardId: values.cardId ?? undefined, invoiceMonth: values.invoiceMonth ?? undefined, installments: values.installments ?? undefined,
+        cardId: values.cardId ?? undefined, tripId: values.tripId ?? undefined, invoiceMonth: values.invoiceMonth ?? undefined, installments: values.installments ?? undefined,
         status: values.status, source: values.source, fingerprint: values.fingerprint ?? undefined,
         rewardPoints: values.rewardPointsMilli == null ? undefined : values.rewardPointsMilli / 1000,
         rewardCashback: values.rewardCashbackCents == null ? undefined : values.rewardCashbackCents / 100,
@@ -252,10 +262,10 @@ export async function POST(request: Request) {
       };
       const result: SyncMutationResultV1 = { mutationId: mutation.mutationId, entity: "transaction", entityId: mutation.entityId, status: "applied", entityVersion: decision.nextVersion, entityData: savedData };
       const write = existing
-        ? env.DB.prepare(`UPDATE transactions SET description = ?, category = ?, account = ?, occurred_at = ?, amount_cents = ?, type = ?, installments = ?, status = ?, source = ?, payment_method = ?, card_id = ?, invoice_month = ?, reward_points_milli = ?, reward_cashback_cents = ?, reward_usd_rate_micros = ?, fingerprint = ?, version = ?, deleted_at = NULL, device_id = ?, last_mutation_id = ?, updated_at = ? WHERE owner_id = ? AND id = ?`)
-          .bind(values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now, ownerId, mutation.entityId)
-        : env.DB.prepare(`INSERT INTO transactions (id, owner_id, description, category, account, occurred_at, amount_cents, type, installments, status, source, payment_method, card_id, invoice_month, reward_points_milli, reward_cashback_cents, reward_usd_rate_micros, fingerprint, version, deleted_at, device_id, last_mutation_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
-          .bind(mutation.entityId, ownerId, values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now);
+        ? env.DB.prepare(`UPDATE transactions SET description = ?, category = ?, account = ?, occurred_at = ?, amount_cents = ?, type = ?, installments = ?, status = ?, source = ?, payment_method = ?, card_id = ?, trip_id = ?, invoice_month = ?, reward_points_milli = ?, reward_cashback_cents = ?, reward_usd_rate_micros = ?, fingerprint = ?, version = ?, deleted_at = NULL, device_id = ?, last_mutation_id = ?, updated_at = ? WHERE owner_id = ? AND id = ?`)
+          .bind(values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now, ownerId, mutation.entityId)
+        : env.DB.prepare(`INSERT INTO transactions (id, owner_id, description, category, account, occurred_at, amount_cents, type, installments, status, source, payment_method, card_id, trip_id, invoice_month, reward_points_milli, reward_cashback_cents, reward_usd_rate_micros, fingerprint, version, deleted_at, device_id, last_mutation_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
+          .bind(mutation.entityId, ownerId, values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now);
       const statements = [write];
       const deltas = new Map<string, number>();
       if (existing) deltas.set(existing.account, (deltas.get(existing.account) ?? 0) - balanceEffect(existing));

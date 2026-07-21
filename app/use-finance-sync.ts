@@ -10,6 +10,7 @@ import type {
   FinanceRecurringRule,
   FinanceSalaryRule,
   FinanceSnapshot,
+  FinanceTrip,
   FinanceTransaction,
 } from "../lib/finance-types";
 
@@ -65,6 +66,7 @@ export function useFinanceSync(ownerKey: string) {
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [cards, setCards] = useState<FinanceCard[]>([]);
+  const [trips, setTrips] = useState<FinanceTrip[]>([]);
   const [salaryRule, setSalaryRule] = useState<FinanceSalaryRule | null>(null);
   const [benefitRule, setBenefitRule] = useState<FinanceBenefitRule | null>(null);
   const [recurringRules, setRecurringRules] = useState<FinanceRecurringRule[]>([]);
@@ -78,6 +80,7 @@ export function useFinanceSync(ownerKey: string) {
     setAccounts(snapshot.accounts);
     setCategories(snapshot.categories);
     setCards([...snapshot.cards].sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1));
+    setTrips([...(snapshot.trips ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate)));
     setSalaryRule(snapshot.salaryRule);
     setBenefitRule(snapshot.benefitRule);
     setRecurringRules(snapshot.recurringRules ?? []);
@@ -254,6 +257,23 @@ export function useFinanceSync(ownerKey: string) {
     } catch (error) { setStatus("error"); throw error; }
   }, [refreshSnapshot]);
 
+  const saveTrip = useCallback(async (trip: Omit<FinanceTrip, "createdAt" | "updatedAt">) => {
+    setStatus("saving");
+    try {
+      const payload = await postFinance<{ trip: FinanceTrip }>({ trip });
+      setTrips((current) => [...current.filter((item) => item.id !== payload.trip.id), payload.trip].sort((a, b) => b.startDate.localeCompare(a.startDate)));
+      await refreshSnapshot(); setStatus("synced"); return payload.trip;
+    } catch (error) { setStatus("error"); throw error; }
+  }, [refreshSnapshot]);
+
+  const removeTrip = useCallback(async (id: string) => {
+    setStatus("saving");
+    const response = await fetch(`/api/finance?entity=trip&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) { setStatus("error"); throw new Error(payload?.error || "Não foi possível excluir a viagem"); }
+    await refreshSnapshot(); setStatus("synced");
+  }, [refreshSnapshot]);
+
   const saveIncomeRules = useCallback(async (rules: { salary: Partial<FinanceSalaryRule>; benefit: Partial<FinanceBenefitRule> }) => {
     setStatus("saving");
     try {
@@ -306,8 +326,8 @@ export function useFinanceSync(ownerKey: string) {
   }, [cacheKey, refreshSnapshot]);
 
   return {
-    transactions, accounts, categories, cards, salaryRule, benefitRule, recurringRules, exchangeRate, status,
+    transactions, accounts, categories, cards, trips, salaryRule, benefitRule, recurringRules, exchangeRate, status,
     addTransactions, removeTransaction, saveAccount, removeAccount, saveCategory, saveCard, saveIncomeRules,
-    saveRecurringRule, payInvoice, confirmSalary, retrySync: flushQueue,
+    saveRecurringRule, saveTrip, removeTrip, payInvoice, confirmSalary, retrySync: flushQueue,
   };
 }

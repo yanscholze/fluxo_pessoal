@@ -11,6 +11,7 @@ export type FinanceTransaction = {
   type: TransactionType;
   paymentMethod?: PaymentMethod;
   cardId?: string;
+  tripId?: string;
   invoiceMonth?: string;
   installments?: string;
   status?: "confirmed" | "planned";
@@ -32,11 +33,13 @@ export type FinanceAccount = { id: string; name: string; institution: string; ki
 export type FinanceCategory = { id: string; name: string; kind: string; color: string; icon: string; essential: boolean };
 export type FinanceCard = { id: string; name: string; linkedAccount: string; kind: "credit" | "debit"; brand: string; tier: string; last4: string; limit: number; closingDay: number; dueDay: number; dueAdjustment?: "previous" | "next"; pointsPerDollar: number; cashbackPercent: number; rewardMode: string; pointsGoal: number; manualUsdRate?: number; color: string };
 export type FinanceRecurringRule = { id: string; description: string; type: "expense" | "income"; category: string; account: string; amount: number; dayOfMonth: number; active: boolean; projectedAmount?: number; effectiveDate?: string; lastConfirmedMonth?: string; businessDays?: number };
+export type FinanceTrip = { id: string; name: string; startDate: string; endDate: string; currency: string; exchangeRate: number; createdAt?: string; updatedAt?: string };
 
 export type FinanceSnapshot = {
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   cards: FinanceCard[];
+  trips: FinanceTrip[];
   transactions: FinanceTransaction[];
   salaryRule: FinanceRecurringRule | null;
   benefitRule: FinanceRecurringRule | null;

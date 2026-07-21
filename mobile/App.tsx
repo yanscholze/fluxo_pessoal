@@ -21,9 +21,9 @@ import { Notifications, registerForPushNotifications, unregisterPushNotification
 import type { AppNotification, FinanceCard, FinanceSnapshot, FinanceTransaction, NotificationsResult, ProfileResult } from "./src/types";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], transactions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
-const tabs = ["Início", "Lançamentos", "Cartões", "Contas", "Ajustes"] as const;
-type Tab = typeof tabs[number];
+const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], trips: [], transactions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
+const tabs = ["Início", "Lançamentos", "Cartões", "Contas", "Viagens"] as const;
+type Tab = typeof tabs[number] | "Ajustes";
 type ImportMode = { kind: "history" } | { kind: "card"; card: FinanceCard; month: string };
 type PayState = { card: FinanceCard; remaining: number } | null;
 
@@ -140,6 +140,7 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
         {tab === "Lançamentos" && <TransactionsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
         {tab === "Cartões" && <CardsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} palette={palette} onImport={(card) => setImportMode({ kind: "card", card, month: selectedMonth })} onPay={(card, remaining) => setPayState({ card, remaining })} onPurchase={openComposer} />}
         {tab === "Contas" && <AccountsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
+        {tab === "Viagens" && <TravelScreen snapshot={snapshot} styles={styles} />}
         {tab === "Ajustes" && <SettingsScreen user={session.user} connected={connected} theme={theme} message={message} onLogout={() => void signOut()} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onImport={() => setImportMode({ kind: "history" })} onUserUpdated={onUserUpdated} styles={styles} />}
       </Animated.View>
       {tab !== "Ajustes" && <Pressable accessibilityRole="button" accessibilityLabel="Novo lançamento" style={({ pressed }) => [styles.fab, pressed && styles.pressed]} onPress={() => openComposer()}><Text style={styles.fabText}>＋</Text></Pressable>}
@@ -166,6 +167,22 @@ function TransactionsScreen({ snapshot, month, onMonth, styles, palette }: { sna
 function AccountsScreen({ snapshot, month, onMonth, styles, palette }: { snapshot: FinanceSnapshot; month: string; onMonth: (month: string) => void; styles: ReturnType<typeof makeStyles>; palette: Palette }) {
   const currentMonth = new Date().toISOString().slice(0, 7); const accounts = snapshot.accounts.filter((item) => item.kind !== "credit-card").map((account) => ({ ...account, historicalBalance: accountBalanceAtMonth(account, snapshot.transactions, month, currentMonth) }));
   return <ScrollView contentContainerStyle={styles.scroll}><ScreenHeader eyebrow="PATRIMÔNIO" title="Contas" styles={styles} /><PeriodSwitcher month={month} onChange={onMonth} palette={palette} /><View style={styles.accountGrid}>{accounts.map((account) => <View style={styles.accountCard} key={account.id}><View style={styles.accountMark}><Text style={styles.accountMarkText}>{account.name.slice(0, 1).toUpperCase()}</Text></View><Text style={styles.accountName}>{account.name}</Text><Text style={styles.accountBalance}>{currency.format(account.historicalBalance)}</Text><Text style={styles.accountKind}>{month < currentMonth ? `Saldo ao fim de ${month.slice(5, 7)}/${month.slice(0, 4)}` : account.kind === "benefit" ? "Benefício" : account.institution}</Text>{account.goal > 0 && <View style={{ marginTop: 10 }}><View style={{ height: 4, overflow: "hidden", borderRadius: 2, backgroundColor: palette.surface2 }}><View style={{ width: `${Math.min(100, account.historicalBalance / account.goal * 100)}%`, height: 4, backgroundColor: palette.accent }} /></View><Text style={styles.accountKind}>Meta {currency.format(account.goal)}</Text></View>}</View>)}</View>{!accounts.length && <Empty text="Suas contas aparecerão após a primeira sincronização." styles={styles} />}</ScrollView>;
+}
+
+function TravelScreen({ snapshot, styles }: { snapshot: FinanceSnapshot; styles: ReturnType<typeof makeStyles> }) {
+  const [selectedId, setSelectedId] = useState(snapshot.trips[0]?.id ?? "");
+  useEffect(() => { if (!snapshot.trips.some((item) => item.id === selectedId)) setSelectedId(snapshot.trips[0]?.id ?? ""); }, [selectedId, snapshot.trips]);
+  const trip = snapshot.trips.find((item) => item.id === selectedId) ?? snapshot.trips[0];
+  const items = trip ? snapshot.transactions.filter((item) => item.tripId === trip.id && item.type === "expense" && item.status !== "planned") : [];
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+  const categoryTotals = [...items.reduce((map, item) => map.set(item.category, (map.get(item.category) ?? 0) + item.amount), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+  return <ScrollView contentContainerStyle={styles.scroll}><ScreenHeader eyebrow="MODO VIAGEM" title="Viagens" styles={styles} />
+    {snapshot.trips.length ? <><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripChips}>{snapshot.trips.map((item) => <Pressable key={item.id} style={[styles.tripChip, item.id === trip?.id && styles.tripChipActive]} onPress={() => setSelectedId(item.id)}><Text style={[styles.tripChipText, item.id === trip?.id && styles.tripChipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView>
+      {trip && <><View style={styles.tripHero}><Text style={styles.tripEyebrow}>{trip.startDate.split("-").reverse().join("/")} — {trip.endDate.split("-").reverse().join("/")}</Text><Text style={styles.tripName}>{trip.name}</Text><Text style={styles.tripTotal}>{currency.format(total)}</Text><Text style={styles.tripConverted}>≈ {(total / Math.max(trip.exchangeRate, .000001)).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {trip.currency} · 1 {trip.currency} = {currency.format(trip.exchangeRate)}</Text></View>
+        <View style={styles.settingPanel}><Text style={styles.settingSection}>GASTOS POR CATEGORIA</Text>{categoryTotals.map(([name, value]) => <View key={name} style={styles.tripCategory}><Text style={styles.settingTitle}>{name}</Text><Text style={styles.tripCategoryValue}>{currency.format(value)}</Text></View>)}{!categoryTotals.length && <Text style={styles.settingCopy}>Nenhum gasto marcado nesta viagem.</Text>}</View>
+        <View style={styles.settingPanel}><Text style={styles.settingSection}>LANÇAMENTOS DA VIAGEM</Text>{[...items].sort((a, b) => b.date.localeCompare(a.date)).map((item) => <TransactionRow key={item.id} item={item} styles={styles} />)}{!items.length && <Text style={styles.settingCopy}>Use a tag da viagem ao registrar uma despesa.</Text>}</View></>}
+    </> : <Empty text="Crie sua viagem no Fluxo Web. Depois ela aparecerá aqui para marcar e acompanhar os gastos." styles={styles} />}
+  </ScrollView>;
 }
 
 function SettingsScreen({ user, connected, theme, message, onLogout, onTheme, onImport, onUserUpdated, styles }: { user: MobileSession["user"]; connected: boolean; theme: ThemeName; message: string; onLogout: () => void; onTheme: () => void; onImport: () => void; onUserUpdated: (user: MobileSession["user"]) => Promise<void>; styles: ReturnType<typeof makeStyles> }) {

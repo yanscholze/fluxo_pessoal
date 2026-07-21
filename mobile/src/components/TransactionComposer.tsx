@@ -19,6 +19,7 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
   const [type, setType] = useState<TransactionType>("expense"); const [description, setDescription] = useState(""); const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(""); const [account, setAccount] = useState(""); const [paymentMethod, setPaymentMethod] = useState<"debit" | "credit">("debit");
   const [installments, setInstallments] = useState("1"); const [cardId, setCardId] = useState(""); const [date, setDate] = useState(today());
+  const [tripId, setTripId] = useState(""); const [tripInitialized, setTripInitialized] = useState(false);
   const [receiptUri, setReceiptUri] = useState(""); const [receiptScan, setReceiptScan] = useState<ReceiptScanResult | null>(null); const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const expenseCategories = useMemo(() => snapshot.categories.filter((item) => item.kind === "expense"), [snapshot.categories]);
@@ -29,10 +30,11 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
   const creditCards = useMemo(() => snapshot.cards.filter((item) => item.kind === "credit"), [snapshot.cards]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setTripInitialized(false); return; }
     const requested = initialCardId && creditCards.some((item) => item.id === initialCardId) ? initialCardId : cardId || creditCards[0]?.id || "";
     setCardId(requested); if (initialCardId) setPaymentMethod("credit");
-  }, [creditCards, initialCardId, open]);
+    if (!tripInitialized) { setTripId(snapshot.trips.find((item) => today() >= item.startDate && today() <= item.endDate)?.id ?? ""); setTripInitialized(true); }
+  }, [creditCards, initialCardId, open, snapshot.trips, tripInitialized]);
   useEffect(() => { if (!choices.some((item) => item.name === category)) setCategory(choices[0]?.name ?? (type === "income" ? "Receita" : "Outros")); }, [category, choiceKey, choices, type]);
   useEffect(() => { if (!accounts.some((item) => item.name === account)) setAccount(accounts[0]?.name ?? "Nubank"); }, [account, accounts]);
 
@@ -89,11 +91,12 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
           id, description: description.trim(), category, account: method === "credit" ? selectedCard!.linkedAccount : account,
           date: installmentDate, amount: (baseCents + (index < remainder ? 1 : 0)) / 100, type, paymentMethod: method,
           cardId: method === "credit" ? selectedCard!.id : undefined, invoiceMonth,
+          tripId: tripId || undefined,
           installments: count > 1 ? `${index + 1}/${count}` : undefined, status: "confirmed", source: "manual", version: 0,
         }, newId("mutation"));
         if (receiptUri && index === 0) await saveLocalAttachment(db, id, receiptUri);
       }
-      setDescription(""); setAmount(""); setInstallments("1"); setDate(today()); setReceiptUri(""); setReceiptScan(null); await onSaved();
+      setDescription(""); setAmount(""); setInstallments("1"); setDate(today()); setTripId(""); setReceiptUri(""); setReceiptScan(null); await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não consegui salvar este lançamento."); }
     finally { setBusy(false); }
   }
@@ -106,6 +109,7 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
       <View style={styles.descriptionRow}><TextInput placeholder="Descrição" placeholderTextColor={palette.muted} value={description} onChangeText={setDescription} style={[styles.input, styles.descriptionInput]} autoFocus /><Pressable accessibilityLabel="Fotografar cupom" style={styles.inlineCamera} onPress={captureReceipt}><Text style={styles.inlineCameraText}>▣</Text></Pressable></View>
       <TextInput placeholder="R$ 0,00" placeholderTextColor={palette.muted} value={amount} onChangeText={setAmount} style={[styles.input, styles.amountInput]} keyboardType="decimal-pad" />
       <Text style={styles.fieldLabel}>DATA DA COMPRA</Text><TextInput placeholder="AAAA-MM-DD" placeholderTextColor={palette.muted} value={date} onChangeText={setDate} style={styles.input} keyboardType="numbers-and-punctuation" maxLength={10} />
+      {type === "expense" && snapshot.trips.length > 0 && <><Text style={styles.fieldLabel}>MODO VIAGEM</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}><Pressable style={[styles.chip, !tripId && styles.chipActive]} onPress={() => setTripId("")}><Text style={[styles.chipText, !tripId && styles.chipTextActive]}>Sem viagem</Text></Pressable>{snapshot.trips.map((item) => <Pressable key={item.id} style={[styles.chip, tripId === item.id && styles.chipActive]} onPress={() => setTripId(item.id)}><Text style={[styles.chipText, tripId === item.id && styles.chipTextActive]}>✈ {item.name} · {item.currency}</Text></Pressable>)}</ScrollView></>}
       {type === "expense" && <><Text style={styles.fieldLabel}>FORMA DE PAGAMENTO</Text><View style={styles.toggle}>{(["debit", "credit"] as const).map((item) => <Pressable key={item} style={[styles.toggleButton, paymentMethod === item && styles.toggleActive]} onPress={() => setPaymentMethod(item)}><Text style={[styles.toggleText, paymentMethod === item && styles.toggleTextActive]}>{item === "credit" ? "Crédito" : "Débito / saldo"}</Text></Pressable>)}</View>{paymentMethod === "credit" && <><Text style={styles.fieldLabel}>CARTÃO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{creditCards.map((item) => <Pressable key={item.id} style={[styles.chip, cardId === item.id && styles.chipActive]} onPress={() => setCardId(item.id)}><Text style={[styles.chipText, cardId === item.id && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView><TextInput placeholder="Quantidade de parcelas" placeholderTextColor={palette.muted} value={installments} onChangeText={setInstallments} style={styles.input} keyboardType="number-pad" /></>}</>}
       <Text style={styles.fieldLabel}>CATEGORIA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{choices.map((item) => <Pressable key={item.id} style={[styles.chip, category === item.name && styles.chipActive]} onPress={() => setCategory(item.name)}><Text style={[styles.chipText, category === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView>
       {(paymentMethod !== "credit" || type === "income") && <><Text style={styles.fieldLabel}>CONTA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{accounts.map((item) => <Pressable key={item.id} style={[styles.chip, account === item.name && styles.chipActive]} onPress={() => setAccount(item.name)}><Text style={[styles.chipText, account === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView></>}

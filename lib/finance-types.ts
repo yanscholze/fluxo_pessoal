@@ -13,6 +13,7 @@ export type FinanceTransaction = {
   type: TransactionType;
   paymentMethod?: PaymentMethod;
   cardId?: string;
+  tripId?: string;
   invoiceMonth?: string;
   installments?: string;
   status?: "confirmed" | "planned";
@@ -26,6 +27,17 @@ export type FinanceTransaction = {
   deletedAt?: string;
   deviceId?: string;
   pendingSync?: boolean;
+};
+
+export type FinanceTrip = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  currency: string;
+  exchangeRate: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type FinanceAccount = {
@@ -105,6 +117,7 @@ export type FinanceSnapshot = {
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   cards: FinanceCard[];
+  trips: FinanceTrip[];
   transactions: FinanceTransaction[];
   salaryRule: FinanceSalaryRule | null;
   benefitRule: FinanceBenefitRule | null;

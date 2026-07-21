@@ -164,6 +164,25 @@ export const categories = sqliteTable(
   ],
 );
 
+export const trips = sqliteTable(
+  "trips",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    name: text("name").notNull(),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    currency: text("currency").notNull().default("BRL"),
+    exchangeRateMicros: integer("exchange_rate_micros").notNull().default(1_000_000),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("trips_owner_dates_idx").on(table.ownerId, table.startDate, table.endDate),
+    uniqueIndex("trips_owner_name_dates_idx").on(table.ownerId, table.name, table.startDate),
+  ],
+);
+
 export const transactions = sqliteTable(
   "transactions",
   {
@@ -180,6 +199,7 @@ export const transactions = sqliteTable(
     source: text("source").notNull().default("manual"),
     paymentMethod: text("payment_method").notNull().default("other"),
     cardId: text("card_id"),
+    tripId: text("trip_id"),
     invoiceMonth: text("invoice_month"),
     rewardPointsMilli: integer("reward_points_milli"),
     rewardCashbackCents: integer("reward_cashback_cents"),
@@ -195,6 +215,7 @@ export const transactions = sqliteTable(
   (table) => [
     index("transactions_owner_date_idx").on(table.ownerId, table.occurredAt),
     index("transactions_owner_updated_idx").on(table.ownerId, table.updatedAt),
+    index("transactions_owner_trip_idx").on(table.ownerId, table.tripId),
     uniqueIndex("transactions_owner_fingerprint_idx").on(table.ownerId, table.fingerprint),
   ],
 );
