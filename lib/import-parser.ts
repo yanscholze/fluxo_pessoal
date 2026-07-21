@@ -68,6 +68,15 @@ export function installmentMarker(value: string) {
   return { current, total };
 }
 
+export function cleanInstallmentDescription(value: string) {
+  const cleaned = value
+    .replace(/(?:\s*[-–—|:]\s*)?(?:parcela\s*)?\b\d{1,2}\s*(?:\/|\s+de\s+)\s*\d{1,2}\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[-–—|:]\s*$/g, "")
+    .trim();
+  return cleaned || value.trim();
+}
+
 function fingerprintOf(date: string, description: string, amount: number, context?: { cardId?: string; invoiceMonth?: string; installments?: string; occurrence?: number }) {
   const base = `${date}|${normalizeHeader(description)}|${amount.toFixed(2)}${(context?.occurrence ?? 1) > 1 ? `|occurrence:${context!.occurrence}` : ""}`;
   if (!context?.invoiceMonth) return base;
@@ -89,14 +98,15 @@ export function parseCsv(text: string, account: string, card?: FinanceCard, invo
   if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) return { items: [], ignored: 0, ignoredReasons: [], expandedInstallments: 0 };
   const items: FinanceTransaction[] = []; let ignored = 0; let expandedInstallments = 0; const reasons = new Set<string>(); const occurrences = new Map<string, number>();
   for (const cells of records.slice(1)) {
-    const rawAmount = parseMoney(cells[amountIndex] ?? ""); const description = (cells[descriptionIndex] ?? "Lançamento importado").trim();
+    const rawAmount = parseMoney(cells[amountIndex] ?? ""); const rawDescription = (cells[descriptionIndex] ?? "Lançamento importado").trim();
+    const description = cleanInstallmentDescription(rawDescription);
     if (!description || !Number.isFinite(rawAmount) || rawAmount === 0) { ignored += 1; reasons.add("linhas vazias ou sem valor"); continue; }
     const date = isoDate(cells[dateIndex] ?? ""); const credit = card?.kind === "credit" || isCardAccount(account);
     if (credit && invoicePaymentPattern.test(normalizeHeader(description))) { ignored += 1; reasons.add("pagamentos recebidos pela fatura"); continue; }
     if (credit && rawAmount < 0) { ignored += 1; reasons.add("créditos e estornos do cartão"); continue; }
     const type: TransactionType = rawAmount >= 0 && !credit ? "income" : "expense"; const amount = Math.abs(rawAmount);
     const referenceMonth = credit ? (/^\d{4}-\d{2}$/.test(invoiceMonth ?? "") ? invoiceMonth! : date.slice(0, 7)) : undefined;
-    const marker = credit ? installmentMarker(installmentIndex >= 0 ? cells[installmentIndex] ?? "" : "") ?? installmentMarker(description) : null;
+    const marker = credit ? installmentMarker(installmentIndex >= 0 ? cells[installmentIndex] ?? "" : "") ?? installmentMarker(rawDescription) : null;
     const occurrenceKey = `${date}|${normalizeHeader(description)}|${amount.toFixed(2)}|${referenceMonth ?? "account"}|${marker ? `${marker.current}/${marker.total}` : "single"}`;
     const occurrence = (occurrences.get(occurrenceKey) ?? 0) + 1; occurrences.set(occurrenceKey, occurrence);
     if (credit && referenceMonth && marker) {

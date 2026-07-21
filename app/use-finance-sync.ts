@@ -8,6 +8,7 @@ import type {
   FinanceCategory,
   FinanceExchangeRate,
   FinanceRecurringRule,
+  FinanceRewardRedemption,
   FinanceSalaryRule,
   FinanceSnapshot,
   FinanceTrip,
@@ -67,6 +68,7 @@ export function useFinanceSync(ownerKey: string) {
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [cards, setCards] = useState<FinanceCard[]>([]);
   const [trips, setTrips] = useState<FinanceTrip[]>([]);
+  const [rewardRedemptions, setRewardRedemptions] = useState<FinanceRewardRedemption[]>([]);
   const [salaryRule, setSalaryRule] = useState<FinanceSalaryRule | null>(null);
   const [benefitRule, setBenefitRule] = useState<FinanceBenefitRule | null>(null);
   const [recurringRules, setRecurringRules] = useState<FinanceRecurringRule[]>([]);
@@ -81,6 +83,7 @@ export function useFinanceSync(ownerKey: string) {
     setCategories(snapshot.categories);
     setCards([...snapshot.cards].sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1));
     setTrips([...(snapshot.trips ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate)));
+    setRewardRedemptions([...(snapshot.rewardRedemptions ?? [])].sort((a, b) => b.date.localeCompare(a.date)));
     setSalaryRule(snapshot.salaryRule);
     setBenefitRule(snapshot.benefitRule);
     setRecurringRules(snapshot.recurringRules ?? []);
@@ -325,9 +328,20 @@ export function useFinanceSync(ownerKey: string) {
     } catch (error) { setStatus("error"); throw error; }
   }, [cacheKey, refreshSnapshot]);
 
+  const redeemReward = useCallback(async (redemption: Omit<FinanceRewardRedemption, "id" | "createdAt">) => {
+    setStatus("saving");
+    try {
+      const payload = await postFinance<{ rewardRedemption: FinanceRewardRedemption }>({ rewardRedemption: { ...redemption, id: globalThis.crypto?.randomUUID?.() ?? `reward-${Date.now()}` } });
+      setRewardRedemptions((current) => [payload.rewardRedemption, ...current]);
+      await refreshSnapshot();
+      setStatus("synced");
+      return payload.rewardRedemption;
+    } catch (error) { setStatus("error"); throw error; }
+  }, [refreshSnapshot]);
+
   return {
-    transactions, accounts, categories, cards, trips, salaryRule, benefitRule, recurringRules, exchangeRate, status,
+    transactions, accounts, categories, cards, trips, rewardRedemptions, salaryRule, benefitRule, recurringRules, exchangeRate, status,
     addTransactions, removeTransaction, saveAccount, removeAccount, saveCategory, saveCard, saveIncomeRules,
-    saveRecurringRule, saveTrip, removeTrip, payInvoice, confirmSalary, retrySync: flushQueue,
+    saveRecurringRule, saveTrip, removeTrip, payInvoice, redeemReward, confirmSalary, retrySync: flushQueue,
   };
 }

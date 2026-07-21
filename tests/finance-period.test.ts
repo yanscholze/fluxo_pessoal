@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountBalanceAtMonth, defaultInvoiceMonthForCard, financialMonthOf, transactionsForInvoiceMonth, transactionsForMonth } from "../lib/finance-period.ts";
+import { accountBalanceAtMonth, defaultInvoiceMonthForCard, financialMonthOf, invoiceClosingDate, invoiceDueDate, transactionsForInvoiceMonth, transactionsForMonth } from "../lib/finance-period.ts";
 
 const items = [
   { id: "card", description: "Compra", category: "Casa", account: "Cartão", date: "2026-07-29", amount: 500, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-08" },
@@ -25,4 +25,18 @@ test("mantém fatura fechada até o pagamento total e então avança", () => {
 test("reconstrói o saldo existente ao fim de um mês histórico", () => {
   const account = { id: "nu", name: "Nubank", institution: "Nubank", kind: "checking", balance: 900, goal: 0, monthlyYieldPercent: 0, fixed: false, color: "purple" };
   assert.equal(accountBalanceAtMonth(account, items, "2026-07", "2026-08"), 1000);
+});
+
+test("vencimento anterior ao fechamento pertence ao mês seguinte", () => {
+  const datesCard = { id: "uv", name: "UV", linkedAccount: "Cartão", kind: "credit" as const, brand: "Mastercard", tier: "Black", last4: "0000", limit: 10000, closingDay: 29, dueDay: 4, dueAdjustment: "next" as const, pointsPerDollar: 2.2, cashbackPercent: 1.25, rewardMode: "both" as const, pointsGoal: 30000, manualUsdRate: 5, color: "uv" };
+  assert.equal(invoiceClosingDate(datesCard, "2026-07"), "2026-07-29");
+  assert.equal(invoiceDueDate(datesCard, "2026-07"), "2026-08-04");
+});
+
+test("transferência reconstrói origem e destino sem criar renda", () => {
+  const source = { id: "nu", name: "Nubank", institution: "Nubank", kind: "checking", balance: 900, goal: 0, monthlyYieldPercent: 0, fixed: false, color: "purple" };
+  const destination = { ...source, id: "cash", name: "Dinheiro", balance: 600 };
+  const transfer = { id: "transfer", description: "Saque", category: "Transferência", account: "Nubank", destinationAccount: "Dinheiro", date: "2026-08-03", amount: 100, type: "transfer" as const, paymentMethod: "transfer" as const, source: "account-transfer" as const, status: "confirmed" as const };
+  assert.equal(accountBalanceAtMonth(source, [transfer], "2026-07", "2026-08"), 1000);
+  assert.equal(accountBalanceAtMonth(destination, [transfer], "2026-07", "2026-08"), 500);
 });

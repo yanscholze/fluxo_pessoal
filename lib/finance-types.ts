@@ -8,6 +8,7 @@ export type FinanceTransaction = {
   description: string;
   category: string;
   account: string;
+  destinationAccount?: string;
   date: string;
   amount: number;
   type: TransactionType;
@@ -17,7 +18,7 @@ export type FinanceTransaction = {
   invoiceMonth?: string;
   installments?: string;
   status?: "confirmed" | "planned";
-  source?: "manual" | "import" | "recurring" | "invoice-payment";
+  source?: "manual" | "import" | "recurring" | "invoice-payment" | "account-transfer";
   fingerprint?: string;
   rewardPoints?: number;
   rewardCashback?: number;
@@ -102,6 +103,18 @@ export type FinanceCard = {
   pointsGoal: number;
   manualUsdRate: number;
   color: string;
+  imageData?: string;
+};
+
+export type FinanceRewardRedemption = {
+  id: string;
+  cardId: string;
+  kind: "points" | "cashback";
+  amount: number;
+  account?: string;
+  date: string;
+  note?: string;
+  createdAt?: string;
 };
 
 export type FinanceExchangeRate = {
@@ -119,6 +132,7 @@ export type FinanceSnapshot = {
   cards: FinanceCard[];
   trips: FinanceTrip[];
   transactions: FinanceTransaction[];
+  rewardRedemptions: FinanceRewardRedemption[];
   salaryRule: FinanceSalaryRule | null;
   benefitRule: FinanceBenefitRule | null;
   recurringRules: FinanceRecurringRule[];

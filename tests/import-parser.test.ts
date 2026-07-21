@@ -83,6 +83,7 @@ test("parcela identificada na fatura preenche histórico e meses futuros", () =>
   assert.equal(result.items.length, 5);
   assert.equal(result.expandedInstallments, 4);
   assert.deepEqual(result.items.map((item) => item.installments), ["1/5", "2/5", "3/5", "4/5", "5/5"]);
+  assert.ok(result.items.every((item) => item.description === "Notebook"));
   assert.deepEqual(result.items.map((item) => item.invoiceMonth), ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]);
   assert.equal(result.items.filter((item) => item.invoiceMonth === "2026-07").reduce((sum, item) => sum + item.amount, 0), 250);
 });

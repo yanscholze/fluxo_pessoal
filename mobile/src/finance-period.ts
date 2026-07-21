@@ -37,6 +37,15 @@ export function activeInvoiceMonth(card: FinanceCard, today: string) {
   return today > closingDate ? monthOffset(calendarMonth, 1) : calendarMonth;
 }
 
+export function invoiceClosingDate(card: FinanceCard, invoiceMonth: string) {
+  return effectiveCardDate(invoiceMonth, card.closingDay, "previous");
+}
+
+export function invoiceDueDate(card: FinanceCard, invoiceMonth: string) {
+  const dueMonth = card.dueDay <= card.closingDay ? monthOffset(invoiceMonth, 1) : invoiceMonth;
+  return effectiveCardDate(dueMonth, card.dueDay, card.dueAdjustment ?? "next");
+}
+
 export function defaultInvoiceMonthForCard(card: FinanceCard, transactions: FinanceTransaction[], today: string) {
   const activeMonth = activeInvoiceMonth(card, today);
   const cardItems = transactions.filter((item) => !item.deletedAt && item.status !== "planned" && belongsToCard(item, card));
@@ -62,11 +71,17 @@ export function balanceEffect(item: FinanceTransaction) {
   return item.type === "income" ? item.amount : -item.amount;
 }
 
+function accountEffect(item: FinanceTransaction, accountName: string) {
+  const sourceEffect = item.account === accountName ? balanceEffect(item) : 0;
+  const destinationEffect = item.source === "account-transfer" && item.destinationAccount === accountName && !item.deletedAt && item.status !== "planned" ? item.amount : 0;
+  return sourceEffect + destinationEffect;
+}
+
 export function accountBalanceAtMonth(account: FinanceAccount, transactions: FinanceTransaction[], selectedMonth: string, currentMonth: string) {
   void currentMonth;
   const laterEffect = transactions
-    .filter((item) => item.account === account.name && item.date.slice(0, 7) > selectedMonth)
-    .reduce((sum, item) => sum + balanceEffect(item), 0);
+    .filter((item) => (item.account === account.name || item.destinationAccount === account.name) && item.date.slice(0, 7) > selectedMonth)
+    .reduce((sum, item) => sum + accountEffect(item, account.name), 0);
   return account.balance - laterEffect;
 }
 

@@ -41,6 +41,15 @@ function marker(value: string) {
   return current >= 1 && total >= 2 && current <= total && total <= 48 ? { current, total } : null;
 }
 
+function cleanInstallmentDescription(value: string) {
+  const cleaned = value
+    .replace(/(?:\s*[-–—|:]\s*)?(?:parcela\s*)?\b\d{1,2}\s*(?:\/|\s+de\s+)\s*\d{1,2}\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[-–—|:]\s*$/g, "")
+    .trim();
+  return cleaned || value.trim();
+}
+
 const invoicePaymentPattern = /pagamento\s+(?:recebido|de\s+fatura|da\s+fatura)|recebimento\s+de\s+pagamento|pagamento\s+efetuado|credit[oó]\s+de\s+pagamento/i;
 
 function dateInMonth(date: string, month: string) {
@@ -52,14 +61,15 @@ function dateInMonth(date: string, month: string) {
 function buildItems(input: { date: string; description: string; amount: number; type: TransactionType; category?: string; account?: string; installments?: string; occurrence?: number }, context: MobileImportContext) {
   const account = input.account || context.account; const category = input.category || (input.type === "income" ? "Receita" : "Outros");
   const detected = context.card?.kind === "credit" ? marker(input.installments ?? "") ?? marker(input.description) : null;
+  const description = detected ? cleanInstallmentDescription(input.description) : input.description;
   const referenceMonth = context.invoiceMonth ?? input.date.slice(0, 7);
   const make = (installment: number | null, total: number | null): FinanceTransaction => {
     const invoiceMonth = installment && total && detected ? monthOffset(referenceMonth, installment - detected.current) : context.card?.kind === "credit" ? referenceMonth : undefined;
     const installments = installment && total ? `${installment}/${total}` : undefined;
     const date = invoiceMonth && installments && installment !== detected?.current ? dateInMonth(input.date, invoiceMonth) : input.date;
-    const key = fingerprint(date, input.description, input.amount, { ...context, account }, installments, input.occurrence);
+    const key = fingerprint(date, description, input.amount, { ...context, account }, installments, input.occurrence);
     return {
-      id: `legacy-${stableHash(key)}`, description: input.description, category, account, date, amount: input.amount,
+      id: `legacy-${stableHash(key)}`, description, category, account, date, amount: input.amount,
       type: context.card?.kind === "credit" ? "expense" : input.type,
       paymentMethod: context.card?.kind === "credit" ? "credit" : input.type === "income" ? "transfer" : "debit",
       cardId: context.card?.id, invoiceMonth, installments, status: "confirmed", source: "import", fingerprint: key, version: 0,

@@ -21,7 +21,7 @@ import { Notifications, registerForPushNotifications, unregisterPushNotification
 import type { AppNotification, FinanceCard, FinanceSnapshot, FinanceTransaction, NotificationsResult, ProfileResult } from "./src/types";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], trips: [], transactions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
+const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], trips: [], transactions: [], rewardRedemptions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
 const tabs = ["Início", "Lançamentos", "Cartões", "Contas", "Viagens"] as const;
 type Tab = typeof tabs[number] | "Ajustes";
 type ImportMode = { kind: "history" } | { kind: "card"; card: FinanceCard; month: string };
@@ -126,6 +126,10 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
     await financeApi({ payInvoice: { id: newId("invoice-payment"), cardId: payState.card.id, invoiceMonth: selectedMonth, sourceAccount, amount } });
     await syncNow();
   }
+  async function redeemReward(cardId: string, kind: "points" | "cashback", amount: number, account?: string) {
+    await financeApi({ rewardRedemption: { id: newId("reward-redemption"), cardId, kind, amount, account, date: new Date().toISOString().slice(0, 10) } });
+    await syncNow();
+  }
   async function confirmIncome() { await financeApi({ confirmSalary: { month: selectedMonth } }); await syncNow(); }
   async function readNotification(item: AppNotification) {
     if (!item.readAt) setNotificationState(await notificationsApi({ action: "mark-read", id: item.id }));
@@ -138,7 +142,7 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
       <Animated.View style={[styles.content, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
         {tab === "Início" && <DashboardScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} userName={session.user.displayName} avatarData={session.user.avatarData} connected={connected} syncState={syncState} unreadCount={notificationState.unreadCount} theme={theme} palette={palette} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onSync={syncNow} onNotifications={() => setNotificationsOpen(true)} onConfirmIncome={() => void confirmIncome()} onOpen={openWidget} onProfile={() => setTab("Ajustes")} />}
         {tab === "Lançamentos" && <TransactionsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
-        {tab === "Cartões" && <CardsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} palette={palette} onImport={(card) => setImportMode({ kind: "card", card, month: selectedMonth })} onPay={(card, remaining) => setPayState({ card, remaining })} onPurchase={openComposer} />}
+        {tab === "Cartões" && <CardsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} palette={palette} onImport={(card) => setImportMode({ kind: "card", card, month: selectedMonth })} onPay={(card, remaining) => setPayState({ card, remaining })} onPurchase={openComposer} onRedeem={redeemReward} />}
         {tab === "Contas" && <AccountsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
         {tab === "Viagens" && <TravelScreen snapshot={snapshot} styles={styles} />}
         {tab === "Ajustes" && <SettingsScreen user={session.user} connected={connected} theme={theme} message={message} onLogout={() => void signOut()} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onImport={() => setImportMode({ kind: "history" })} onUserUpdated={onUserUpdated} styles={styles} />}
@@ -209,5 +213,5 @@ function rewardSnapshot(item: FinanceTransaction, card: FinanceCard): FinanceTra
   return { ...item, rewardPoints: points, rewardCashback: cashback, rewardUsdRate: points ? usd : undefined };
 }
 function ScreenHeader({ eyebrow, title, styles }: { eyebrow: string; title: string; styles: ReturnType<typeof makeStyles> }) { return <View style={styles.screenHeader}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.title}>{title}</Text></View>; }
-function TransactionRow({ item, styles }: { item: FinanceTransaction; styles: ReturnType<typeof makeStyles> }) { return <View style={styles.transactionRow}><View style={[styles.transactionIcon, item.type === "income" && styles.transactionIncome]}><Text style={styles.transactionIconText}>{item.type === "income" ? "↓" : item.type === "transfer" ? "↔" : "↑"}</Text></View><View style={styles.transactionMain}><Text numberOfLines={1} style={styles.transactionName}>{item.description}</Text><Text style={styles.transactionMeta}>{item.category} · {new Date(`${item.date}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })}{item.installments ? ` · ${item.installments}` : ""}{item.receiptUri ? " · cupom" : ""}{item.pendingSync ? " · pendente" : ""}</Text></View><Text style={[styles.transactionValue, item.type === "income" && styles.valueIncome]}>{item.type === "income" ? "+" : item.type === "transfer" ? "" : "−"}{currency.format(item.amount)}</Text></View>; }
+function TransactionRow({ item, styles }: { item: FinanceTransaction; styles: ReturnType<typeof makeStyles> }) { return <View style={styles.transactionRow}><View style={[styles.transactionIcon, item.type === "income" && styles.transactionIncome]}><Text style={styles.transactionIconText}>{item.type === "income" ? "↓" : item.type === "transfer" ? "↔" : "↑"}</Text></View><View style={styles.transactionMain}><Text numberOfLines={1} style={styles.transactionName}>{item.description}</Text><Text style={styles.transactionMeta}>{item.type === "transfer" && item.destinationAccount ? `${item.account} → ${item.destinationAccount}` : item.category} · {new Date(`${item.date}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })}{item.installments ? ` · ${item.installments}` : ""}{item.receiptUri ? " · cupom" : ""}{item.pendingSync ? " · pendente" : ""}</Text></View><Text style={[styles.transactionValue, item.type === "income" && styles.valueIncome]}>{item.type === "income" ? "+" : item.type === "transfer" ? "" : "−"}{currency.format(item.amount)}</Text></View>; }
 function Empty({ text, styles }: { text: string; styles: ReturnType<typeof makeStyles> }) { return <View style={styles.empty}><Text style={styles.emptyIcon}>◎</Text><Text style={styles.emptyText}>{text}</Text></View>; }

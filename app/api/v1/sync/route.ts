@@ -1,11 +1,12 @@
 import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
-import { cards, syncMutations, transactions, trips } from "../../../../db/schema";
+import { accounts, cards, syncMutations, transactions, trips } from "../../../../db/schema";
 import { ensureFinanceSchema } from "../../../../db/ensure-schema";
 import { getDb } from "../../../../db";
 import { apiIdentityFrom, apiUnauthorized } from "../../../../lib/api-v1-auth";
 import type { FinanceTransaction, PaymentMethod, TransactionType } from "../../../../lib/finance-types";
 import { scopedImportFingerprint } from "../../../../lib/import-fingerprint";
+import { cleanInstallmentDescription } from "../../../../lib/import-parser";
 import { effectiveRecurringDate } from "../../../../lib/brazil-calendar";
 import { decideSyncMutation, parseSyncRequestV1, SYNC_API_VERSION, SYNC_SCHEMA_VERSION, type SyncMutationResultV1 } from "../../../../lib/sync-v1";
 import { financeGetForOwner } from "../../finance/route";
@@ -15,9 +16,10 @@ type TransactionRow = typeof transactions.$inferSelect;
 function transactionJson(row: TransactionRow): FinanceTransaction {
   return {
     id: row.id,
-    description: row.description,
+    description: row.installments ? cleanInstallmentDescription(row.description) : row.description,
     category: row.category,
     account: row.account,
+    destinationAccount: row.destinationAccount ?? undefined,
     date: row.occurredAt,
     amount: row.amountCents / 100,
     type: row.type as TransactionType,
@@ -42,6 +44,14 @@ function transactionJson(row: TransactionRow): FinanceTransaction {
 function balanceEffect(item: { type: string; status: string; paymentMethod: string; amountCents: number; deletedAt?: string | null }) {
   if (item.deletedAt || item.status !== "confirmed" || !["debit", "cash", "transfer"].includes(item.paymentMethod)) return 0;
   return item.type === "income" ? item.amountCents : -item.amountCents;
+}
+
+function accountDeltas(item: { account: string; destinationAccount?: string | null; source?: string | null; type: string; status: string; paymentMethod: string; amountCents: number; deletedAt?: string | null }, multiplier = 1) {
+  const deltas = new Map<string, number>();
+  const sourceDelta = balanceEffect(item) * multiplier;
+  if (sourceDelta) deltas.set(item.account, sourceDelta);
+  if (!item.deletedAt && item.status === "confirmed" && item.source === "account-transfer" && item.destinationAccount) deltas.set(item.destinationAccount, (deltas.get(item.destinationAccount) ?? 0) + item.amountCents * multiplier);
+  return deltas;
 }
 
 function validTransaction(item: FinanceTransaction | undefined) {
@@ -177,8 +187,7 @@ export async function POST(request: Request) {
           env.DB.prepare(`UPDATE transactions SET deleted_at = ?, version = ?, device_id = ?, last_mutation_id = ?, updated_at = ? WHERE owner_id = ? AND id = ?`)
             .bind(now, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now, ownerId, mutation.entityId),
         ];
-        const reverseEffect = -balanceEffect(existing!);
-        if (reverseEffect) statements.push(env.DB.prepare(`UPDATE accounts SET balance_cents = balance_cents + ?, updated_at = ? WHERE owner_id = ? AND name = ? AND kind <> 'credit-card'`).bind(reverseEffect, now, ownerId, existing!.account));
+        for (const [account, delta] of accountDeltas(existing!, -1)) if (delta) statements.push(env.DB.prepare(`UPDATE accounts SET balance_cents = balance_cents + ?, updated_at = ? WHERE owner_id = ? AND name = ? AND kind <> 'credit-card'`).bind(delta, now, ownerId, account));
         const result: SyncMutationResultV1 = { mutationId: mutation.mutationId, entity: "transaction", entityId: mutation.entityId, status: "applied", entityVersion: decision.nextVersion, entityData: deletedData };
         statements.push(receiptStatement(ownerId, parsed.value.device.id, result, mutation.operation));
         await env.DB.batch(statements);
@@ -208,9 +217,10 @@ export async function POST(request: Request) {
         }
       }
 
-      const paymentMethod = (["credit", "debit", "cash", "transfer"].includes(item!.paymentMethod ?? "") ? item!.paymentMethod : "other") as PaymentMethod;
-      const source = (["import", "recurring", "invoice-payment"].includes(item!.source ?? "") ? item!.source : "manual") as NonNullable<FinanceTransaction["source"]>;
+      let paymentMethod = (["credit", "debit", "cash", "transfer"].includes(item!.paymentMethod ?? "") ? item!.paymentMethod : "other") as PaymentMethod;
+      let source = (["import", "recurring", "invoice-payment"].includes(item!.source ?? "") ? item!.source : "manual") as NonNullable<FinanceTransaction["source"]>;
       let resolvedAccount = item!.account.trim();
+      let resolvedDestinationAccount: string | null = null;
       let resolvedCardId = item!.cardId?.trim() || null;
       const requestedTripId = item!.tripId?.trim() || null;
       const resolvedTripId = requestedTripId ? (await db.select({ id: trips.id }).from(trips).where(and(eq(trips.ownerId, ownerId), eq(trips.id, requestedTripId))).limit(1))[0]?.id ?? null : null;
@@ -240,8 +250,25 @@ export async function POST(request: Request) {
           resolvedInvoiceMonth = selectedCard.kind === "credit" ? resolvedInvoiceMonth ?? purchaseInvoiceMonth(item!.date, selectedCard.closingDay) : null;
         }
       }
+      if (item!.type === "transfer") {
+        paymentMethod = "transfer";
+        source = "account-transfer";
+        resolvedCardId = null;
+        resolvedInvoiceMonth = null;
+        resolvedDestinationAccount = item!.destinationAccount?.trim() || null;
+        const ownerAccounts = await db.select().from(accounts).where(eq(accounts.ownerId, ownerId));
+        const validSource = ownerAccounts.some((account) => account.name === resolvedAccount && account.kind !== "credit-card");
+        const validDestination = ownerAccounts.some((account) => account.name === resolvedDestinationAccount && account.kind !== "credit-card");
+        if (!validSource || !validDestination || resolvedAccount === resolvedDestinationAccount) {
+          results.push(await rememberResult(ownerId, parsed.value.device.id, {
+            mutationId: mutation.mutationId, entity: "transaction", entityId: mutation.entityId,
+            status: "rejected", message: "Selecione contas de origem e destino diferentes",
+          }, mutation.operation));
+          continue;
+        }
+      }
       const values = {
-        description: item!.description.trim(), category: item!.category.trim(), account: resolvedAccount, occurredAt: item!.date,
+        description: source === "import" ? cleanInstallmentDescription(item!.description) : item!.description.trim(), category: item!.type === "transfer" ? "Transferência" : item!.category.trim(), account: resolvedAccount, destinationAccount: resolvedDestinationAccount, occurredAt: item!.date,
         amountCents: Math.round(item!.amount * 100), type: item!.type, paymentMethod,
         cardId: resolvedCardId, tripId: resolvedTripId, invoiceMonth: resolvedInvoiceMonth,
         installments: item!.installments?.trim() || null, status: (item!.status === "planned" ? "planned" : "confirmed") as "planned" | "confirmed", source,
@@ -251,7 +278,7 @@ export async function POST(request: Request) {
         rewardUsdRateMicros: item!.rewardUsdRate == null ? existing?.rewardUsdRateMicros ?? null : Math.round(Math.max(0, item!.rewardUsdRate) * 1_000_000),
       };
       const savedData: FinanceTransaction = {
-        id: mutation.entityId, description: values.description, category: values.category, account: values.account,
+        id: mutation.entityId, description: values.description, category: values.category, account: values.account, destinationAccount: values.destinationAccount ?? undefined,
         date: values.occurredAt, amount: values.amountCents / 100, type: values.type, paymentMethod: values.paymentMethod,
         cardId: values.cardId ?? undefined, tripId: values.tripId ?? undefined, invoiceMonth: values.invoiceMonth ?? undefined, installments: values.installments ?? undefined,
         status: values.status, source: values.source, fingerprint: values.fingerprint ?? undefined,
@@ -262,14 +289,14 @@ export async function POST(request: Request) {
       };
       const result: SyncMutationResultV1 = { mutationId: mutation.mutationId, entity: "transaction", entityId: mutation.entityId, status: "applied", entityVersion: decision.nextVersion, entityData: savedData };
       const write = existing
-        ? env.DB.prepare(`UPDATE transactions SET description = ?, category = ?, account = ?, occurred_at = ?, amount_cents = ?, type = ?, installments = ?, status = ?, source = ?, payment_method = ?, card_id = ?, trip_id = ?, invoice_month = ?, reward_points_milli = ?, reward_cashback_cents = ?, reward_usd_rate_micros = ?, fingerprint = ?, version = ?, deleted_at = NULL, device_id = ?, last_mutation_id = ?, updated_at = ? WHERE owner_id = ? AND id = ?`)
-          .bind(values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now, ownerId, mutation.entityId)
-        : env.DB.prepare(`INSERT INTO transactions (id, owner_id, description, category, account, occurred_at, amount_cents, type, installments, status, source, payment_method, card_id, trip_id, invoice_month, reward_points_milli, reward_cashback_cents, reward_usd_rate_micros, fingerprint, version, deleted_at, device_id, last_mutation_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
-          .bind(mutation.entityId, ownerId, values.description, values.category, values.account, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now);
+        ? env.DB.prepare(`UPDATE transactions SET description = ?, category = ?, account = ?, destination_account = ?, occurred_at = ?, amount_cents = ?, type = ?, installments = ?, status = ?, source = ?, payment_method = ?, card_id = ?, trip_id = ?, invoice_month = ?, reward_points_milli = ?, reward_cashback_cents = ?, reward_usd_rate_micros = ?, fingerprint = ?, version = ?, deleted_at = NULL, device_id = ?, last_mutation_id = ?, updated_at = ? WHERE owner_id = ? AND id = ?`)
+          .bind(values.description, values.category, values.account, values.destinationAccount, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now, ownerId, mutation.entityId)
+        : env.DB.prepare(`INSERT INTO transactions (id, owner_id, description, category, account, destination_account, occurred_at, amount_cents, type, installments, status, source, payment_method, card_id, trip_id, invoice_month, reward_points_milli, reward_cashback_cents, reward_usd_rate_micros, fingerprint, version, deleted_at, device_id, last_mutation_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
+          .bind(mutation.entityId, ownerId, values.description, values.category, values.account, values.destinationAccount, values.occurredAt, values.amountCents, values.type, values.installments, values.status, values.source, values.paymentMethod, values.cardId, values.tripId, values.invoiceMonth, values.rewardPointsMilli, values.rewardCashbackCents, values.rewardUsdRateMicros, values.fingerprint, decision.nextVersion, parsed.value.device.id, mutation.mutationId, now);
       const statements = [write];
       const deltas = new Map<string, number>();
-      if (existing) deltas.set(existing.account, (deltas.get(existing.account) ?? 0) - balanceEffect(existing));
-      deltas.set(values.account, (deltas.get(values.account) ?? 0) + balanceEffect({ ...values, deletedAt: null }));
+      if (existing) for (const [account, delta] of accountDeltas(existing, -1)) deltas.set(account, (deltas.get(account) ?? 0) + delta);
+      for (const [account, delta] of accountDeltas({ ...values, deletedAt: null })) deltas.set(account, (deltas.get(account) ?? 0) + delta);
       for (const [account, delta] of deltas) if (delta) statements.push(env.DB.prepare(`UPDATE accounts SET balance_cents = balance_cents + ?, updated_at = ? WHERE owner_id = ? AND name = ? AND kind <> 'credit-card'`).bind(delta, now, ownerId, account));
       statements.push(receiptStatement(ownerId, parsed.value.device.id, result, mutation.operation));
       await env.DB.batch(statements);

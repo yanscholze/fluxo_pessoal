@@ -139,6 +139,7 @@ export function ensureFinanceSchema() {
         description TEXT NOT NULL,
         category TEXT NOT NULL DEFAULT 'Outros',
         account TEXT NOT NULL DEFAULT 'Nubank',
+        destination_account TEXT,
         occurred_at TEXT NOT NULL,
         amount_cents INTEGER NOT NULL,
         type TEXT NOT NULL,
@@ -233,17 +234,32 @@ export function ensureFinanceSchema() {
         points_goal INTEGER NOT NULL DEFAULT 0,
         manual_usd_rate_micros INTEGER NOT NULL DEFAULT 0,
         color TEXT NOT NULL DEFAULT 'black',
+        image_data TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS cards_owner_name_idx ON cards (owner_id, name)`,
       `CREATE INDEX IF NOT EXISTS cards_owner_idx ON cards (owner_id)`,
+      `CREATE TABLE IF NOT EXISTS reward_redemptions (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_id TEXT NOT NULL,
+        card_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        amount_milli INTEGER NOT NULL,
+        account TEXT,
+        redeemed_at TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS reward_redemptions_owner_date_idx ON reward_redemptions (owner_id, redeemed_at)`,
+      `CREATE INDEX IF NOT EXISTS reward_redemptions_owner_card_idx ON reward_redemptions (owner_id, card_id)`,
     ];
 
     await env.DB.batch(statements.map((statement) => env.DB.prepare(statement)));
     const transactionInfo = await env.DB.prepare("PRAGMA table_info(transactions)").all<{ name: string }>();
     const transactionColumns = new Set(transactionInfo.results.map((column) => column.name));
     if (!transactionColumns.has("payment_method")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'other'").run();
+    if (!transactionColumns.has("destination_account")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN destination_account TEXT").run();
     if (!transactionColumns.has("card_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN card_id TEXT").run();
     if (!transactionColumns.has("trip_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN trip_id TEXT").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS transactions_owner_trip_idx ON transactions (owner_id, trip_id)").run();
@@ -273,6 +289,9 @@ export function ensureFinanceSchema() {
     if (!recurringColumns.has("date_adjustment")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN date_adjustment TEXT NOT NULL DEFAULT 'previous'").run();
     if (!recurringColumns.has("payment_method")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'transfer'").run();
     if (!recurringColumns.has("card_id")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN card_id TEXT").run();
+    const cardInfo = await env.DB.prepare("PRAGMA table_info(cards)").all<{ name: string }>();
+    const cardColumns = new Set(cardInfo.results.map((column) => column.name));
+    if (!cardColumns.has("image_data")) await env.DB.prepare("ALTER TABLE cards ADD COLUMN image_data TEXT").run();
     const feedbackInfo = await env.DB.prepare("PRAGMA table_info(developer_feedback)").all<{ name: string }>();
     const feedbackColumns = new Set(feedbackInfo.results.map((column) => column.name));
     if (!feedbackColumns.has("developer_comment")) await env.DB.prepare("ALTER TABLE developer_feedback ADD COLUMN developer_comment TEXT").run();

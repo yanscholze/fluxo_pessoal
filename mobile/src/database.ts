@@ -13,7 +13,7 @@ type OutboxRow = { mutation_id: string; entity_id: string; operation: "upsert" |
 type AttachmentRow = { entity_id: string; uri: string };
 
 const emptySnapshot = (): FinanceSnapshot => ({
-  accounts: [], categories: [], cards: [], trips: [], transactions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: new Date(0).toISOString(),
+  accounts: [], categories: [], cards: [], trips: [], transactions: [], rewardRedemptions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: new Date(0).toISOString(),
 });
 
 export async function migrateDatabase(db: SQLiteDatabase) {

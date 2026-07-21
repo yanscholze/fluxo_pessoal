@@ -17,6 +17,7 @@ test("expande uma parcela intermediária para todo o histórico", () => {
   const csv = "data;descricao;valor\n10/07/2026;Notebook parcela 3/5;250,00";
   const result = parseImportedText(csv, "csv", { account: "Nubank", card, invoiceMonth: "2026-07" });
   assert.deepEqual(result.items.map((item) => item.invoiceMonth), ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]);
+  assert.ok(result.items.every((item) => item.description === "Notebook"));
   assert.equal(result.expandedInstallments, 4);
 });
 

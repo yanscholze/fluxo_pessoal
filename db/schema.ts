@@ -191,6 +191,7 @@ export const transactions = sqliteTable(
     description: text("description").notNull(),
     category: text("category").notNull().default("Outros"),
     account: text("account").notNull().default("Nubank"),
+    destinationAccount: text("destination_account"),
     occurredAt: text("occurred_at").notNull(),
     amountCents: integer("amount_cents").notNull(),
     type: text("type").notNull(),
@@ -308,11 +309,31 @@ export const cards = sqliteTable(
     pointsGoal: integer("points_goal").notNull().default(0),
     manualUsdRateMicros: integer("manual_usd_rate_micros").notNull().default(0),
     color: text("color").notNull().default("black"),
+    imageData: text("image_data"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
     index("cards_owner_idx").on(table.ownerId),
     uniqueIndex("cards_owner_name_idx").on(table.ownerId, table.name),
+  ],
+);
+
+export const rewardRedemptions = sqliteTable(
+  "reward_redemptions",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    cardId: text("card_id").notNull(),
+    kind: text("kind").notNull(),
+    amountMilli: integer("amount_milli").notNull(),
+    account: text("account"),
+    redeemedAt: text("redeemed_at").notNull(),
+    note: text("note"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("reward_redemptions_owner_date_idx").on(table.ownerId, table.redeemedAt),
+    index("reward_redemptions_owner_card_idx").on(table.ownerId, table.cardId),
   ],
 );

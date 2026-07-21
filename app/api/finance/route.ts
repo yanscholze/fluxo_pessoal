@@ -1,10 +1,11 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { accounts, cards, categories, recurringEntries, transactions, trips } from "../../../db/schema";
+import { accounts, cards, categories, recurringEntries, rewardRedemptions, transactions, trips } from "../../../db/schema";
 import { ensureFinanceSchema } from "../../../db/ensure-schema";
 import { getDb } from "../../../db";
 import { businessDaysInMonth, effectiveRecurringDate } from "../../../lib/brazil-calendar";
 import { scopedImportFingerprint } from "../../../lib/import-fingerprint";
 import type { PaymentMethod, TransactionType } from "../../../lib/finance-types";
+import { cleanInstallmentDescription } from "../../../lib/import-parser";
 import { webIdentityFrom } from "../../../lib/app-auth";
 
 function unauthorized() {
@@ -62,6 +63,15 @@ function cardJson(row: typeof cards.$inferSelect) {
     pointsGoal: row.pointsGoal,
     manualUsdRate: row.manualUsdRateMicros / 1_000_000,
     color: row.color,
+    imageData: row.imageData ?? undefined,
+  };
+}
+
+function rewardRedemptionJson(row: typeof rewardRedemptions.$inferSelect) {
+  return {
+    id: row.id, cardId: row.cardId, kind: row.kind,
+    amount: row.amountMilli / 1000, account: row.account ?? undefined,
+    date: row.redeemedAt, note: row.note ?? undefined, createdAt: row.createdAt,
   };
 }
 
@@ -156,7 +166,8 @@ function balanceEffect(item: { type: string; status: string; paymentMethod: stri
 
 function transactionJson(row: typeof transactions.$inferSelect) {
   return {
-    id: row.id, description: row.description, category: row.category, account: row.account,
+    id: row.id, description: row.installments ? cleanInstallmentDescription(row.description) : row.description, category: row.category, account: row.account,
+    destinationAccount: row.destinationAccount ?? undefined,
     date: row.occurredAt, amount: row.amountCents / 100, type: row.type,
     paymentMethod: row.paymentMethod, cardId: row.cardId ?? undefined, tripId: row.tripId ?? undefined,
     invoiceMonth: row.invoiceMonth ?? undefined, installments: row.installments ?? undefined,
@@ -167,6 +178,20 @@ function transactionJson(row: typeof transactions.$inferSelect) {
     version: row.version, updatedAt: row.updatedAt, deletedAt: row.deletedAt ?? undefined,
     deviceId: row.deviceId ?? undefined,
   };
+}
+
+function accountDeltas(item: { account: string; destinationAccount?: string | null; source?: string | null; type: string; status: string; paymentMethod: string; amountCents: number; deletedAt?: string | null }) {
+  const deltas = new Map<string, number>();
+  const sourceDelta = balanceEffect(item);
+  if (sourceDelta) deltas.set(item.account, sourceDelta);
+  if (!item.deletedAt && item.status === "confirmed" && item.source === "account-transfer" && item.destinationAccount) {
+    deltas.set(item.destinationAccount, (deltas.get(item.destinationAccount) ?? 0) + item.amountCents);
+  }
+  return deltas;
+}
+
+async function applyAccountDeltas(ownerId: string, item: Parameters<typeof accountDeltas>[0], multiplier = 1) {
+  for (const [account, delta] of accountDeltas(item)) await adjustAccount(ownerId, account, delta * multiplier);
 }
 
 function monthOffset(month: string, offset: number) {
@@ -206,12 +231,13 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
     await seedDefaults(ownerId);
     const db = getDb();
     const month = new Date().toISOString().slice(0, 7);
-    const [accountRows, categoryRows, cardRows, tripRows, recurringRows] = await Promise.all([
+    const [accountRows, categoryRows, cardRows, tripRows, recurringRows, redemptionRows] = await Promise.all([
       db.select().from(accounts).where(eq(accounts.ownerId, ownerId)).orderBy(accounts.name),
       db.select().from(categories).where(eq(categories.ownerId, ownerId)).orderBy(categories.kind, categories.name),
       db.select().from(cards).where(eq(cards.ownerId, ownerId)).orderBy(cards.name),
       db.select().from(trips).where(eq(trips.ownerId, ownerId)).orderBy(desc(trips.startDate)),
       db.select().from(recurringEntries).where(eq(recurringEntries.ownerId, ownerId)),
+      db.select().from(rewardRedemptions).where(eq(rewardRedemptions.ownerId, ownerId)).orderBy(desc(rewardRedemptions.redeemedAt), desc(rewardRedemptions.createdAt)),
     ]);
     await materializeRecurring(ownerId, recurringRows, month);
     const transactionRows = await db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), isNull(transactions.deletedAt))).orderBy(desc(transactions.occurredAt), desc(transactions.createdAt));
@@ -224,6 +250,7 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
       cards: cardRows.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "credit" ? -1 : 1).map(cardJson),
       trips: tripRows.map(tripJson),
       transactions: transactionRows.map(transactionJson),
+      rewardRedemptions: redemptionRows.map(rewardRedemptionJson),
       salaryRule: salary ? recurringJson(salary, month) : null,
       benefitRule: benefit ? recurringJson(benefit, month) : null,
       recurringRules: recurringRows.filter((row) => !specialIds.has(row.id)).map((row) => recurringJson(row, month)),
@@ -252,14 +279,15 @@ export async function financePostForOwner(request: Request, ownerId: string) {
     const payload = await request.json() as {
       account?: { id?: string; name?: string; institution?: string; kind?: string; balance?: number; goal?: number; monthlyYieldPercent?: number; fixed?: boolean; color?: string };
       category?: { id?: string; name?: string; originalName?: string; kind?: string; color?: string; icon?: string; essential?: boolean };
-      card?: { id?: string; name?: string; linkedAccount?: string; kind?: string; brand?: string; tier?: string; last4?: string; limit?: number; closingDay?: number; dueDay?: number; dueAdjustment?: string; pointsPerDollar?: number; cashbackPercent?: number; rewardMode?: string; pointsGoal?: number; manualUsdRate?: number; color?: string };
+      card?: { id?: string; name?: string; linkedAccount?: string; kind?: string; brand?: string; tier?: string; last4?: string; limit?: number; closingDay?: number; dueDay?: number; dueAdjustment?: string; pointsPerDollar?: number; cashbackPercent?: number; rewardMode?: string; pointsGoal?: number; manualUsdRate?: number; color?: string; imageData?: string };
+      rewardRedemption?: { id?: string; cardId?: string; kind?: string; amount?: number; account?: string; date?: string; note?: string };
       trip?: { id?: string; name?: string; startDate?: string; endDate?: string; currency?: string; exchangeRate?: number };
       incomeRules?: { salary?: RuleInput; benefit?: RuleInput };
       salaryRule?: RuleInput;
       confirmSalary?: { month?: string };
       recurringRule?: { id?: string; description?: string; category?: string; account?: string; amount?: number; type?: string; dayOfMonth?: number; calculationMode?: string; scheduleMode?: string; dateAdjustment?: string; paymentMethod?: PaymentMethod; cardId?: string; active?: boolean };
       payInvoice?: { id?: string; cardId?: string; invoiceMonth?: string; sourceAccount?: string; amount?: number; date?: string };
-      transaction?: { id?: string; description?: string; category?: string; account?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
+      transaction?: { id?: string; description?: string; category?: string; account?: string; destinationAccount?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
     };
     const db = getDb();
 
@@ -305,8 +333,10 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       if (existing && existing.name !== name) {
         await Promise.all([
           db.update(transactions).set({ account: name, updatedAt: now }).where(and(eq(transactions.ownerId, ownerId), eq(transactions.account, existing.name))),
+          db.update(transactions).set({ destinationAccount: name, updatedAt: now }).where(and(eq(transactions.ownerId, ownerId), eq(transactions.destinationAccount, existing.name))),
           db.update(cards).set({ linkedAccount: name, updatedAt: now }).where(and(eq(cards.ownerId, ownerId), eq(cards.linkedAccount, existing.name))),
           db.update(recurringEntries).set({ account: name, updatedAt: now }).where(and(eq(recurringEntries.ownerId, ownerId), eq(recurringEntries.account, existing.name))),
+          db.update(rewardRedemptions).set({ account: name }).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.account, existing.name))),
         ]);
       }
       return Response.json({ account: { id, name, institution: values.institution, kind, balance, goal, monthlyYieldPercent, fixed: values.fixed, color: values.color } });
@@ -353,6 +383,10 @@ export async function financePostForOwner(request: Request, ownerId: string) {
         if (duplicateName.length) return Response.json({ error: "Já existe um cartão com este nome" }, { status: 409 });
       }
       const now = new Date().toISOString();
+      const imageData = item.imageData == null ? existing?.imageData ?? null : item.imageData.trim() || null;
+      if (imageData && (!/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(imageData) || imageData.length > 2_000_000)) {
+        return Response.json({ error: "A imagem do cartão deve ser PNG, JPG ou WebP e ter até 1,5 MB" }, { status: 400 });
+      }
       const values = {
         name, linkedAccount, kind: item.kind === "debit" ? "debit" : "credit",
         brand: item.brand?.trim() || "Mastercard", tier: item.tier?.trim() || "Black",
@@ -364,12 +398,48 @@ export async function financePostForOwner(request: Request, ownerId: string) {
         rewardMode: ["points", "cashback", "both"].includes(item.rewardMode ?? "") ? String(item.rewardMode) : "none",
         pointsGoal: Math.max(0, Math.trunc(Number(item.pointsGoal ?? 0))),
         manualUsdRateMicros: Math.round(Math.max(0, Number(item.manualUsdRate ?? 0)) * 1_000_000),
-        color: item.color?.trim() || "black", updatedAt: now,
+        color: item.color?.trim() || "black", imageData, updatedAt: now,
       };
       if (existing) await db.update(cards).set(values).where(and(eq(cards.ownerId, ownerId), eq(cards.id, existing.id)));
       else await db.insert(cards).values({ id, ownerId, ...values });
       const saved = (await db.select().from(cards).where(and(eq(cards.ownerId, ownerId), eq(cards.id, id))).limit(1))[0];
       return Response.json({ card: cardJson(saved) });
+    }
+
+    if (payload.rewardRedemption) {
+      const item = payload.rewardRedemption;
+      const cardId = item.cardId?.trim() || "";
+      const kind = item.kind === "cashback" ? "cashback" : item.kind === "points" ? "points" : "";
+      const amount = Number(item.amount);
+      const redeemedAt = item.date?.trim() || new Date().toISOString().slice(0, 10);
+      if (!cardId || !kind || !Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(redeemedAt)) return Response.json({ error: "Resgate inválido" }, { status: 400 });
+      const card = (await db.select().from(cards).where(and(eq(cards.ownerId, ownerId), eq(cards.id, cardId))).limit(1))[0];
+      if (!card) return Response.json({ error: "Cartão não encontrado" }, { status: 404 });
+      const [purchaseRows, previousRedemptions] = await Promise.all([
+        db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.cardId, cardId), isNull(transactions.deletedAt))),
+        db.select().from(rewardRedemptions).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.cardId, cardId))),
+      ]);
+      const eligibleRows = purchaseRows.filter((row) => row.status === "confirmed" && row.type === "expense");
+      const pointsEnabled = card.rewardMode === "points" || card.rewardMode === "both"; const cashbackEnabled = card.rewardMode === "cashback" || card.rewardMode === "both";
+      const earnedMilli = kind === "points"
+        ? eligibleRows.reduce((sum, row) => sum + (row.rewardPointsMilli ?? (pointsEnabled && card.manualUsdRateMicros > 0 ? Math.round((row.amountCents * 10_000 / card.manualUsdRateMicros) * card.pointsPerDollarMilli) : 0)), 0)
+        : eligibleRows.reduce((sum, row) => sum + (row.rewardCashbackCents ?? (cashbackEnabled ? Math.round(row.amountCents * card.cashbackBasisPoints / 10_000) : 0)) * 10, 0);
+      const redeemedMilli = previousRedemptions.filter((row) => row.kind === kind).reduce((sum, row) => sum + row.amountMilli, 0);
+      const amountMilli = Math.round(amount * 1000);
+      if (amountMilli > earnedMilli - redeemedMilli) return Response.json({ error: `Saldo de ${kind === "points" ? "pontos" : "cashback"} insuficiente` }, { status: 400 });
+      let accountName: string | null = null;
+      if (kind === "cashback") {
+        accountName = item.account?.trim() || "";
+        const account = (await db.select().from(accounts).where(and(eq(accounts.ownerId, ownerId), eq(accounts.name, accountName))).limit(1))[0];
+        if (!account || account.kind === "credit-card") return Response.json({ error: "Selecione uma conta válida para receber o cashback" }, { status: 400 });
+      }
+      const id = item.id?.trim() || freshEntityId(ownerId, "reward-redemption", card.name);
+      const foreign = await db.select({ ownerId: rewardRedemptions.ownerId }).from(rewardRedemptions).where(eq(rewardRedemptions.id, id)).limit(1);
+      if (foreign.length) return Response.json({ error: "Este resgate já foi registrado" }, { status: 409 });
+      await db.insert(rewardRedemptions).values({ id, ownerId, cardId, kind, amountMilli, account: accountName, redeemedAt, note: item.note?.trim().slice(0, 180) || null });
+      if (kind === "cashback" && accountName) await adjustAccount(ownerId, accountName, Math.round(amount * 100));
+      const saved = (await db.select().from(rewardRedemptions).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.id, id))).limit(1))[0];
+      return Response.json({ rewardRedemption: rewardRedemptionJson(saved) }, { status: 201 });
     }
 
     if (payload.recurringRule) {
@@ -504,8 +574,9 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       const duplicate = (await db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.fingerprint, importFingerprint))).limit(1))[0];
       if (duplicate) { previous = duplicate; transactionId = duplicate.id; }
     }
-    const paymentMethod = ["credit", "debit", "cash", "transfer"].includes(item.paymentMethod ?? "") ? String(item.paymentMethod) : "other";
+    let paymentMethod = ["credit", "debit", "cash", "transfer"].includes(item.paymentMethod ?? "") ? String(item.paymentMethod) : "other";
     let resolvedAccount = item.account?.trim() || "Nubank";
+    let resolvedDestinationAccount: string | null = null;
     let resolvedCardId = item.cardId?.trim() || null;
     const requestedTripId = item.tripId?.trim() || null;
     const resolvedTripId = requestedTripId
@@ -525,10 +596,24 @@ export async function financePostForOwner(request: Request, ownerId: string) {
         resolvedInvoiceMonth = selectedCard.kind === "credit" ? resolvedInvoiceMonth ?? purchaseInvoiceMonth(item.date, selectedCard.closingDay) : null;
       }
     }
+    if (transactionType === "transfer") {
+      paymentMethod = "transfer";
+      resolvedCardId = null;
+      resolvedInvoiceMonth = null;
+      resolvedDestinationAccount = item.destinationAccount?.trim() || null;
+      const ownerAccounts = await db.select().from(accounts).where(eq(accounts.ownerId, ownerId));
+      const sourceAccount = ownerAccounts.find((account) => account.name === resolvedAccount && account.kind !== "credit-card");
+      const destinationAccount = ownerAccounts.find((account) => account.name === resolvedDestinationAccount && account.kind !== "credit-card");
+      if (!sourceAccount || !destinationAccount || sourceAccount.name === destinationAccount.name) return Response.json({ error: "Selecione contas de origem e destino diferentes" }, { status: 400 });
+    } else if (paymentMethod !== "credit") {
+      const ownerAccount = (await db.select().from(accounts).where(and(eq(accounts.ownerId, ownerId), eq(accounts.name, resolvedAccount))).limit(1))[0];
+      if (!ownerAccount || ownerAccount.kind === "credit-card") return Response.json({ error: "Selecione uma conta válida" }, { status: 400 });
+    }
     const now = new Date().toISOString();
+    const source = transactionType === "transfer" ? "account-transfer" : ["import", "recurring", "invoice-payment"].includes(item.source ?? "") ? String(item.source) : "manual";
     const values = {
-      description: item.description.trim(), category: item.category?.trim() || "Outros",
-      account: resolvedAccount, occurredAt: item.date,
+      description: source === "import" ? cleanInstallmentDescription(item.description) : item.description.trim(), category: transactionType === "transfer" ? "Transferência" : item.category?.trim() || "Outros",
+      account: resolvedAccount, destinationAccount: resolvedDestinationAccount, occurredAt: item.date,
       amountCents: Math.round(Number(item.amount) * 100), type: transactionType,
       paymentMethod, cardId: resolvedCardId, tripId: resolvedTripId,
       invoiceMonth: resolvedInvoiceMonth,
@@ -536,13 +621,13 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       rewardCashbackCents: item.rewardCashback == null ? previous?.rewardCashbackCents ?? null : Math.round(Math.max(0, Number(item.rewardCashback)) * 100),
       rewardUsdRateMicros: item.rewardUsdRate == null ? previous?.rewardUsdRateMicros ?? null : Math.round(Math.max(0, Number(item.rewardUsdRate)) * 1_000_000),
       installments: item.installments?.trim() || null, status: item.status === "planned" ? "planned" : "confirmed",
-      source: ["import", "recurring", "invoice-payment"].includes(item.source ?? "") ? String(item.source) : "manual",
+      source,
       fingerprint: importFingerprint || null, version: (previous?.version ?? 0) + 1,
       deletedAt: null, deviceId: "web", lastMutationId: null, updatedAt: now,
     };
     await db.insert(transactions).values({ id: transactionId, ownerId, ...values }).onConflictDoUpdate({ target: transactions.id, set: values });
-    if (previous) await adjustAccount(ownerId, previous.account, -balanceEffect(previous));
-    await adjustAccount(ownerId, values.account, balanceEffect(values));
+    if (previous) await applyAccountDeltas(ownerId, previous, -1);
+    await applyAccountDeltas(ownerId, values);
     const saved = (await db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.id, transactionId))).limit(1))[0];
     return Response.json({ transaction: transactionJson(saved), updatedDuplicate: transactionId !== item.id }, { status: 201 });
   } catch (error) {
@@ -570,12 +655,14 @@ export async function financeDeleteForOwner(request: Request, ownerId: string) {
       const account = (await db.select().from(accounts).where(and(eq(accounts.id, id), eq(accounts.ownerId, ownerId))).limit(1))[0];
       if (!account) return Response.json({ ok: true });
       if (account.fixed) return Response.json({ error: "A conta fixa de reserva não pode ser excluída" }, { status: 409 });
-      const [linkedTransaction, linkedCard, linkedRule] = await Promise.all([
+      const [linkedTransaction, linkedDestination, linkedCard, linkedRule, linkedReward] = await Promise.all([
         db.select({ id: transactions.id }).from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.account, account.name), isNull(transactions.deletedAt))).limit(1),
+        db.select({ id: transactions.id }).from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.destinationAccount, account.name), isNull(transactions.deletedAt))).limit(1),
         db.select({ id: cards.id }).from(cards).where(and(eq(cards.ownerId, ownerId), eq(cards.linkedAccount, account.name))).limit(1),
         db.select({ id: recurringEntries.id }).from(recurringEntries).where(and(eq(recurringEntries.ownerId, ownerId), eq(recurringEntries.account, account.name))).limit(1),
+        db.select({ id: rewardRedemptions.id }).from(rewardRedemptions).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.account, account.name))).limit(1),
       ]);
-      if (linkedTransaction.length || linkedCard.length || linkedRule.length) {
+      if (linkedTransaction.length || linkedDestination.length || linkedCard.length || linkedRule.length || linkedReward.length) {
         return Response.json({ error: "Esta conta possui lançamentos, cartões ou recorrências vinculados. Realoque-os antes de excluir." }, { status: 409 });
       }
       await db.delete(accounts).where(and(eq(accounts.ownerId, ownerId), eq(accounts.id, id)));
@@ -591,7 +678,7 @@ export async function financeDeleteForOwner(request: Request, ownerId: string) {
     }
     const existing = (await db.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.ownerId, ownerId))).limit(1))[0];
     if (existing && !existing.deletedAt) {
-      await adjustAccount(ownerId, existing.account, -balanceEffect(existing));
+      await applyAccountDeltas(ownerId, existing, -1);
       await db.update(transactions).set({
         deletedAt: new Date().toISOString(), version: existing.version + 1,
         deviceId: "web", lastMutationId: null, updatedAt: new Date().toISOString(),

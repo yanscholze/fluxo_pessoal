@@ -17,7 +17,7 @@ function formatMoneyInput(value: number) { return value.toFixed(2).replace(".", 
 export function TransactionComposer({ open, snapshot, initialCardId, palette, onClose, onSaved }: { open: boolean; snapshot: FinanceSnapshot; initialCardId?: string; palette: Palette; onClose: () => void; onSaved: () => Promise<void> | void }) {
   const db = useSQLiteContext(); const styles = useMemo(() => makeStyles(palette), [palette]);
   const [type, setType] = useState<TransactionType>("expense"); const [description, setDescription] = useState(""); const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState(""); const [account, setAccount] = useState(""); const [paymentMethod, setPaymentMethod] = useState<"debit" | "credit">("debit");
+  const [category, setCategory] = useState(""); const [account, setAccount] = useState(""); const [destinationAccount, setDestinationAccount] = useState(""); const [paymentMethod, setPaymentMethod] = useState<"debit" | "credit">("debit");
   const [installments, setInstallments] = useState("1"); const [cardId, setCardId] = useState(""); const [date, setDate] = useState(today());
   const [tripId, setTripId] = useState(""); const [tripInitialized, setTripInitialized] = useState(false);
   const [receiptUri, setReceiptUri] = useState(""); const [receiptScan, setReceiptScan] = useState<ReceiptScanResult | null>(null); const [scanning, setScanning] = useState(false);
@@ -37,6 +37,7 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
   }, [creditCards, initialCardId, open, snapshot.trips, tripInitialized]);
   useEffect(() => { if (!choices.some((item) => item.name === category)) setCategory(choices[0]?.name ?? (type === "income" ? "Receita" : "Outros")); }, [category, choiceKey, choices, type]);
   useEffect(() => { if (!accounts.some((item) => item.name === account)) setAccount(accounts[0]?.name ?? "Nubank"); }, [account, accounts]);
+  useEffect(() => { if (!accounts.some((item) => item.name === destinationAccount) || destinationAccount === account) setDestinationAccount(accounts.find((item) => item.name !== account)?.name ?? ""); }, [account, accounts, destinationAccount]);
 
   async function captureReceipt() {
     setError("");
@@ -74,12 +75,13 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
     setError(""); const numeric = Number(amount.replace(/\./g, "").replace(",", "."));
     if (!description.trim()) { setError("Descreva este lançamento."); return; }
     if (!Number.isFinite(numeric) || numeric <= 0) { setError("Informe um valor válido."); return; }
+    if (type === "transfer" && (!destinationAccount || destinationAccount === account)) { setError("Escolha contas de origem e destino diferentes."); return; }
     setBusy(true);
     try {
       const transactionDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(`${date}T12:00:00Z`)) ? date : "";
       if (!transactionDate) { setError("Informe a data no formato AAAA-MM-DD."); setBusy(false); return; }
       const selectedCard = creditCards.find((item) => item.id === cardId);
-      const method = type === "expense" && paymentMethod === "credit" && selectedCard ? "credit" : type === "income" ? "transfer" : "debit";
+      const method = type === "expense" && paymentMethod === "credit" && selectedCard ? "credit" : type === "income" || type === "transfer" ? "transfer" : "debit";
       const count = method === "credit" ? Math.min(48, Math.max(1, Math.trunc(Number(installments) || 1))) : 1;
       const totalCents = Math.round(numeric * 100); const baseCents = Math.floor(totalCents / count); const remainder = totalCents - baseCents * count;
       const groupId = newId("mobile"); const firstInvoiceMonth = method === "credit" ? invoiceMonthFor(transactionDate, selectedCard!.closingDay) : undefined;
@@ -88,11 +90,11 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
         const installmentDate = index === 0 ? transactionDate : dateInMonth(transactionDate, monthOffset(transactionDate.slice(0, 7), index));
         const id = `${groupId}-${index + 1}`;
         await saveLocalTransaction(db, {
-          id, description: description.trim(), category, account: method === "credit" ? selectedCard!.linkedAccount : account,
+          id, description: description.trim(), category: type === "transfer" ? "Transferência" : category, account: method === "credit" ? selectedCard!.linkedAccount : account, destinationAccount: type === "transfer" ? destinationAccount : undefined,
           date: installmentDate, amount: (baseCents + (index < remainder ? 1 : 0)) / 100, type, paymentMethod: method,
           cardId: method === "credit" ? selectedCard!.id : undefined, invoiceMonth,
           tripId: tripId || undefined,
-          installments: count > 1 ? `${index + 1}/${count}` : undefined, status: "confirmed", source: "manual", version: 0,
+          installments: count > 1 ? `${index + 1}/${count}` : undefined, status: "confirmed", source: type === "transfer" ? "account-transfer" : "manual", version: 0,
         }, newId("mutation"));
         if (receiptUri && index === 0) await saveLocalAttachment(db, id, receiptUri);
       }
@@ -105,14 +107,15 @@ export function TransactionComposer({ open, snapshot, initialCardId, palette, on
     <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       {receiptUri ? <View style={styles.receipt}><Image source={{ uri: receiptUri }} style={styles.receiptImage} /><View style={styles.receiptMain}><Text style={styles.receiptTitle}>{scanning ? "Lendo cupom…" : receiptScan ? "Cupom interpretado" : "Cupom anexado"}</Text><Text style={styles.receiptCopy}>{scanning ? "Buscando estabelecimento, valor, data e itens." : receiptScan ? `${receiptScan.merchant || receiptScan.description} · ${receiptScan.items.length} ${receiptScan.items.length === 1 ? "item" : "itens"} · confira antes de salvar.` : "A foto ficará vinculada a este lançamento."}</Text></View>{scanning ? <ActivityIndicator color={palette.accent} /> : <Pressable onPress={() => { setReceiptUri(""); setReceiptScan(null); }}><Text style={styles.removeReceipt}>×</Text></Pressable>}</View> : null}
       {receiptScan?.warnings.length ? <View style={styles.scanWarning}>{receiptScan.warnings.map((item, index) => <Text key={`${item}-${index}`} style={styles.scanWarningText}>• {item}</Text>)}</View> : null}
-      <View style={styles.toggle}>{(["expense", "income"] as TransactionType[]).map((item) => <Pressable key={item} style={[styles.toggleButton, type === item && styles.toggleActive]} onPress={() => setType(item)}><Text style={[styles.toggleText, type === item && styles.toggleTextActive]}>{item === "expense" ? "Saída" : "Entrada"}</Text></Pressable>)}</View>
+      <View style={styles.toggle}>{(["expense", "income", "transfer"] as TransactionType[]).map((item) => <Pressable key={item} style={[styles.toggleButton, type === item && styles.toggleActive]} onPress={() => { setType(item); if (item === "transfer" && !description) setDescription("Transferência entre contas"); }}><Text style={[styles.toggleText, type === item && styles.toggleTextActive]}>{item === "expense" ? "Saída" : item === "income" ? "Entrada" : "Transferir"}</Text></Pressable>)}</View>
       <View style={styles.descriptionRow}><TextInput placeholder="Descrição" placeholderTextColor={palette.muted} value={description} onChangeText={setDescription} style={[styles.input, styles.descriptionInput]} autoFocus /><Pressable accessibilityLabel="Fotografar cupom" style={styles.inlineCamera} onPress={captureReceipt}><Text style={styles.inlineCameraText}>▣</Text></Pressable></View>
       <TextInput placeholder="R$ 0,00" placeholderTextColor={palette.muted} value={amount} onChangeText={setAmount} style={[styles.input, styles.amountInput]} keyboardType="decimal-pad" />
       <Text style={styles.fieldLabel}>DATA DA COMPRA</Text><TextInput placeholder="AAAA-MM-DD" placeholderTextColor={palette.muted} value={date} onChangeText={setDate} style={styles.input} keyboardType="numbers-and-punctuation" maxLength={10} />
       {type === "expense" && snapshot.trips.length > 0 && <><Text style={styles.fieldLabel}>MODO VIAGEM</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}><Pressable style={[styles.chip, !tripId && styles.chipActive]} onPress={() => setTripId("")}><Text style={[styles.chipText, !tripId && styles.chipTextActive]}>Sem viagem</Text></Pressable>{snapshot.trips.map((item) => <Pressable key={item.id} style={[styles.chip, tripId === item.id && styles.chipActive]} onPress={() => setTripId(item.id)}><Text style={[styles.chipText, tripId === item.id && styles.chipTextActive]}>✈ {item.name} · {item.currency}</Text></Pressable>)}</ScrollView></>}
       {type === "expense" && <><Text style={styles.fieldLabel}>FORMA DE PAGAMENTO</Text><View style={styles.toggle}>{(["debit", "credit"] as const).map((item) => <Pressable key={item} style={[styles.toggleButton, paymentMethod === item && styles.toggleActive]} onPress={() => setPaymentMethod(item)}><Text style={[styles.toggleText, paymentMethod === item && styles.toggleTextActive]}>{item === "credit" ? "Crédito" : "Débito / saldo"}</Text></Pressable>)}</View>{paymentMethod === "credit" && <><Text style={styles.fieldLabel}>CARTÃO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{creditCards.map((item) => <Pressable key={item.id} style={[styles.chip, cardId === item.id && styles.chipActive]} onPress={() => setCardId(item.id)}><Text style={[styles.chipText, cardId === item.id && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView><TextInput placeholder="Quantidade de parcelas" placeholderTextColor={palette.muted} value={installments} onChangeText={setInstallments} style={styles.input} keyboardType="number-pad" /></>}</>}
-      <Text style={styles.fieldLabel}>CATEGORIA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{choices.map((item) => <Pressable key={item.id} style={[styles.chip, category === item.name && styles.chipActive]} onPress={() => setCategory(item.name)}><Text style={[styles.chipText, category === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView>
-      {(paymentMethod !== "credit" || type === "income") && <><Text style={styles.fieldLabel}>CONTA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{accounts.map((item) => <Pressable key={item.id} style={[styles.chip, account === item.name && styles.chipActive]} onPress={() => setAccount(item.name)}><Text style={[styles.chipText, account === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView></>}
+      {type !== "transfer" && <><Text style={styles.fieldLabel}>CATEGORIA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{choices.map((item) => <Pressable key={item.id} style={[styles.chip, category === item.name && styles.chipActive]} onPress={() => setCategory(item.name)}><Text style={[styles.chipText, category === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView></>}
+      {(paymentMethod !== "credit" || type === "income" || type === "transfer") && <><Text style={styles.fieldLabel}>{type === "transfer" ? "CONTA DE ORIGEM" : "CONTA"}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{accounts.map((item) => <Pressable key={item.id} style={[styles.chip, account === item.name && styles.chipActive]} onPress={() => setAccount(item.name)}><Text style={[styles.chipText, account === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView></>}
+      {type === "transfer" && <><Text style={styles.fieldLabel}>CONTA DE DESTINO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{accounts.filter((item) => item.name !== account).map((item) => <Pressable key={item.id} style={[styles.chip, destinationAccount === item.name && styles.chipActive]} onPress={() => setDestinationAccount(item.name)}><Text style={[styles.chipText, destinationAccount === item.name && styles.chipTextActive]}>{item.name}</Text></Pressable>)}</ScrollView></>}
       {error ? <Text style={styles.error}>{error}</Text> : null}<Pressable disabled={busy || scanning} style={[styles.save, (busy || scanning) && styles.disabled]} onPress={save}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{scanning ? "Lendo cupom…" : "Salvar lançamento"}</Text>}</Pressable>
     </ScrollView></View></View></Modal>;
 }
