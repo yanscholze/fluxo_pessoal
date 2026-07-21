@@ -20,6 +20,7 @@
     "plugins": [
       ["expo-secure-store", { "configureAndroidBackup": true }],
       "expo-sqlite",
+      ["expo-notifications", { "color": "#35b7aa", "defaultChannel": "fluxo-updates" }],
       ["expo-image-picker", { "cameraPermission": "Permita que o Fluxo fotografe e anexe seus cupons fiscais.", "photosPermission": false }]
     ],
     "extra": { "eas": { "projectId": "13821e67-9f56-418c-a8bd-fe90eaf83620" } }

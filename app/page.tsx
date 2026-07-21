@@ -2,6 +2,7 @@
 
 import NextImage from "next/image";
 import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Award, Banknote, Bell, CalendarDays,
   ChartNoAxesCombined, Check, ChevronLeft, ChevronRight,
@@ -27,9 +28,11 @@ type MonthOption = { key: string; label: string };
 type DashboardWidgetLayout = "desktop" | "mobile";
 type DashboardMetric = { id: DashboardWidgetId; label: string; value: string; note: string; icon: typeof LayoutDashboard; tone: string; target: View };
 type SessionUser = { id: string; email: string; displayName: string };
-type ProfileFeedback = { id: string; senderOwnerId: string; senderName: string; message: string; status: string; createdAt: string };
+type ProfileFeedback = { id: string; senderOwnerId: string; senderName: string; message: string; status: string; developerComment?: string | null; createdAt: string; updatedAt: string };
 type ProfilePayload = { user: SessionUser & { avatarData?: string | null }; isDeveloper: boolean; feedback: ProfileFeedback[] };
 type FinancialCoachResult = { answer: string; summary: string; actions: Array<{ label: string; reason: string; priority: "high" | "medium" | "low" }>; warnings: string[] };
+type AppNotification = { id: string; kind: string; title: string; message: string; feedbackId?: string | null; readAt?: string | null; createdAt: string };
+type NotificationsPayload = { notifications: AppNotification[]; unreadCount: number };
 
 const navItems: { label: View; icon: typeof LayoutDashboard }[] = [
   { label: "Visão geral", icon: LayoutDashboard }, { label: "Lançamentos", icon: ReceiptText },
@@ -132,6 +135,10 @@ function FinanceApplication({ user, onLogout }: { user: SessionUser; onLogout: (
   const [cardOpen, setCardOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<FinanceCard | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [profileUser, setProfileUser] = useState<SessionUser & { avatarData?: string | null }>(user);
   const firstName = profileUser.displayName.trim().split(/\s+/)[0] || profileUser.email.split("@")[0];
   const [greeting, setGreeting] = useState(`Olá, ${firstName}`);
@@ -174,6 +181,32 @@ function FinanceApplication({ user, onLogout }: { user: SessionUser; onLogout: (
     document.documentElement.style.backgroundColor = canvasColor;
     document.body.style.backgroundColor = canvasColor;
   }, [theme]);
+
+  async function refreshNotifications() {
+    try {
+      const response = await fetch("/api/v1/notifications", { cache: "no-store" });
+      const payload = await response.json() as NotificationsPayload & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível carregar as notificações");
+      setNotifications(payload.notifications); setUnreadCount(payload.unreadCount);
+    } catch { /* tenta novamente no próximo ciclo */ }
+  }
+  useEffect(() => {
+    const initial = window.setTimeout(() => void refreshNotifications(), 0);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refreshNotifications(); }, 30_000);
+    const visible = () => { if (document.visibilityState === "visible") void refreshNotifications(); };
+    document.addEventListener("visibilitychange", visible);
+    return () => { window.clearTimeout(initial); window.clearInterval(timer); document.removeEventListener("visibilitychange", visible); };
+  }, []);
+  async function notificationAction(action: "mark-read" | "mark-all-read", id?: string) {
+    setNotificationsBusy(true);
+    try {
+      const response = await fetch("/api/v1/notifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, id }) });
+      const payload = await response.json() as NotificationsPayload & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível atualizar as notificações");
+      setNotifications(payload.notifications); setUnreadCount(payload.unreadCount);
+    } catch (reason) { flash(reason instanceof Error ? reason.message : "Não foi possível atualizar as notificações"); }
+    finally { setNotificationsBusy(false); }
+  }
 
   function flash(message: string) {
     setNotice(message);
@@ -270,7 +303,7 @@ function FinanceApplication({ user, onLogout }: { user: SessionUser; onLogout: (
           {view !== "Configurações" && <div className="month-picker" aria-label="Selecionar mês"><button className="icon-button compact" onClick={() => setMonthIndex((index) => Math.max(0, index - 1))} aria-label="Mês anterior"><ChevronLeft size={17} /></button><CalendarDays size={18} /><span>{selectedMonth.label}</span><button className="icon-button compact" onClick={() => setMonthIndex((index) => Math.min(monthOptions.length - 1, index + 1))} aria-label="Próximo mês"><ChevronRight size={17} /></button></div>}
           <SyncPill status={status} onRetry={finance.retrySync} />
           <button className="icon-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Alternar tema">{theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}</button>
-          <button className="icon-button desktop-only" aria-label="Notificações e recomendações" onClick={() => navigate("Configurações")}><Bell size={19} /></button>
+          <button className={`icon-button notification-button desktop-only ${unreadCount ? "has-unread" : ""}`} aria-label={unreadCount ? `${unreadCount} notificações não lidas` : "Notificações"} onClick={() => { setNotificationsOpen(true); void refreshNotifications(); }}><Bell size={19} />{unreadCount > 0 && <span className="notification-count">{Math.min(unreadCount, 99)}</span>}</button>
           <button className="primary-button" onClick={() => openTransaction()}><Plus size={18} /> <span>Novo lançamento</span></button>
         </div>
       </header>
@@ -303,6 +336,7 @@ function FinanceApplication({ user, onLogout }: { user: SessionUser; onLogout: (
     {categoryOpen && <CategoryModal categories={categories} onClose={() => setCategoryOpen(false)} onSave={async (category) => { await finance.saveCategory(category); flash("Categoria salva"); }} />}
     {accountOpen && <AccountModal account={editingAccount} onClose={() => { setAccountOpen(false); setEditingAccount(null); }} onSave={async (account) => { await finance.saveAccount(account); setAccountOpen(false); setEditingAccount(null); flash("Conta salva"); }} onDelete={editingAccount && !editingAccount.fixed ? async () => { if (!window.confirm(`Excluir a conta ${editingAccount.name}?`)) return; await finance.removeAccount(editingAccount.id); setAccountOpen(false); setEditingAccount(null); flash("Conta excluída"); } : undefined} />}
     {cardOpen && <CardModal card={editingCard} accounts={accounts} onClose={() => { setCardOpen(false); setEditingCard(null); }} onSave={async (card) => { await finance.saveCard(card); setCardOpen(false); setEditingCard(null); flash("Cartão e recompensas atualizados"); }} />}
+    {notificationsOpen && <NotificationsModal notifications={notifications} unreadCount={unreadCount} busy={notificationsBusy} onClose={() => setNotificationsOpen(false)} onRead={async (item) => { if (!item.readAt) await notificationAction("mark-read", item.id); if (item.feedbackId) { setNotificationsOpen(false); navigate("Configurações"); } }} onReadAll={() => void notificationAction("mark-all-read")} />}
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </div>;
 }
@@ -493,6 +527,13 @@ function FlowAssistant({ period, tip }: { period: string; tip: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const suggestions = ["Quanto posso gastar sem apertar o próximo mês?", "Minha reserva de emergência está saudável?", "Qual gasto merece mais atenção agora?"];
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.body.style.overflow = "hidden"; document.addEventListener("keydown", close);
+    return () => { document.body.style.overflow = previous; document.removeEventListener("keydown", close); };
+  }, [open]);
   async function ask(value = question) {
     const prompt = value.trim();
     if (prompt.length < 3 || busy) return;
@@ -505,15 +546,24 @@ function FlowAssistant({ period, tip }: { period: string; tip: string }) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não consegui analisar seus dados"); }
     finally { setBusy(false); }
   }
-  return <section className="flow-ai-card">
+  return <><section className="flow-ai-card">
     <div className="flow-ai-orb"><Sparkles size={22} /></div><div className="flow-ai-copy"><span>ASSISTENTE FLUXO</span><strong>Uma decisão melhor começa pelos seus dados.</strong><small>{result?.summary || tip}</small></div><button className="primary-button" onClick={() => setOpen(true)}>Perguntar à IA</button>
-    {open && <div className="modal-layer nested" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}><section className="modal flow-ai-modal" role="dialog" aria-modal="true"><div className="modal-header"><div><span className="eyebrow">GESTOR FINANCEIRO</span><h2>Converse com o Fluxo</h2><p>As respostas consideram somente os dados da sua conta e do período selecionado.</p></div><button className="icon-button" onClick={() => setOpen(false)}><X size={19} /></button></div>
+  </section>
+    {open && createPortal(<div className="modal-layer global-modal-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}><section className="modal flow-ai-modal" role="dialog" aria-modal="true" aria-labelledby="flow-ai-title"><div className="modal-header"><div><span className="eyebrow">GESTOR FINANCEIRO</span><h2 id="flow-ai-title">Converse com o Fluxo</h2><p>As respostas consideram somente os dados da sua conta e do período selecionado.</p></div><button className="icon-button" aria-label="Fechar assistente" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <div className="ai-suggestions">{suggestions.map((item) => <button key={item} onClick={() => void ask(item)}>{item}</button>)}</div>
       {result && <div className="ai-answer"><span><Sparkles size={17} /> ANÁLISE DO FLUXO</span><strong>{result.summary}</strong><p>{result.answer}</p>{result.actions.length > 0 && <div className="ai-actions">{result.actions.map((action) => <article key={`${action.label}-${action.reason}`} data-priority={action.priority}><span>{action.priority === "high" ? "Prioridade" : "Próximo passo"}</span><strong>{action.label}</strong><small>{action.reason}</small></article>)}</div>}{result.warnings.map((warning) => <small className="ai-warning" key={warning}><AlertTriangle size={14} />{warning}</small>)}</div>}
       {error && <div className="auth-error"><AlertTriangle size={16} />{error}</div>}
       <form className="ai-question" onSubmit={(event) => { event.preventDefault(); void ask(); }}><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ex.: Posso fazer uma compra de R$ 800 agora?" maxLength={600} /><button className="primary-button" disabled={busy || question.trim().length < 3}>{busy ? <RefreshCw className="spin" size={17} /> : <Send size={17} />}{busy ? "Analisando" : "Perguntar"}</button></form>
-    </section></div>}
-  </section>;
+    </section></div>, document.body)}
+  </>;
+}
+
+function NotificationsModal({ notifications, unreadCount, busy, onClose, onRead, onReadAll }: { notifications: AppNotification[]; unreadCount: number; busy: boolean; onClose: () => void; onRead: (item: AppNotification) => Promise<void>; onReadAll: () => void }) {
+  useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); }; document.addEventListener("keydown", close); return () => document.removeEventListener("keydown", close); }, [onClose]);
+  return createPortal(<div className="modal-layer global-modal-layer notifications-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal notifications-modal" role="dialog" aria-modal="true" aria-labelledby="notifications-title"><div className="modal-header"><div><span className="eyebrow">CENTRAL DE ALERTAS</span><h2 id="notifications-title">Notificações</h2><p>{unreadCount ? `${unreadCount} ${unreadCount === 1 ? "novidade ainda não lida" : "novidades ainda não lidas"}.` : "Você está em dia com as novidades."}</p></div><button className="icon-button" aria-label="Fechar notificações" onClick={onClose}><X size={19} /></button></div>
+    <div className="notifications-toolbar"><span>Atualizações do Fluxo</span>{unreadCount > 0 && <button disabled={busy} onClick={onReadAll}><Check size={14} /> Marcar todas como lidas</button>}</div>
+    <div className="notifications-list">{notifications.length ? notifications.map((item) => <button key={item.id} className={item.readAt ? "notification-item" : "notification-item unread"} onClick={() => void onRead(item)}><span className="notification-kind">{item.kind === "feedback-new" ? <MessageSquare size={17} /> : <Bell size={17} />}</span><span><strong>{item.title}</strong><small>{item.message}</small><time>{new Date(item.createdAt).toLocaleString("pt-BR")}</time></span>{!item.readAt && <i aria-label="Não lida" />}</button>) : <EmptyState icon={Bell} title="Nenhuma notificação" text="Recomendações e mudanças de status aparecerão aqui." />}</div>
+  </section></div>, document.body);
 }
 
 async function avatarDataFromFile(file: File) {
@@ -532,11 +582,11 @@ function SettingsView({ user, finance, onUser, onLogout, onFlash }: {
   finance: { transactions: FinanceTransaction[]; accounts: FinanceAccount[]; categories: FinanceCategory[]; cards: FinanceCard[]; salaryRule: FinanceSalaryRule | null; benefitRule: FinanceBenefitRule | null; recurringRules: FinanceRecurringRule[] };
   onUser: (user: SessionUser & { avatarData?: string | null }) => void; onLogout: () => Promise<void>; onFlash: (message: string) => void;
 }) {
-  const [profile, setProfile] = useState<ProfilePayload | null>(null); const [busy, setBusy] = useState(false); const [feedbackText, setFeedbackText] = useState(""); const [error, setError] = useState("");
-  useEffect(() => { let active = true; fetch("/api/v1/profile", { cache: "no-store" }).then(async (response) => { const payload = await response.json() as ProfilePayload & { error?: string }; if (!response.ok) throw new Error(payload.error || "Não consegui carregar o perfil"); if (active) { setProfile(payload); onUser(payload.user); } }).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Não consegui carregar o perfil")); return () => { active = false; }; }, [onUser]);
+  const [profile, setProfile] = useState<ProfilePayload | null>(null); const [busy, setBusy] = useState(false); const [feedbackText, setFeedbackText] = useState(""); const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({}); const [error, setError] = useState("");
+  useEffect(() => { let active = true; fetch("/api/v1/profile", { cache: "no-store" }).then(async (response) => { const payload = await response.json() as ProfilePayload & { error?: string }; if (!response.ok) throw new Error(payload.error || "Não consegui carregar o perfil"); if (active) { setProfile(payload); setFeedbackComments(Object.fromEntries(payload.feedback.map((item) => [item.id, item.developerComment ?? ""]))); onUser(payload.user); } }).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Não consegui carregar o perfil")); return () => { active = false; }; }, [onUser]);
   async function action(payload: Record<string, unknown>) {
     setBusy(true); setError("");
-    try { const response = await fetch("/api/v1/profile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const result = await response.json() as ProfilePayload & { error?: string; requiresLogin?: boolean }; if (!response.ok) throw new Error(result.error || "Não foi possível salvar"); if (result.requiresLogin) { onFlash("Senha alterada. Entre novamente para proteger a conta."); await onLogout(); return null; } setProfile(result); onUser(result.user); return result; }
+    try { const response = await fetch("/api/v1/profile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const result = await response.json() as ProfilePayload & { error?: string; requiresLogin?: boolean }; if (!response.ok) throw new Error(result.error || "Não foi possível salvar"); if (result.requiresLogin) { onFlash("Senha alterada. Entre novamente para proteger a conta."); await onLogout(); return null; } setProfile(result); setFeedbackComments(Object.fromEntries(result.feedback.map((item) => [item.id, item.developerComment ?? ""]))); onUser(result.user); return result; }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar"); return null; }
     finally { setBusy(false); }
   }
@@ -551,9 +601,9 @@ function SettingsView({ user, finance, onUser, onLogout, onFlash }: {
     <div className="settings-grid"><section className="panel settings-card"><div className="settings-title"><Settings2 size={19} /><span><strong>Dados pessoais</strong><small>O e-mail continua sendo sua identificação de acesso.</small></span></div><form onSubmit={saveName}><label>Nome de exibição<input name="displayName" defaultValue={shownUser.displayName} required minLength={2} maxLength={80} /></label><label>E-mail<input value={shownUser.email} disabled /></label><button className="primary-button" disabled={busy}>Salvar perfil</button></form></section>
       <section className="panel settings-card"><div className="settings-title"><KeyRound size={19} /><span><strong>Alterar senha</strong><small>Todos os aparelhos serão desconectados após a troca.</small></span></div><form onSubmit={savePassword}><label>Senha atual<input name="currentPassword" type="password" autoComplete="current-password" required /></label><label>Nova senha<input name="nextPassword" type="password" minLength={10} autoComplete="new-password" required /></label><label>Confirmar nova senha<input name="confirmPassword" type="password" minLength={10} autoComplete="new-password" required /></label><button className="secondary-button" disabled={busy}>Atualizar senha</button></form></section>
       <section className="panel settings-card export-card"><div className="settings-title"><FileJson size={19} /><span><strong>Seus dados</strong><small>Baixe uma cópia legível de contas, cartões, regras e lançamentos.</small></span></div><button className="secondary-button" onClick={exportData}><Download size={16} /> Exportar JSON</button><button className="ghost-button danger" onClick={() => void onLogout()}><LogOut size={16} /> Sair desta conta</button></section>
-      <section className="panel settings-card feedback-card"><div className="settings-title"><MessageSquare size={19} /><span><strong>Recomendar melhoria</strong><small>Sua ideia chegará diretamente à caixa do desenvolvedor.</small></span></div><form onSubmit={sendFeedback}><textarea value={feedbackText} onChange={(event) => setFeedbackText(event.target.value)} maxLength={2000} placeholder="O que deixaria o Fluxo melhor para você?" /><button className="primary-button" disabled={busy || feedbackText.trim().length < 5}><Send size={16} /> Enviar recomendação</button></form>{!profile?.isDeveloper && profile?.feedback?.length ? <div className="own-feedback"><strong>Suas recomendações</strong>{profile.feedback.slice(0, 4).map((item) => <span key={item.id}><small>{statusLabel[item.status] || item.status}</small>{item.message}</span>)}</div> : null}</section>
+      <section className="panel settings-card feedback-card"><div className="settings-title"><MessageSquare size={19} /><span><strong>Recomendar melhoria</strong><small>Sua ideia chegará diretamente à caixa do desenvolvedor.</small></span></div><form onSubmit={sendFeedback}><textarea value={feedbackText} onChange={(event) => setFeedbackText(event.target.value)} maxLength={2000} placeholder="O que deixaria o Fluxo melhor para você?" /><button className="primary-button" disabled={busy || feedbackText.trim().length < 5}><Send size={16} /> Enviar recomendação</button></form>{!profile?.isDeveloper && profile?.feedback?.length ? <div className="own-feedback"><strong>Suas recomendações</strong>{profile.feedback.slice(0, 6).map((item) => <article key={item.id}><div><small>{statusLabel[item.status] || item.status}</small><time>{new Date(item.updatedAt || item.createdAt).toLocaleDateString("pt-BR")}</time></div><p>{item.message}</p>{item.developerComment && <blockquote><MessageSquare size={13} /><span><strong>Retorno do desenvolvimento</strong>{item.developerComment}</span></blockquote>}</article>)}</div> : null}</section>
     </div>
-    {profile?.isDeveloper && <section className="panel developer-inbox"><div className="settings-title"><Bell size={19} /><span><strong>Caixa do desenvolvedor</strong><small>{profile.feedback.filter((item) => item.status === "new").length} novas recomendações · visível somente para a conta principal.</small></span></div><div>{profile.feedback.length ? profile.feedback.map((item) => <article key={item.id}><span><strong>{item.senderName}</strong><small>{new Date(item.createdAt).toLocaleString("pt-BR")}</small></span><p>{item.message}</p><div>{(["new", "reviewing", "planned", "done"] as const).map((status) => <button key={status} className={item.status === status ? "active" : ""} onClick={() => void action({ action: "feedback-status", feedbackId: item.id, status })}>{statusLabel[status]}</button>)}</div></article>) : <EmptyState icon={MessageSquare} title="Nenhuma recomendação" text="As sugestões de outros usuários aparecerão aqui." />}</div></section>}
+    {profile?.isDeveloper && <section className="panel developer-inbox"><div className="settings-title"><Bell size={19} /><span><strong>Caixa do desenvolvedor</strong><small>{profile.feedback.filter((item) => item.status === "new").length} novas recomendações · visível somente para a conta principal.</small></span></div><div>{profile.feedback.length ? profile.feedback.map((item) => <article key={item.id}><header><span><strong>{item.senderName}</strong><small>{new Date(item.createdAt).toLocaleString("pt-BR")}</small></span><em>{statusLabel[item.status] || item.status}</em></header><p>{item.message}</p><textarea value={feedbackComments[item.id] ?? ""} onChange={(event) => setFeedbackComments((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={2000} placeholder="Adicione um retorno, detalhes da implementação ou orientação para o usuário…" /><footer><div>{(["new", "reviewing", "planned", "done"] as const).map((status) => <button key={status} className={item.status === status ? "active" : ""} disabled={busy} onClick={() => void action({ action: "feedback-status", feedbackId: item.id, status, developerComment: feedbackComments[item.id] ?? "" }).then((result) => result && onFlash(`Recomendação marcada como ${statusLabel[status].toLowerCase()}`))}>{statusLabel[status]}</button>)}</div><button className="secondary-button" disabled={busy} onClick={() => void action({ action: "feedback-status", feedbackId: item.id, status: item.status, developerComment: feedbackComments[item.id] ?? "" }).then((result) => result && onFlash("Comentário salvo e usuário notificado"))}><Send size={14} /> Salvar comentário</button></footer></article>) : <EmptyState icon={MessageSquare} title="Nenhuma recomendação" text="As sugestões de outros usuários aparecerão aqui." />}</div></section>}
   </div>;
 }
 

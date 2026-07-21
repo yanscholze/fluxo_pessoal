@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { ensureFinanceSchema } from "../../../../db/ensure-schema";
 import { getDb } from "../../../../db";
-import { mobileDevices } from "../../../../db/schema";
+import { mobileDevices, pushSubscriptions } from "../../../../db/schema";
 import { assertLoginAllowed, authenticateUser, clearLoginFailures, recordLoginFailure, registerUser } from "../../../../lib/app-auth";
 import { apiIdentityFrom } from "../../../../lib/api-v1-auth";
 import { createMobileToken, hashMobileToken, mobileSessionExpiry, parseBearerToken } from "../../../../lib/mobile-auth";
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
           eq(mobileDevices.ownerId, identity.ownerId),
           eq(mobileDevices.tokenHash, tokenHash),
         ));
+        if (identity.deviceId) await getDb().update(pushSubscriptions).set({ active: false, updatedAt: now }).where(and(eq(pushSubscriptions.ownerId, identity.ownerId), eq(pushSubscriptions.deviceId, identity.deviceId)));
       }
       return Response.json({ ok: true }, { headers: responseHeaders });
     }

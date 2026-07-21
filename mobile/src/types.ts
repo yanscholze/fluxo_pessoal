@@ -91,5 +91,17 @@ export type FinancialCoachResult = {
   warnings: string[];
 };
 
-export type ProfileFeedback = { id: string; senderOwnerId: string; senderName: string; message: string; status: string; createdAt: string };
+export type ProfileFeedback = { id: string; senderOwnerId: string; senderName: string; message: string; status: string; developerComment?: string | null; createdAt: string; updatedAt: string };
 export type ProfileResult = { user: { id: string; email: string; displayName: string; avatarData?: string | null }; isDeveloper: boolean; feedback: ProfileFeedback[] };
+
+export type AppNotification = {
+  id: string;
+  kind: string;
+  title: string;
+  message: string;
+  feedbackId?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+};
+
+export type NotificationsResult = { notifications: AppNotification[]; unreadCount: number };

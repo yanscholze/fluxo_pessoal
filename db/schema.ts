@@ -77,12 +77,51 @@ export const developerFeedback = sqliteTable(
     senderName: text("sender_name").notNull(),
     message: text("message").notNull(),
     status: text("status").notNull().default("new"),
+    developerComment: text("developer_comment"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
     index("developer_feedback_sender_idx").on(table.senderOwnerId),
     index("developer_feedback_status_created_idx").on(table.status, table.createdAt),
+  ],
+);
+
+export const appNotifications = sqliteTable(
+  "app_notifications",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    feedbackId: text("feedback_id"),
+    readAt: text("read_at"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("app_notifications_owner_created_idx").on(table.ownerId, table.createdAt),
+    index("app_notifications_owner_read_idx").on(table.ownerId, table.readAt),
+  ],
+);
+
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    deviceId: text("device_id").notNull(),
+    expoPushToken: text("expo_push_token").notNull(),
+    platform: text("platform").notNull().default("android"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    lastRegisteredAt: text("last_registered_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("push_subscriptions_owner_device_idx").on(table.ownerId, table.deviceId),
+    uniqueIndex("push_subscriptions_token_idx").on(table.expoPushToken),
+    index("push_subscriptions_owner_active_idx").on(table.ownerId, table.active),
   ],
 );
 

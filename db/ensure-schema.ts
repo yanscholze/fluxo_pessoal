@@ -60,11 +60,38 @@ export function ensureFinanceSchema() {
         sender_name TEXT NOT NULL,
         message TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'new',
+        developer_comment TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE INDEX IF NOT EXISTS developer_feedback_sender_idx ON developer_feedback (sender_owner_id)`,
       `CREATE INDEX IF NOT EXISTS developer_feedback_status_created_idx ON developer_feedback (status, created_at)`,
+      `CREATE TABLE IF NOT EXISTS app_notifications (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        feedback_id TEXT,
+        read_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS app_notifications_owner_created_idx ON app_notifications (owner_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS app_notifications_owner_read_idx ON app_notifications (owner_id, read_at)`,
+      `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        expo_push_token TEXT NOT NULL,
+        platform TEXT NOT NULL DEFAULT 'android',
+        active INTEGER NOT NULL DEFAULT 1,
+        last_registered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_owner_device_idx ON push_subscriptions (owner_id, device_id)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_token_idx ON push_subscriptions (expo_push_token)`,
+      `CREATE INDEX IF NOT EXISTS push_subscriptions_owner_active_idx ON push_subscriptions (owner_id, active)`,
       `CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY NOT NULL,
         owner_id TEXT NOT NULL,
@@ -230,6 +257,9 @@ export function ensureFinanceSchema() {
     if (!recurringColumns.has("date_adjustment")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN date_adjustment TEXT NOT NULL DEFAULT 'previous'").run();
     if (!recurringColumns.has("payment_method")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'transfer'").run();
     if (!recurringColumns.has("card_id")) await env.DB.prepare("ALTER TABLE recurring_entries ADD COLUMN card_id TEXT").run();
+    const feedbackInfo = await env.DB.prepare("PRAGMA table_info(developer_feedback)").all<{ name: string }>();
+    const feedbackColumns = new Set(feedbackInfo.results.map((column) => column.name));
+    if (!feedbackColumns.has("developer_comment")) await env.DB.prepare("ALTER TABLE developer_feedback ADD COLUMN developer_comment TEXT").run();
   })().catch((error) => {
     ready = null;
     throw error;

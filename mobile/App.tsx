@@ -2,8 +2,8 @@ import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import { SQLiteProvider, useSQLiteContext } from "expo-sqlite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, FlatList, Image, Pressable, SafeAreaView, ScrollView, Text, TextInput, useColorScheme, View } from "react-native";
-import { financeApi, profileApi } from "./src/api";
+import { ActivityIndicator, Animated, AppState, FlatList, Image, Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, useColorScheme, View } from "react-native";
+import { financeApi, notificationsApi, profileApi } from "./src/api";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ImportSheet } from "./src/components/ImportSheet";
 import { PayInvoiceSheet } from "./src/components/PayInvoiceSheet";
@@ -17,7 +17,8 @@ import { CardsScreen } from "./src/screens/CardsScreen";
 import { DashboardScreen } from "./src/screens/DashboardScreen";
 import { newId, synchronize } from "./src/sync";
 import { makeStyles, palettes, type Palette, type ThemeName } from "./src/theme";
-import type { FinanceCard, FinanceSnapshot, FinanceTransaction, ProfileResult } from "./src/types";
+import { Notifications, registerForPushNotifications, unregisterPushNotifications } from "./src/notifications";
+import type { AppNotification, FinanceCard, FinanceSnapshot, FinanceTransaction, NotificationsResult, ProfileResult } from "./src/types";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], transactions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
@@ -53,6 +54,7 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
   const [snapshot, setSnapshot] = useState(emptySnapshot); const [connected, setConnected] = useState(true); const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline" | "error">("idle");
   const [tab, setTab] = useState<Tab>("Início"); const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [composerOpen, setComposerOpen] = useState(false); const [composerCardId, setComposerCardId] = useState<string>(); const [importMode, setImportMode] = useState<ImportMode | null>(null); const [payState, setPayState] = useState<PayState>(null); const [message, setMessage] = useState("");
+  const [notificationState, setNotificationState] = useState<NotificationsResult>({ notifications: [], unreadCount: 0 }); const [notificationsOpen, setNotificationsOpen] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
   const refresh = useCallback(async () => setSnapshot(await readLocalSnapshot(db)), [db]);
   const syncNow = useCallback(async () => {
@@ -68,16 +70,37 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
       setSyncState("offline");
     }
   }, [db, onSignedOut, refresh]);
+  const refreshNotifications = useCallback(async () => {
+    try { setNotificationState(await notificationsApi()); } catch { /* sincroniza novamente quando houver conexão */ }
+  }, []);
 
   useEffect(() => { readThemePreference(db).then((saved) => { if (saved) setTheme(saved); setThemeReady(true); }); }, [db]);
   useEffect(() => { if (themeReady) void saveThemePreference(db, theme); }, [db, theme, themeReady]);
   useEffect(() => { refresh().then(syncNow); const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void syncNow(); }); return () => subscription.remove(); }, [refresh, syncNow]);
   useEffect(() => { fade.setValue(0); Animated.timing(fade, { toValue: 1, duration: 260, useNativeDriver: true }).start(); }, [fade, tab]);
+  useEffect(() => {
+    void registerForPushNotifications().catch(() => undefined);
+    void refreshNotifications();
+    const received = Notifications.addNotificationReceivedListener(() => void refreshNotifications());
+    const opened = Notifications.addNotificationResponseReceivedListener((response) => {
+      const view = response.notification.request.content.data?.view;
+      if (view === "settings") setTab("Ajustes");
+      setNotificationsOpen(true); void refreshNotifications();
+    });
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return;
+      if (response.notification.request.content.data?.view === "settings") setTab("Ajustes");
+      setNotificationsOpen(true);
+    });
+    return () => { received.remove(); opened.remove(); };
+  }, [refreshNotifications]);
+  useEffect(() => { void Notifications.setBadgeCountAsync(notificationState.unreadCount).catch(() => undefined); }, [notificationState.unreadCount]);
 
   async function signOut() {
     setMessage("");
     try {
       if (connected) await syncNow();
+      await unregisterPushNotifications();
       await logoutSession();
       onSignedOut();
     } catch (error) {
@@ -104,12 +127,16 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
     await syncNow();
   }
   async function confirmIncome() { await financeApi({ confirmSalary: { month: selectedMonth } }); await syncNow(); }
+  async function readNotification(item: AppNotification) {
+    if (!item.readAt) setNotificationState(await notificationsApi({ action: "mark-read", id: item.id }));
+    if (item.feedbackId) { setNotificationsOpen(false); setTab("Ajustes"); }
+  }
 
   return <SafeAreaView style={styles.safe}>
     <StatusBar style={theme === "dark" ? "light" : "dark"} />
     <View style={styles.app}>
       <Animated.View style={[styles.content, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
-        {tab === "Início" && <DashboardScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} userName={session.user.displayName} avatarData={session.user.avatarData} connected={connected} syncState={syncState} theme={theme} palette={palette} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onSync={syncNow} onConfirmIncome={() => void confirmIncome()} onOpen={openWidget} onProfile={() => setTab("Ajustes")} />}
+        {tab === "Início" && <DashboardScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} userName={session.user.displayName} avatarData={session.user.avatarData} connected={connected} syncState={syncState} unreadCount={notificationState.unreadCount} theme={theme} palette={palette} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onSync={syncNow} onNotifications={() => setNotificationsOpen(true)} onConfirmIncome={() => void confirmIncome()} onOpen={openWidget} onProfile={() => setTab("Ajustes")} />}
         {tab === "Lançamentos" && <TransactionsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
         {tab === "Cartões" && <CardsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} palette={palette} onImport={(card) => setImportMode({ kind: "card", card, month: selectedMonth })} onPay={(card, remaining) => setPayState({ card, remaining })} onPurchase={openComposer} />}
         {tab === "Contas" && <AccountsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
@@ -121,6 +148,13 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
     <TransactionComposer open={composerOpen} snapshot={snapshot} initialCardId={composerCardId} palette={palette} onClose={() => setComposerOpen(false)} onSaved={async () => { setComposerOpen(false); await refresh(); void syncNow(); }} />
     {importMode && <ImportSheet key={`${importMode.kind}-${importMode.kind === "card" ? `${importMode.card.id}-${importMode.month}` : "history"}`} open mode={importMode} snapshot={snapshot} palette={palette} onClose={() => setImportMode(null)} onImport={importItems} />}
     <PayInvoiceSheet open={Boolean(payState)} card={payState?.card} month={selectedMonth} remaining={payState?.remaining ?? 0} accounts={snapshot.accounts} palette={palette} onClose={() => setPayState(null)} onPay={payInvoice} />
+    <Modal visible={notificationsOpen} transparent animationType="fade" onRequestClose={() => setNotificationsOpen(false)}>
+      <View style={styles.notificationLayer}><Pressable style={styles.notificationBackdrop} onPress={() => setNotificationsOpen(false)} /><View style={styles.notificationSheet}>
+        <View style={styles.notificationHeader}><View><Text style={styles.notificationTitle}>Notificações</Text><Text style={styles.notificationSubtitle}>{notificationState.unreadCount ? `${notificationState.unreadCount} não lida${notificationState.unreadCount === 1 ? "" : "s"}` : "Você está em dia"}</Text></View>{notificationState.unreadCount > 0 && <Pressable onPress={async () => setNotificationState(await notificationsApi({ action: "mark-all-read" }))}><Text style={styles.notificationReadAll}>Marcar todas</Text></Pressable>}</View>
+        <ScrollView style={styles.notificationList}>{notificationState.notifications.length ? notificationState.notifications.map((item) => <Pressable key={item.id} style={[styles.notificationItem, !item.readAt && styles.notificationItemUnread]} onPress={() => void readNotification(item)}><View style={[styles.notificationDot, item.readAt && styles.notificationDotRead]} /><View style={styles.notificationMain}><Text style={styles.notificationItemTitle}>{item.title}</Text><Text style={styles.notificationMessage}>{item.message}</Text><Text style={styles.notificationDate}>{new Date(item.createdAt).toLocaleString("pt-BR")}</Text></View></Pressable>) : <View style={styles.notificationEmpty}><Text style={styles.notificationEmptyIcon}>✓</Text><Text style={styles.notificationMessage}>Nenhuma notificação por enquanto.</Text></View>}</ScrollView>
+        <Pressable style={styles.notificationClose} onPress={() => setNotificationsOpen(false)}><Text style={styles.notificationCloseText}>Fechar</Text></Pressable>
+      </View></View>
+    </Modal>
   </SafeAreaView>;
 }
 
@@ -135,9 +169,9 @@ function AccountsScreen({ snapshot, month, onMonth, styles, palette }: { snapsho
 }
 
 function SettingsScreen({ user, connected, theme, message, onLogout, onTheme, onImport, onUserUpdated, styles }: { user: MobileSession["user"]; connected: boolean; theme: ThemeName; message: string; onLogout: () => void; onTheme: () => void; onImport: () => void; onUserUpdated: (user: MobileSession["user"]) => Promise<void>; styles: ReturnType<typeof makeStyles> }) {
-  const [profile, setProfile] = useState<ProfileResult | null>(null); const [name, setName] = useState(user.displayName); const [feedback, setFeedback] = useState(""); const [currentPassword, setCurrentPassword] = useState(""); const [nextPassword, setNextPassword] = useState(""); const [busy, setBusy] = useState(false); const [localMessage, setLocalMessage] = useState("");
-  useEffect(() => { profileApi().then((result) => { setProfile(result); setName(result.user.displayName); void onUserUpdated(result.user); }).catch((reason) => setLocalMessage(reason instanceof Error ? reason.message : "Não consegui carregar o perfil")); }, []);
-  async function run(payload: Record<string, unknown>) { setBusy(true); setLocalMessage(""); try { const result = await profileApi(payload); if (result.requiresLogin) { await clearSession(); onLogout(); return null; } setProfile(result); await onUserUpdated({ id: result.user.id, email: result.user.email, displayName: result.user.displayName }); return result; } catch (reason) { setLocalMessage(reason instanceof Error ? reason.message : "Não consegui salvar"); return null; } finally { setBusy(false); } }
+  const [profile, setProfile] = useState<ProfileResult | null>(null); const [name, setName] = useState(user.displayName); const [feedback, setFeedback] = useState(""); const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({}); const [currentPassword, setCurrentPassword] = useState(""); const [nextPassword, setNextPassword] = useState(""); const [busy, setBusy] = useState(false); const [localMessage, setLocalMessage] = useState("");
+  useEffect(() => { profileApi().then((result) => { setProfile(result); setName(result.user.displayName); setFeedbackComments(Object.fromEntries(result.feedback.map((item) => [item.id, item.developerComment ?? ""]))); void onUserUpdated(result.user); }).catch((reason) => setLocalMessage(reason instanceof Error ? reason.message : "Não consegui carregar o perfil")); }, []);
+  async function run(payload: Record<string, unknown>) { setBusy(true); setLocalMessage(""); try { const result = await profileApi(payload); if (result.requiresLogin) { await clearSession(); onLogout(); return null; } setProfile(result); setFeedbackComments(Object.fromEntries(result.feedback.map((item) => [item.id, item.developerComment ?? ""]))); await onUserUpdated(result.user); return result; } catch (reason) { setLocalMessage(reason instanceof Error ? reason.message : "Não consegui salvar"); return null; } finally { setBusy(false); } }
   async function pickAvatar() { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: .35, base64: true }); const asset = result.assets?.[0]; if (!asset?.base64) return; const mime = asset.mimeType && ["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType) ? asset.mimeType : "image/jpeg"; const data = `data:${mime};base64,${asset.base64}`; if (data.length > 420_000) { setLocalMessage("A foto ficou grande demais. Escolha uma imagem menor."); return; } if (await run({ action: "profile", avatarData: data })) setLocalMessage("Foto atualizada"); }
   const shown: ProfileResult["user"] = profile?.user ?? user; const initial = shown.displayName.slice(0, 1).toUpperCase(); const status: Record<string, string> = { new: "Nova", reviewing: "Em análise", planned: "Planejada", done: "Concluída" };
   return <ScrollView contentContainerStyle={styles.scroll}><ScreenHeader eyebrow="PREFERÊNCIAS" title="Ajustes" styles={styles} />
@@ -147,8 +181,8 @@ function SettingsScreen({ user, connected, theme, message, onLogout, onTheme, on
     <Pressable style={styles.settingRow} onPress={onImport}><View><Text style={styles.settingTitle}>Importar dados</Text><Text style={styles.settingCopy}>Traga CSV, OFX ou JSON do aplicativo antigo</Text></View><Text style={styles.settingArrow}>›</Text></Pressable>
     <View style={styles.settingRow}><View><Text style={styles.settingTitle}>Exportar dados</Text><Text style={styles.settingCopy}>A exportação completa está disponível no Fluxo Web</Text></View><Text style={styles.settingArrow}>↗</Text></View>
     <View style={styles.settingPanel}><Text style={styles.settingSection}>ALTERAR SENHA</Text><TextInput value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry placeholder="Senha atual" placeholderTextColor="#71868c" style={styles.settingInput} /><TextInput value={nextPassword} onChangeText={setNextPassword} secureTextEntry placeholder="Nova senha, mínimo 10 caracteres" placeholderTextColor="#71868c" style={styles.settingInput} /><Pressable disabled={busy || nextPassword.length < 10} style={styles.settingAction} onPress={() => void run({ action: "password", currentPassword, nextPassword })}><Text style={styles.settingActionText}>Atualizar senha</Text></Pressable></View>
-    <View style={styles.settingPanel}><Text style={styles.settingSection}>RECOMENDAR MELHORIA</Text><TextInput value={feedback} onChangeText={setFeedback} multiline maxLength={2000} placeholder="O que deixaria o Fluxo melhor para você?" placeholderTextColor="#71868c" style={[styles.settingInput, styles.feedbackInput]} /><Pressable disabled={busy || feedback.trim().length < 5} style={styles.settingAction} onPress={async () => { if (await run({ action: "feedback", message: feedback })) { setFeedback(""); setLocalMessage("Recomendação enviada ao desenvolvedor"); } }}><Text style={styles.settingActionText}>Enviar recomendação</Text></Pressable>{profile?.feedback.slice(0, 3).map((item) => <View key={item.id} style={styles.feedbackHistory}><Text style={styles.feedbackStatus}>{status[item.status] || item.status}</Text><Text numberOfLines={2} style={styles.feedbackText}>{item.message}</Text></View>)}</View>
-    {profile?.isDeveloper && <View style={styles.settingPanel}><Text style={styles.settingSection}>CAIXA DO DESENVOLVEDOR</Text>{profile.feedback.length ? profile.feedback.map((item) => <View key={item.id} style={styles.developerFeedback}><Text style={styles.settingTitle}>{item.senderName}</Text><Text style={styles.settingCopy}>{item.message}</Text><View style={styles.feedbackStatuses}>{(["new", "reviewing", "planned", "done"] as const).map((value) => <Pressable key={value} style={[styles.feedbackStatusButton, item.status === value && styles.feedbackStatusActive]} onPress={() => void run({ action: "feedback-status", feedbackId: item.id, status: value })}><Text style={styles.feedbackStatusButtonText}>{status[value]}</Text></Pressable>)}</View></View>) : <Text style={styles.settingCopy}>Nenhuma recomendação recebida.</Text>}</View>}
+    <View style={styles.settingPanel}><Text style={styles.settingSection}>RECOMENDAR MELHORIA</Text><TextInput value={feedback} onChangeText={setFeedback} multiline maxLength={2000} placeholder="O que deixaria o Fluxo melhor para você?" placeholderTextColor="#71868c" style={[styles.settingInput, styles.feedbackInput]} /><Pressable disabled={busy || feedback.trim().length < 5} style={styles.settingAction} onPress={async () => { if (await run({ action: "feedback", message: feedback })) { setFeedback(""); setLocalMessage("Recomendação enviada ao desenvolvedor"); } }}><Text style={styles.settingActionText}>Enviar recomendação</Text></Pressable>{profile?.feedback.slice(0, 3).map((item) => <View key={item.id} style={styles.feedbackHistory}><Text style={styles.feedbackStatus}>{status[item.status] || item.status}</Text><View style={{ flex: 1 }}><Text numberOfLines={2} style={styles.feedbackText}>{item.message}</Text>{item.developerComment ? <Text style={styles.feedbackComment}>↳ {item.developerComment}</Text> : null}</View></View>)}</View>
+    {profile?.isDeveloper && <View style={styles.settingPanel}><Text style={styles.settingSection}>CAIXA DO DESENVOLVEDOR</Text>{profile.feedback.length ? profile.feedback.map((item) => <View key={item.id} style={styles.developerFeedback}><Text style={styles.settingTitle}>{item.senderName}</Text><Text style={styles.settingCopy}>{item.message}</Text><TextInput value={feedbackComments[item.id] ?? ""} onChangeText={(value) => setFeedbackComments((current) => ({ ...current, [item.id]: value }))} multiline maxLength={2000} placeholder="Comentário ou retorno para o usuário" placeholderTextColor="#71868c" style={[styles.settingInput, styles.feedbackInput]} /><View style={styles.feedbackStatuses}>{(["new", "reviewing", "planned", "done"] as const).map((value) => <Pressable key={value} style={[styles.feedbackStatusButton, item.status === value && styles.feedbackStatusActive]} onPress={() => void run({ action: "feedback-status", feedbackId: item.id, status: value, developerComment: feedbackComments[item.id] ?? "" })}><Text style={styles.feedbackStatusButtonText}>{status[value]}</Text></Pressable>)}</View><Pressable style={styles.settingAction} onPress={() => void run({ action: "feedback-status", feedbackId: item.id, status: item.status, developerComment: feedbackComments[item.id] ?? "" }).then((result) => result && setLocalMessage("Comentário salvo e usuário notificado"))}><Text style={styles.settingActionText}>Salvar comentário</Text></Pressable></View>) : <Text style={styles.settingCopy}>Nenhuma recomendação recebida.</Text>}</View>}
     <Pressable style={styles.settingRow} onPress={onLogout}><View><Text style={styles.settingTitle}>Sair e trocar de conta</Text><Text style={styles.settingCopy}>Será necessário entrar novamente com e-mail e senha</Text></View><Text style={styles.settingArrow}>›</Text></Pressable>{message || localMessage ? <Text style={styles.errorText}>{localMessage || message}</Text> : null}
   </ScrollView>;
 }

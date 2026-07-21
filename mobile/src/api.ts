@@ -1,5 +1,5 @@
 import { API_ORIGIN, getSession } from "./session";
-import type { FinancialCoachResult, ProfileResult, ReceiptScanResult, SyncMutation, SyncResponse } from "./types";
+import type { FinancialCoachResult, NotificationsResult, ProfileResult, ReceiptScanResult, SyncMutation, SyncResponse } from "./types";
 
 function authenticatedHeaders(session: Awaited<ReturnType<typeof getSession>>) {
   if (!session) throw new Error("AUTH_REQUIRED");
@@ -75,5 +75,18 @@ export async function profileApi(payload?: Record<string, unknown>) {
   });
   const data = await response.json() as ProfileResult & { error?: string; requiresLogin?: boolean };
   if (!response.ok) throw new Error(data.error || "Não consegui atualizar o perfil");
+  return data;
+}
+
+export async function notificationsApi(payload?: Record<string, unknown>) {
+  const session = await getSession();
+  if (!session) throw new Error("AUTH_REQUIRED");
+  const response = await fetch(`${API_ORIGIN}/api/v1/notifications`, {
+    method: payload ? "POST" : "GET",
+    headers: authenticatedHeaders(session),
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
+  });
+  const data = await response.json() as NotificationsResult & { error?: string };
+  if (!response.ok) throw new Error(data.error || "Não consegui atualizar as notificações");
   return data;
 }

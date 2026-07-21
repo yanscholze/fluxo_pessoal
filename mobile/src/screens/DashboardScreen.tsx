@@ -23,17 +23,19 @@ type Props = {
   avatarData?: string | null;
   connected: boolean;
   syncState: string;
+  unreadCount: number;
   theme: ThemeName;
   palette: Palette;
   onTheme: () => void;
   onSync: () => void;
+  onNotifications: () => void;
   onConfirmIncome: () => void;
   onOpen: (widget: DashboardWidgetId) => void;
   onProfile: () => void;
 };
 
 export function DashboardScreen(props: Props) {
-  const { snapshot, month, onMonth, userName, avatarData, connected, syncState, theme, palette, onTheme, onSync, onConfirmIncome, onOpen, onProfile } = props;
+  const { snapshot, month, onMonth, userName, avatarData, connected, syncState, unreadCount, theme, palette, onTheme, onSync, onNotifications, onConfirmIncome, onOpen, onProfile } = props;
   const db = useSQLiteContext();
   const styles = useMemo(() => makeStyles(palette), [palette]);
   const [layout, setLayout] = useState<DashboardWidgetPreference[]>(DEFAULT_DASHBOARD_LAYOUT);
@@ -91,6 +93,7 @@ export function DashboardScreen(props: Props) {
       <View><Text style={styles.eyebrow}>VISÃO GERAL</Text><Text style={styles.title}>Olá, {userName.split(/\s+/)[0]}</Text></View>
       <View style={styles.headerActions}>
         <Pressable style={styles.iconButton} onPress={onTheme}><Text style={styles.iconText}>{theme === "dark" ? "☀" : "☾"}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${unreadCount} notificações não lidas`} style={[styles.iconButton, unreadCount > 0 && styles.notificationButtonActive]} onPress={onNotifications}><Text style={[styles.iconText, unreadCount > 0 && styles.notificationIconActive]}>♢</Text>{unreadCount > 0 && <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text></View>}</Pressable>
         <Pressable style={styles.syncButton} onPress={onSync}>{syncState === "syncing" ? <ActivityIndicator size="small" color={palette.accent} /> : <Text style={styles.syncText}>{connected ? syncState === "offline" ? "Offline" : "Sincronizado" : "Sessão expirada"}</Text>}</Pressable>
         <Pressable style={styles.profileButton} onPress={onProfile}>{avatarData ? <Image source={{ uri: avatarData }} style={styles.profileButtonImage} /> : <Text style={styles.profileButtonText}>{userName.slice(0, 1).toUpperCase()}</Text>}</Pressable>
       </View>
@@ -202,7 +205,7 @@ function DashboardWidget({ preference, data, palette, onOpen }: { preference: Da
 }
 
 function makeStyles(p: Palette) { return StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 130 }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }, headerActions: { flexDirection: "row", gap: 7 }, eyebrow: { color: p.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 }, title: { marginTop: 4, color: p.text, fontSize: 30, fontWeight: "900", letterSpacing: -1 }, iconButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, iconText: { color: p.text, fontSize: 18 }, syncButton: { minWidth: 76, height: 42, alignItems: "center", justifyContent: "center", paddingHorizontal: 9, borderRadius: 14, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, syncText: { color: p.accent, fontSize: 8, fontWeight: "900" }, profileButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 14, backgroundColor: p.accent }, profileButtonImage: { width: 42, height: 42 }, profileButtonText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  scroll: { padding: 20, paddingBottom: 130 }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }, headerActions: { flexDirection: "row", gap: 6 }, eyebrow: { color: p.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 }, title: { marginTop: 4, color: p.text, fontSize: 26, fontWeight: "900", letterSpacing: -.8 }, iconButton: { position: "relative", width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, iconText: { color: p.text, fontSize: 17 }, notificationButtonActive: { borderColor: p.warning, backgroundColor: `${p.warning}18` }, notificationIconActive: { color: p.warning }, notificationBadge: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderRadius: 9, borderWidth: 2, borderColor: p.bg, backgroundColor: p.warning }, notificationBadgeText: { color: "#fff", fontSize: 7, fontWeight: "900" }, syncButton: { minWidth: 66, height: 38, alignItems: "center", justifyContent: "center", paddingHorizontal: 7, borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, syncText: { color: p.accent, fontSize: 7, fontWeight: "900" }, profileButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 13, backgroundColor: p.accent }, profileButtonImage: { width: 38, height: 38 }, profileButtonText: { color: "#fff", fontSize: 14, fontWeight: "900" },
   tip: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18, padding: 15, borderRadius: 20, borderWidth: 1, borderColor: `${p.accent}55`, backgroundColor: p.accentSoft }, tipIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: p.accent }, tipIconText: { color: "#fff", fontSize: 17 }, tipMain: { flex: 1 }, tipLabel: { color: p.accent, fontSize: 8, fontWeight: "900", letterSpacing: 1.1 }, tipText: { marginTop: 4, color: p.text, fontSize: 11, lineHeight: 16, fontWeight: "700" }, tipAsk: { marginTop: 5, color: p.accent, fontSize: 7, fontWeight: "800" }, tipArrow: { color: p.accent, fontSize: 27 },
   connect: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, padding: 15, borderRadius: 18, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, connectTitle: { color: p.text, fontSize: 12, fontWeight: "900" }, connectCopy: { maxWidth: 260, marginTop: 3, color: p.muted, fontSize: 9, lineHeight: 14 },
   editBanner: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 15, padding: 14, borderRadius: 18, backgroundColor: p.surface2 }, editTitle: { color: p.text, fontSize: 12, fontWeight: "900" }, editCopy: { maxWidth: 225, marginTop: 3, color: p.muted, fontSize: 8, lineHeight: 12 }, doneButton: { marginLeft: "auto", paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11, backgroundColor: p.accent }, doneText: { color: "#fff", fontSize: 9, fontWeight: "900" }, grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 14 }, addButton: { height: 54, alignItems: "center", justifyContent: "center", marginTop: 8, borderRadius: 17, borderWidth: 1, borderStyle: "dashed", borderColor: p.accent }, addText: { color: p.accent, fontSize: 12, fontWeight: "900" }, hint: { marginTop: 18, color: p.muted, fontSize: 9, textAlign: "center" },
