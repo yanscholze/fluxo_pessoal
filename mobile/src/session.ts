@@ -51,7 +51,7 @@ async function authenticate(input: { action: "login" | "register"; email: string
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       ...input,
-      device: { deviceId, deviceName, appVersion: "0.3.0" },
+      device: { deviceId, deviceName, appVersion: "0.4.5" },
     }),
   });
   const result = await response.json() as {
