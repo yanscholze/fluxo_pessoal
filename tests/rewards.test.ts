@@ -35,3 +35,17 @@ test("marca lançamentos antigos sem snapshot como estimativa", () => {
   };
   assert.equal(rewardFor(transaction, ultraviolet, 5).estimated, true);
 });
+
+test("corrige recompensa total indevida e reconhece apenas o valor da parcela", () => {
+  const transaction: FinanceTransaction = {
+    id: "installment-1", description: "Notebook", category: "Compras", account: "Nubank",
+    date: "2026-07-16", amount: 500, type: "expense", paymentMethod: "credit", cardId: "uv",
+    installments: "1/10", installmentGroupId: "installment", rewardPoints: 2200,
+    rewardCashback: 125, rewardUsdRate: 5,
+  };
+  const reward = rewardFor(transaction, ultraviolet, 6);
+  assert.ok(Math.abs(reward.points - 220) < 0.000_001);
+  assert.equal(reward.cashback, 6.25);
+  assert.equal(reward.usdRate, 5);
+  assert.equal(reward.estimated, false);
+});

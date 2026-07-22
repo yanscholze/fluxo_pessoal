@@ -83,9 +83,19 @@ test("parcela identificada na fatura preenche histórico e meses futuros", () =>
   assert.equal(result.items.length, 5);
   assert.equal(result.expandedInstallments, 4);
   assert.deepEqual(result.items.map((item) => item.installments), ["1/5", "2/5", "3/5", "4/5", "5/5"]);
+  assert.equal(new Set(result.items.map((item) => item.installmentGroupId)).size, 1);
+  assert.ok(result.items[0]?.installmentGroupId);
   assert.ok(result.items.every((item) => item.description === "Notebook"));
   assert.deepEqual(result.items.map((item) => item.invoiceMonth), ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]);
   assert.equal(result.items.filter((item) => item.invoiceMonth === "2026-07").reduce((sum, item) => sum + item.amount, 0), 250);
+});
+
+test("faturas consecutivas reconhecem a mesma família de parcelamento", () => {
+  const december = parseCsv(`Data;Descrição;Valor\n12/12/2025;Notebook - Parcela 1/5;250,00`, "Nubank", nubankCard, "2025-12");
+  const january = parseCsv(`Data;Descrição;Valor\n12/12/2025;Notebook - Parcela 2/5;250,00`, "Nubank", nubankCard, "2026-01");
+
+  assert.deepEqual(december.items.map((item) => item.fingerprint), january.items.map((item) => item.fingerprint));
+  assert.deepEqual(december.items.map((item) => item.installmentGroupId), january.items.map((item) => item.installmentGroupId));
 });
 
 test("compras realmente idênticas continuam sendo dois itens da fatura", () => {
@@ -121,4 +131,63 @@ test("OFX lê todas as movimentações até o fim do arquivo", () => {
   assert.equal(result.items.length, 2);
   assert.equal(result.items.at(-1)?.description, "Salário");
   assert.equal(result.items.at(-1)?.type, "income");
+});
+
+test("OFX usa FITID como identidade bancária estável", () => {
+  const ofx = `<OFX><STMTTRN><DTPOSTED>20260717000000<TRNAMT>-80.00<FITID>bank-transaction-123<MEMO>Mercado</STMTTRN></OFX>`;
+  const first = parseOfx(ofx, "Nubank");
+  const second = parseOfx(ofx, "Nubank");
+
+  assert.equal(first.items[0]?.fingerprint, "ofx:bank-transaction-123");
+  assert.equal(first.items[0]?.fingerprint, second.items[0]?.fingerprint);
+});
+
+test("OFX XML com tags fechadas, atributos e entidades preserva os detalhes", () => {
+  const ofx = `OFXHEADER:100\nDATA:OFXSGML\n\n<OFX><BANKTRANLIST>
+<STMTTRN id="1"><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260719000000[-3:BRT]</DTPOSTED><TRNAMT>-1,234.56</TRNAMT><FITID>xml-1</FITID><NAME>POSTO &amp; CIA</NAME><MEMO>Combustível premium</MEMO></STMTTRN>
+</BANKTRANLIST></OFX>`;
+
+  const result = parseOfx(ofx, "Nubank");
+
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0]?.amount, 1234.56);
+  assert.equal(result.items[0]?.description, "POSTO & CIA - Combustível premium");
+  assert.equal(result.items[0]?.fingerprint, "ofx:xml-1");
+});
+
+test("OFX de cartão entra na fatura selecionada e reconhece parcelamento", () => {
+  const ofx = `<OFX><CCSTMTRS><BANKTRANLIST>
+<CCSTMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260715000000<TRNAMT>-250.00<FITID>card-1<NAME>Notebook<MEMO>Parcela 3/5</CCSTMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260716000000<TRNAMT>1000.00<FITID>payment-1<MEMO>Pagamento recebido</STMTTRN>
+</BANKTRANLIST></CCSTMTRS></OFX>`;
+
+  const result = parseOfx(ofx, "Nubank", nubankCard, "2026-07");
+
+  assert.equal(result.items.length, 5);
+  assert.equal(result.ignored, 1);
+  assert.equal(result.expandedInstallments, 4);
+  assert.ok(result.items.every((item) => item.type === "expense" && item.paymentMethod === "credit" && item.cardId === nubankCard.id));
+  assert.deepEqual(result.items.map((item) => item.invoiceMonth), ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]);
+  assert.equal(result.items.find((item) => item.invoiceMonth === "2026-07")?.installments, "3/5");
+});
+
+test("OFX do Nubank mantém a mesma família entre faturas mesmo com diferença de centavos", () => {
+  const april = `<OFX><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260409000000[-3:BRT]</DTPOSTED><TRNAMT>-110.79</TRNAMT><FITID>69d7cae8-e15f-4fd7-a552-d714024b9946</FITID><MEMO>Samsung - Shop.com - NuPay - Parcela 1/18</MEMO></STMTTRN></OFX>`;
+  const june = `<OFX><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260513000000[-3:BRT]</DTPOSTED><TRNAMT>-110.78</TRNAMT><FITID>69d7cae8-e15f-4fd7-a552-d714024b9946</FITID><MEMO>Samsung - Shop.com - NuPay - Parcela 3/18</MEMO></STMTTRN></OFX>`;
+
+  const first = parseOfx(april, "Nubank", nubankCard, "2026-04");
+  const later = parseOfx(june, "Nubank", nubankCard, "2026-06");
+
+  assert.deepEqual(first.items.map((item) => item.fingerprint), later.items.map((item) => item.fingerprint));
+  assert.deepEqual(first.items.map((item) => item.installmentGroupId), later.items.map((item) => item.installmentGroupId));
+});
+
+test("OFX preserva o deslocamento entre a data do lançamento e a competência da fatura", () => {
+  const ofx = `<OFX><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260613000000[-3:BRT]</DTPOSTED><TRNAMT>-160.00</TRNAMT><FITID>purchase-1</FITID><MEMO>Pgz*Trustmoto - Parcela 4/10</MEMO></STMTTRN></OFX>`;
+
+  const result = parseOfx(ofx, "Nubank", nubankCard, "2026-07");
+
+  assert.equal(result.items.find((item) => item.installments === "4/10")?.date, "2026-06-13");
+  assert.equal(result.items.find((item) => item.installments === "5/10")?.date, "2026-07-13");
+  assert.equal(result.items.find((item) => item.installments === "5/10")?.invoiceMonth, "2026-08");
 });

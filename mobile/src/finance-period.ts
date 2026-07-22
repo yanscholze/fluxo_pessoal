@@ -27,6 +27,44 @@ export function transactionsForInvoiceMonth(transactions: FinanceTransaction[], 
   return transactions.filter((item) => !item.deletedAt && (item.invoiceMonth ?? item.date.slice(0, 7)) === month);
 }
 
+function normalizedLabel(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+export function isCardLoanTransaction(item: FinanceTransaction) {
+  return normalizedLabel(item.category) === "emprestimo de cartao";
+}
+
+export function isSalaryConfirmed(snapshot: FinanceSnapshot, month: string, items = transactionsForMonth(snapshot.transactions, month)) {
+  const rule = snapshot.salaryRule;
+  if (!rule) return true;
+  if (rule.lastConfirmedMonth === month) return true;
+  const fingerprint = `recurring:${rule.id}:${month}`;
+  const category = normalizedLabel(rule.category);
+  const description = normalizedLabel(rule.description);
+  return items.some((item) => item.type === "income" && !item.deletedAt && item.status !== "planned" && (
+    item.fingerprint === fingerprint
+    || (normalizedLabel(item.category) === category && normalizedLabel(item.description) === description)
+  ));
+}
+
+export function budgetTotals(snapshot: FinanceSnapshot, month: string) {
+  const items = transactionsForMonth(snapshot.transactions, month);
+  const confirmed = items.filter((item) => item.status !== "planned" && item.type !== "transfer");
+  let income = confirmed.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);
+  const expenses = confirmed.filter((item) => item.type === "expense" && !isCardLoanTransaction(item)).reduce((sum, item) => sum + item.amount, 0);
+  const salary = snapshot.salaryRule;
+  const salaryApplies = salary?.active && (!salary.effectiveDate || salary.effectiveDate.slice(0, 7) <= month);
+  if (salary && salaryApplies && !isSalaryConfirmed(snapshot, month, items)) income += salary.projectedAmount ?? salary.amount;
+  return { income, expenses, free: income - expenses };
+}
+
+export function committedExpensesTotal(transactions: FinanceTransaction[], month: string) {
+  return transactionsForCommitmentMonth(transactions, month)
+    .filter((item) => item.type === "expense" && !isCardLoanTransaction(item))
+    .reduce((sum, item) => sum + item.amount, 0);
+}
+
 export function belongsToCard(item: FinanceTransaction, card: FinanceCard) {
   return item.cardId === card.id || (!item.cardId && item.account === card.linkedAccount);
 }
@@ -72,6 +110,22 @@ export function cardLimitUsage(transactions: FinanceTransaction[], card: Finance
   return [...invoices.values()].reduce((sum, amount) => sum + Math.max(0, amount), 0);
 }
 
+export function currentInvoiceTotals(snapshot: FinanceSnapshot, today: string) {
+  const items: FinanceTransaction[] = [];
+  let gross = 0;
+  let paid = 0;
+  for (const card of snapshot.cards.filter((item) => item.kind === "credit")) {
+    const invoiceMonth = activeInvoiceMonth(card, today);
+    const rows = snapshot.transactions.filter((item) => !item.deletedAt && item.status !== "planned" && belongsToCard(item, card) && (item.invoiceMonth ?? item.date.slice(0, 7)) === invoiceMonth);
+    const purchases = rows.filter((item) => item.type === "expense" && (item.paymentMethod === "credit" || item.cardId === card.id));
+    const payments = rows.filter((item) => item.type === "transfer" && item.source === "invoice-payment" && item.cardId === card.id);
+    items.push(...purchases);
+    gross += purchases.reduce((sum, item) => sum + item.amount, 0);
+    paid += payments.reduce((sum, item) => sum + item.amount, 0);
+  }
+  return { items, gross, paid, total: Math.max(0, gross - paid) };
+}
+
 export function flowTotals(items: FinanceTransaction[]) {
   const confirmed = items.filter((item) => item.status !== "planned" && item.type !== "transfer");
   const income = confirmed.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);
@@ -108,7 +162,7 @@ export function contextualTip(snapshot: FinanceSnapshot, month: string, today = 
   const invoiceGross = invoiceRows.filter((item) => item.type === "expense" && item.paymentMethod === "credit").reduce((sum, item) => sum + item.amount, 0);
   const invoicePaid = invoiceRows.filter((item) => item.type === "transfer" && item.source === "invoice-payment").reduce((sum, item) => sum + item.amount, 0);
   const invoice = Math.max(0, invoiceGross - invoicePaid);
-  const nextCommitted = transactionsForCommitmentMonth(snapshot.transactions, monthOffset(month, 1)).filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
+  const nextCommitted = committedExpensesTotal(snapshot.transactions, monthOffset(month, 1));
 
   if (!current.length) return `Ainda não há lançamentos em ${month.split("-").reverse().join("/")}. Importe o histórico ou registre o primeiro movimento.`;
   if (month === nowKey) {

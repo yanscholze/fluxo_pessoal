@@ -1,15 +1,16 @@
 import { useSQLiteContext } from "expo-sqlite";
+import { Bell, Cloud, CloudOff, Moon, Pencil, Sun } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Image } from "react-native";
 import { financialCoachApi } from "../api";
 import { PeriodSwitcher } from "../components/PeriodSwitcher";
 import {
-  DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_LAYOUT, moveDashboardWidget, nextWidgetSize,
-  updateDashboardWidget, type DashboardWidgetId, type DashboardWidgetPreference,
+  DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_LAYOUT, moveVisibleDashboardWidget,
+  updateDashboardWidget, type DashboardWidgetId, type DashboardWidgetPreference, type DashboardWidgetSize,
 } from "../dashboard";
 import { readDashboardLayout, saveDashboardLayout } from "../database";
-import { accountBalanceAtMonth, contextualTip, flowTotals, monthOffset, transactionsForCommitmentMonth, transactionsForInvoiceMonth, transactionsForMonth } from "../finance-period";
+import { accountBalanceAtMonth, budgetTotals, committedExpensesTotal, contextualTip, currentInvoiceTotals, flowTotals, isSalaryConfirmed, monthOffset, transactionsForMonth } from "../finance-period";
 import type { Palette, ThemeName } from "../theme";
 import type { FinanceSnapshot, FinanceTransaction, FinancialCoachResult } from "../types";
 
@@ -23,6 +24,7 @@ type Props = {
   avatarData?: string | null;
   connected: boolean;
   syncState: string;
+  lastSyncAt: Date | null;
   unreadCount: number;
   theme: ThemeName;
   palette: Palette;
@@ -35,7 +37,7 @@ type Props = {
 };
 
 export function DashboardScreen(props: Props) {
-  const { snapshot, month, onMonth, userName, avatarData, connected, syncState, unreadCount, theme, palette, onTheme, onSync, onNotifications, onConfirmIncome, onOpen, onProfile } = props;
+  const { snapshot, month, onMonth, userName, avatarData, connected, syncState, lastSyncAt, unreadCount, theme, palette, onTheme, onSync, onNotifications, onConfirmIncome, onOpen, onProfile } = props;
   const db = useSQLiteContext();
   const styles = useMemo(() => makeStyles(palette), [palette]);
   const [layout, setLayout] = useState<DashboardWidgetPreference[]>(DEFAULT_DASHBOARD_LAYOUT);
@@ -47,23 +49,39 @@ export function DashboardScreen(props: Props) {
   const [advice, setAdvice] = useState<FinancialCoachResult | null>(null);
   const [asking, setAsking] = useState(false);
   const [assistantError, setAssistantError] = useState("");
+  const layoutRef = useRef<DashboardWidgetPreference[]>(DEFAULT_DASHBOARD_LAYOUT);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  useEffect(() => { readDashboardLayout(db).then((saved) => { setLayout(saved); setLayoutReady(true); }); }, [db]);
-  useEffect(() => { if (layoutReady) void saveDashboardLayout(db, layout); }, [db, layout, layoutReady]);
+  useEffect(() => { readDashboardLayout(db).then((saved) => { layoutRef.current = saved; setLayout(saved); setLayoutReady(true); }); }, [db]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" && layoutReady) saveQueueRef.current = saveQueueRef.current.then(() => saveDashboardLayout(db, layoutRef.current));
+    });
+    return () => subscription.remove();
+  }, [db, layoutReady]);
+
+  function changeLayout(update: (current: DashboardWidgetPreference[]) => DashboardWidgetPreference[]) {
+    setLayout((current) => {
+      const next = update(current);
+      layoutRef.current = next;
+      saveQueueRef.current = saveQueueRef.current.catch(() => undefined).then(() => saveDashboardLayout(db, next));
+      return next;
+    });
+  }
 
   const todayMonth = new Date().toISOString().slice(0, 7);
   const monthItems = useMemo(() => transactionsForMonth(snapshot.transactions, month), [month, snapshot.transactions]);
-  const totals = useMemo(() => flowTotals(monthItems), [monthItems]);
+  const totals = useMemo(() => budgetTotals(snapshot, month), [month, snapshot]);
+  const cashFlow = useMemo(() => flowTotals(monthItems), [monthItems]);
   const accountBalances = useMemo(() => snapshot.accounts
     .filter((account) => account.kind !== "credit-card")
     .map((account) => ({ account, balance: accountBalanceAtMonth(account, snapshot.transactions, month, todayMonth) })), [month, snapshot.accounts, snapshot.transactions, todayMonth]);
   const totalBalance = accountBalances.reduce((sum, item) => sum + item.balance, 0);
-  const invoiceRows = transactionsForInvoiceMonth(snapshot.transactions, month);
-  const invoiceItems = invoiceRows.filter((item) => item.type === "expense" && item.paymentMethod === "credit");
-  const invoiceGross = invoiceItems.reduce((sum, item) => sum + item.amount, 0);
-  const invoicePaid = invoiceRows.filter((item) => item.type === "transfer" && item.source === "invoice-payment").reduce((sum, item) => sum + item.amount, 0);
-  const invoice = Math.max(0, invoiceGross - invoicePaid);
-  const nextCommitments = transactionsForCommitmentMonth(snapshot.transactions, monthOffset(month, 1)).filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
+  const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+  const currentInvoice = currentInvoiceTotals(snapshot, todayKey);
+  const invoiceItems = currentInvoice.items;
+  const invoice = currentInvoice.total;
+  const nextCommitments = committedExpensesTotal(snapshot.transactions, monthOffset(month, 1));
   const reserve = accountBalances.filter(({ account }) => /reserva|emerg/i.test(`${account.name} ${account.kind}`)).reduce((sum, item) => sum + item.balance, 0);
   const essentialNames = new Set(snapshot.categories.filter((item) => item.essential).map((item) => item.name));
   const essentialMonths = [month, monthOffset(month, -1), monthOffset(month, -2)].map((key) => transactionsForMonth(snapshot.transactions, key).filter((item) => item.type === "expense" && essentialNames.has(item.category)).reduce((sum, item) => sum + item.amount, 0));
@@ -73,13 +91,13 @@ export function DashboardScreen(props: Props) {
     .sort((a, b) => b[1] - a[1]);
   const recent = [...monthItems].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
   const tip = contextualTip(snapshot, month);
-  const salaryConfirmed = Boolean(snapshot.salaryRule?.lastConfirmedMonth === month || monthItems.some((item) => item.fingerprint === `recurring:${snapshot.salaryRule?.id}:${month}`));
+  const salaryConfirmed = isSalaryConfirmed(snapshot, month, monthItems);
   const benefitConfirmed = !snapshot.benefitRule?.active || Boolean(snapshot.benefitRule.lastConfirmedMonth === month || monthItems.some((item) => item.fingerprint === `recurring:${snapshot.benefitRule?.id}:${month}`));
-  const viewData: WidgetData = { snapshot, month, monthItems, totals, totalBalance, invoice, invoiceItems, nextCommitments, reserve, reserveTarget, categoryTotals, recent, accountBalances };
+  const viewData: WidgetData = { snapshot, month, monthItems, totals, cashFlow, totalBalance, invoice, invoiceItems, nextCommitments, reserve, reserveTarget, categoryTotals, recent, accountBalances };
 
   const visible = layout.filter((item) => item.visible);
   const hidden = layout.filter((item) => !item.visible);
-  const move = (id: DashboardWidgetId, offset: number) => setLayout((current) => moveDashboardWidget(current, id, offset));
+  const move = (id: DashboardWidgetId, offset: number) => changeLayout((current) => moveVisibleDashboardWidget(current, id, offset));
   async function askFlow(prompt = question) {
     const value = prompt.trim(); if (value.length < 3 || asking) return;
     setQuestion(value); setAsking(true); setAssistantError("");
@@ -92,9 +110,10 @@ export function DashboardScreen(props: Props) {
     <View style={styles.header}>
       <View><Text style={styles.eyebrow}>VISÃO GERAL</Text><Text style={styles.title}>Olá, {userName.split(/\s+/)[0]}</Text></View>
       <View style={styles.headerActions}>
-        <Pressable style={styles.iconButton} onPress={onTheme}><Text style={styles.iconText}>{theme === "dark" ? "☀" : "☾"}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`${unreadCount} notificações não lidas`} style={[styles.iconButton, unreadCount > 0 && styles.notificationButtonActive]} onPress={onNotifications}><Text style={[styles.iconText, unreadCount > 0 && styles.notificationIconActive]}>♢</Text>{unreadCount > 0 && <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text></View>}</Pressable>
-        <Pressable style={styles.syncButton} onPress={onSync}>{syncState === "syncing" ? <ActivityIndicator size="small" color={palette.accent} /> : <Text style={styles.syncText}>{connected ? syncState === "offline" ? "Offline" : "Sincronizado" : "Sessão expirada"}</Text>}</Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Editar widgets" style={[styles.iconButton, editing && styles.editButtonActive]} onPress={() => setEditing((value) => !value)}><Pencil color={editing ? "#fff" : palette.text} size={16} strokeWidth={2.2} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} style={styles.iconButton} onPress={onTheme}>{theme === "dark" ? <Sun color={palette.text} size={17} /> : <Moon color={palette.text} size={17} />}</Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${unreadCount} notificações não lidas`} style={[styles.iconButton, unreadCount > 0 && styles.notificationButtonActive]} onPress={onNotifications}><Bell color={unreadCount > 0 ? palette.warning : palette.text} size={17} />{unreadCount > 0 && <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text></View>}</Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={connected && lastSyncAt ? `Sincronizado às ${lastSyncAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Offline. Tentar novamente"} style={styles.syncButton} onPress={onSync}>{syncState === "syncing" ? <ActivityIndicator size="small" color={palette.accent} /> : <>{connected ? <Cloud color={palette.accent} size={14} /> : <CloudOff color={palette.warning} size={14} />}<Text style={[styles.syncText, !connected && { color: palette.warning }]}>{connected ? "Online" : "Offline"}</Text></>}</Pressable>
         <Pressable style={styles.profileButton} onPress={onProfile}>{avatarData ? <Image source={{ uri: avatarData }} style={styles.profileButtonImage} /> : <Text style={styles.profileButtonText}>{userName.slice(0, 1).toUpperCase()}</Text>}</Pressable>
       </View>
     </View>
@@ -106,14 +125,14 @@ export function DashboardScreen(props: Props) {
     {snapshot.salaryRule && !(salaryConfirmed && benefitConfirmed) && <View style={styles.incomeBanner}><View style={styles.incomeIcon}><Text style={styles.incomeIconText}>↓</Text></View><View style={styles.incomeMain}><Text style={styles.incomeTitle}>Salário e VA previstos</Text><Text style={styles.incomeCopy}>{currency.format(snapshot.salaryRule.projectedAmount ?? snapshot.salaryRule.amount)}{snapshot.benefitRule?.active ? ` + ${currency.format(snapshot.benefitRule.projectedAmount ?? snapshot.benefitRule.amount)} de VA` : ""}</Text></View><Pressable style={styles.incomeButton} onPress={onConfirmIncome}><Text style={styles.incomeButtonText}>Confirmar</Text></Pressable></View>}
     {editing && <View style={styles.editBanner}><View><Text style={styles.editTitle}>Organizando seu Dashboard</Text><Text style={styles.editCopy}>Arraste, redimensione ou remova. Tudo é salvo automaticamente.</Text></View><Pressable style={styles.doneButton} onPress={() => setEditing(false)}><Text style={styles.doneText}>Concluir</Text></Pressable></View>}
     <View style={styles.grid}>
-      {visible.map((preference) => <DraggableWidget key={preference.id} preference={preference} editing={editing} palette={palette} onEdit={() => setEditing(true)} onMove={move} onSize={() => setLayout((current) => updateDashboardWidget(current, preference.id, { size: nextWidgetSize(preference.size) }))} onRemove={() => setLayout((current) => updateDashboardWidget(current, preference.id, { visible: false }))}>
+      {visible.map((preference, index) => <EditableWidget key={preference.id} preference={preference} editing={editing} first={index === 0} last={index === visible.length - 1} palette={palette} onEdit={() => setEditing(true)} onMove={move} onSize={(size) => changeLayout((current) => updateDashboardWidget(current, preference.id, { size }))} onRemove={() => changeLayout((current) => updateDashboardWidget(current, preference.id, { visible: false }))}>
         <DashboardWidget preference={preference} data={viewData} palette={palette} onOpen={() => onOpen(preference.id)} />
-      </DraggableWidget>)}
+      </EditableWidget>)}
     </View>
     {editing && <Pressable style={styles.addButton} onPress={() => setAdding(true)}><Text style={styles.addText}>＋ Adicionar widget</Text></Pressable>}
     <Text style={styles.hint}>Mantenha um widget pressionado para personalizar sua tela.</Text>
     <Modal visible={adding} transparent animationType="fade" onRequestClose={() => setAdding(false)}>
-      <View style={styles.modalLayer}><Pressable style={styles.backdrop} onPress={() => setAdding(false)} /><View style={styles.sheet}><Text style={styles.sheetTitle}>Adicionar widget</Text><Text style={styles.sheetCopy}>Escolha quais informações ajudam você a decidir melhor.</Text><ScrollView style={styles.sheetList}>{hidden.map((item) => <Pressable key={item.id} style={styles.widgetChoice} onPress={() => { setLayout((current) => updateDashboardWidget(current, item.id, { visible: true })); setAdding(false); }}><View><Text style={styles.choiceTitle}>{DASHBOARD_WIDGET_LABELS[item.id]}</Text><Text style={styles.choiceCopy}>Tamanho inicial {item.size}</Text></View><Text style={styles.choicePlus}>＋</Text></Pressable>)}{!hidden.length && <Text style={styles.allAdded}>Todos os widgets já estão no Dashboard.</Text>}</ScrollView><Pressable style={styles.closeButton} onPress={() => setAdding(false)}><Text style={styles.closeText}>Fechar</Text></Pressable></View></View>
+      <View style={styles.modalLayer}><Pressable style={styles.backdrop} onPress={() => setAdding(false)} /><View style={styles.sheet}><Text style={styles.sheetTitle}>Adicionar widget</Text><Text style={styles.sheetCopy}>Escolha quais informações ajudam você a decidir melhor.</Text><ScrollView style={styles.sheetList}>{hidden.map((item) => <Pressable key={item.id} style={styles.widgetChoice} onPress={() => { changeLayout((current) => updateDashboardWidget(current, item.id, { visible: true })); setAdding(false); }}><View><Text style={styles.choiceTitle}>{DASHBOARD_WIDGET_LABELS[item.id]}</Text><Text style={styles.choiceCopy}>Tamanho inicial {item.size}</Text></View><Text style={styles.choicePlus}>＋</Text></Pressable>)}{!hidden.length && <Text style={styles.allAdded}>Todos os widgets já estão no Dashboard.</Text>}</ScrollView><Pressable style={styles.closeButton} onPress={() => setAdding(false)}><Text style={styles.closeText}>Fechar</Text></Pressable></View></View>
     </Modal>
     <Modal visible={assistantOpen} transparent animationType="slide" onRequestClose={() => setAssistantOpen(false)}>
       <View style={styles.modalLayer}><Pressable style={styles.backdrop} onPress={() => setAssistantOpen(false)} /><View style={[styles.sheet, styles.aiSheet]}><View style={styles.aiHeader}><View style={styles.aiOrb}><Text style={styles.aiOrbText}>✦</Text></View><View style={styles.aiHeaderMain}><Text style={styles.sheetTitle}>Assistente Fluxo</Text><Text style={styles.sheetCopy}>Pergunte usando os dados financeiros deste período.</Text></View><Pressable onPress={() => setAssistantOpen(false)}><Text style={styles.aiClose}>×</Text></Pressable></View>
@@ -127,46 +146,37 @@ export function DashboardScreen(props: Props) {
 
 type WidgetData = {
   snapshot: FinanceSnapshot; month: string; monthItems: FinanceTransaction[]; totals: ReturnType<typeof flowTotals>;
+  cashFlow: ReturnType<typeof flowTotals>;
   totalBalance: number; invoice: number; invoiceItems: FinanceTransaction[]; nextCommitments: number;
   reserve: number; reserveTarget: number; categoryTotals: Array<[string, number]>; recent: FinanceTransaction[];
   accountBalances: Array<{ account: FinanceSnapshot["accounts"][number]; balance: number }>;
 };
 
-function DraggableWidget({ preference, editing, palette, onEdit, onMove, onSize, onRemove, children }: { preference: DashboardWidgetPreference; editing: boolean; palette: Palette; onEdit: () => void; onMove: (id: DashboardWidgetId, offset: number) => void; onSize: () => void; onRemove: () => void; children: React.ReactNode }) {
-  const drag = useRef(new Animated.ValueXY()).current;
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, gesture) => editing && Math.abs(gesture.dy) > 8,
-    onPanResponderMove: Animated.event([null, { dx: drag.x, dy: drag.y }], { useNativeDriver: false }),
-    onPanResponderRelease: (_, gesture) => {
-      const offset = Math.round(gesture.dy / 110) || (gesture.dy > 20 ? 1 : gesture.dy < -20 ? -1 : 0);
-      Animated.spring(drag, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-      if (offset) onMove(preference.id, offset);
-    },
-    onPanResponderTerminate: () => Animated.spring(drag, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start(),
-  }), [drag, editing, onMove, preference.id]);
+function EditableWidget({ preference, editing, first, last, palette, onEdit, onMove, onSize, onRemove, children }: { preference: DashboardWidgetPreference; editing: boolean; first: boolean; last: boolean; palette: Palette; onEdit: () => void; onMove: (id: DashboardWidgetId, offset: number) => void; onSize: (size: DashboardWidgetSize) => void; onRemove: () => void; children: React.ReactNode }) {
   const width = preference.size === "P" ? "48.3%" : "100%";
-  return <Animated.View {...responder.panHandlers} style={{ width, zIndex: editing ? 2 : 0, transform: [{ translateX: drag.x }, { translateY: drag.y }, { scale: editing ? .985 : 1 }] }}>
-    <Pressable delayLongPress={380} onLongPress={onEdit}>{children}</Pressable>
-    {editing && <View style={{ flexDirection: "row", gap: 6, marginTop: -15, marginBottom: 9, alignSelf: "center" }}>
-      <Pressable style={[editChip(palette), { backgroundColor: palette.accent }]} onPress={onSize}><Text style={{ color: "#fff", fontSize: 9, fontWeight: "900" }}>{preference.size}</Text></Pressable>
-      <Pressable style={editChip(palette)} onPress={onRemove}><Text style={{ color: palette.text, fontSize: 12, fontWeight: "900" }}>×</Text></Pressable>
+  return <View style={{ width, zIndex: editing ? 2 : 0, transform: [{ scale: editing ? .985 : 1 }] }}>
+    <Pressable disabled={editing} delayLongPress={320} onLongPress={onEdit}>{children}</Pressable>
+    {editing && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 7, marginBottom: 6, alignSelf: "center", justifyContent: "center" }}>
+      <Pressable accessibilityLabel="Mover widget para cima" disabled={first} style={[editChip(palette), first && { opacity: .3 }]} onPress={() => onMove(preference.id, -1)}><Text style={{ color: palette.text, fontSize: 13, fontWeight: "900" }}>↑</Text></Pressable>
+      <Pressable accessibilityLabel="Mover widget para baixo" disabled={last} style={[editChip(palette), last && { opacity: .3 }]} onPress={() => onMove(preference.id, 1)}><Text style={{ color: palette.text, fontSize: 13, fontWeight: "900" }}>↓</Text></Pressable>
+      {(["P", "M", "G"] as const).map((size) => <Pressable key={size} accessibilityLabel={`Tamanho ${size}`} style={[editChip(palette), preference.size === size && { backgroundColor: palette.accent, borderColor: palette.accent }]} onPress={() => onSize(size)}><Text style={{ color: preference.size === size ? "#fff" : palette.text, fontSize: 9, fontWeight: "900" }}>{size}</Text></Pressable>)}
+      <Pressable accessibilityLabel="Remover widget" style={editChip(palette)} onPress={onRemove}><Text style={{ color: palette.warning, fontSize: 12, fontWeight: "900" }}>×</Text></Pressable>
     </View>}
-  </Animated.View>;
+  </View>;
 }
 
 function editChip(p: Palette) { return { width: 34, height: 28, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 10, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }; }
 
 function DashboardWidget({ preference, data, palette, onOpen }: { preference: DashboardWidgetPreference; data: WidgetData; palette: Palette; onOpen: () => void }) {
   const styles = widgetStyles(palette); const compact = preference.size === "P";
-  const { snapshot, month, monthItems, totals, totalBalance, invoice, invoiceItems, nextCommitments, reserve, reserveTarget, categoryTotals, recent, accountBalances } = data;
+  const { snapshot, month, monthItems, totals, cashFlow, totalBalance, invoice, invoiceItems, nextCommitments, reserve, reserveTarget, categoryTotals, recent, accountBalances } = data;
   if (preference.id === "free") return <Pressable style={styles.hero} onPress={onOpen}><Text style={styles.heroLabel}>LIVRE PARA GASTAR</Text><Text style={styles.heroValue}>{currency.format(totals.free)}</Text><Text style={styles.heroAnswer}>{totals.free >= 0 ? "Depois de entradas e compromissos confirmados" : "Seu mês já está no negativo"}</Text><View style={styles.heroDivider} /><View style={styles.heroMeta}><Text style={styles.heroMetaText}>Entradas  {currency.format(totals.income)}</Text><Text style={styles.heroMetaText}>Saídas  {currency.format(totals.expenses)}</Text></View></Pressable>;
   const shell = (title: string, value: string, answer: string, body?: React.ReactNode) => <Pressable style={[styles.card, compact && styles.cardCompact]} onPress={onOpen}><Text style={styles.label}>{title.toUpperCase()}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.value, compact && styles.valueCompact]}>{value}</Text><Text numberOfLines={compact ? 2 : 3} style={styles.answer}>{answer}</Text>{body}</Pressable>;
   switch (preference.id) {
     case "balance": return shell("Saldo total", currency.format(totalBalance), `${accountBalances.length} saldos neste momento`);
     case "flow": {
-      const max = Math.max(totals.income, totals.expenses, 1);
-      return shell("Fluxo do mês", currency.format(totals.free), totals.free >= 0 ? "Entrou mais dinheiro do que saiu" : "As saídas superaram as entradas", !compact && <View style={styles.bars}><View style={styles.barRow}><Text style={styles.barName}>Entradas</Text><View style={styles.track}><View style={[styles.fill, { width: `${totals.income / max * 100}%`, backgroundColor: palette.success }]} /></View></View><View style={styles.barRow}><Text style={styles.barName}>Saídas</Text><View style={styles.track}><View style={[styles.fill, { width: `${totals.expenses / max * 100}%`, backgroundColor: palette.warning }]} /></View></View></View>);
+      const max = Math.max(cashFlow.income, cashFlow.expenses, 1);
+      return shell("Fluxo do mês", currency.format(cashFlow.free), cashFlow.free >= 0 ? "Entrou mais dinheiro do que saiu" : "As saídas superaram as entradas", !compact && <View style={styles.bars}><View style={styles.barRow}><Text style={styles.barName}>Entradas</Text><View style={styles.track}><View style={[styles.fill, { width: `${cashFlow.income / max * 100}%`, backgroundColor: palette.success }]} /></View></View><View style={styles.barRow}><Text style={styles.barName}>Saídas</Text><View style={styles.track}><View style={[styles.fill, { width: `${cashFlow.expenses / max * 100}%`, backgroundColor: palette.warning }]} /></View></View></View>);
     }
     case "invoice": {
       const limit = snapshot.cards.filter((item) => item.kind === "credit").reduce((sum, item) => sum + item.limit, 0);
@@ -205,7 +215,7 @@ function DashboardWidget({ preference, data, palette, onOpen }: { preference: Da
 }
 
 function makeStyles(p: Palette) { return StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 130 }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }, headerActions: { flexDirection: "row", gap: 6 }, eyebrow: { color: p.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 }, title: { marginTop: 4, color: p.text, fontSize: 26, fontWeight: "900", letterSpacing: -.8 }, iconButton: { position: "relative", width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, iconText: { color: p.text, fontSize: 17 }, notificationButtonActive: { borderColor: p.warning, backgroundColor: `${p.warning}18` }, notificationIconActive: { color: p.warning }, notificationBadge: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderRadius: 9, borderWidth: 2, borderColor: p.bg, backgroundColor: p.warning }, notificationBadgeText: { color: "#fff", fontSize: 7, fontWeight: "900" }, syncButton: { minWidth: 66, height: 38, alignItems: "center", justifyContent: "center", paddingHorizontal: 7, borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, syncText: { color: p.accent, fontSize: 7, fontWeight: "900" }, profileButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 13, backgroundColor: p.accent }, profileButtonImage: { width: 38, height: 38 }, profileButtonText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  scroll: { padding: 20, paddingBottom: 130 }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }, headerActions: { flexDirection: "row", gap: 6 }, eyebrow: { color: p.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 }, title: { marginTop: 4, color: p.text, fontSize: 26, fontWeight: "900", letterSpacing: -.8 }, iconButton: { position: "relative", width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, iconText: { color: p.text, fontSize: 17 }, editButtonActive: { borderColor: p.accent, backgroundColor: p.accent }, editButtonText: { color: "#fff" }, notificationButtonActive: { borderColor: p.warning, backgroundColor: `${p.warning}18` }, notificationIconActive: { color: p.warning }, notificationBadge: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderRadius: 9, borderWidth: 2, borderColor: p.bg, backgroundColor: p.warning }, notificationBadgeText: { color: "#fff", fontSize: 7, fontWeight: "900" }, syncButton: { minWidth: 61, height: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 7, borderRadius: 13, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, syncText: { color: p.accent, fontSize: 7, fontWeight: "900" }, profileButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 13, backgroundColor: p.accent }, profileButtonImage: { width: 38, height: 38 }, profileButtonText: { color: "#fff", fontSize: 14, fontWeight: "900" },
   tip: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18, padding: 15, borderRadius: 20, borderWidth: 1, borderColor: `${p.accent}55`, backgroundColor: p.accentSoft }, tipIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: p.accent }, tipIconText: { color: "#fff", fontSize: 17 }, tipMain: { flex: 1 }, tipLabel: { color: p.accent, fontSize: 8, fontWeight: "900", letterSpacing: 1.1 }, tipText: { marginTop: 4, color: p.text, fontSize: 11, lineHeight: 16, fontWeight: "700" }, tipAsk: { marginTop: 5, color: p.accent, fontSize: 7, fontWeight: "800" }, tipArrow: { color: p.accent, fontSize: 27 },
   connect: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, padding: 15, borderRadius: 18, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }, connectTitle: { color: p.text, fontSize: 12, fontWeight: "900" }, connectCopy: { maxWidth: 260, marginTop: 3, color: p.muted, fontSize: 9, lineHeight: 14 },
   editBanner: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 15, padding: 14, borderRadius: 18, backgroundColor: p.surface2 }, editTitle: { color: p.text, fontSize: 12, fontWeight: "900" }, editCopy: { maxWidth: 225, marginTop: 3, color: p.muted, fontSize: 8, lineHeight: 12 }, doneButton: { marginLeft: "auto", paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11, backgroundColor: p.accent }, doneText: { color: "#fff", fontSize: 9, fontWeight: "900" }, grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 14 }, addButton: { height: 54, alignItems: "center", justifyContent: "center", marginTop: 8, borderRadius: 17, borderWidth: 1, borderStyle: "dashed", borderColor: p.accent }, addText: { color: p.accent, fontSize: 12, fontWeight: "900" }, hint: { marginTop: 18, color: p.muted, fontSize: 9, textAlign: "center" },

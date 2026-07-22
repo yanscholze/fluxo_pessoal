@@ -12,13 +12,17 @@ export function rewardSnapshot(amount: number, card: FinanceCard, fallbackUsdRat
 }
 
 export function rewardFor(transaction: FinanceTransaction, card: FinanceCard, fallbackUsdRate: number) {
-  const calculated = rewardSnapshot(transaction.amount, card, fallbackUsdRate);
+  const calculated = rewardSnapshot(transaction.amount, card, transaction.rewardUsdRate ?? fallbackUsdRate);
   const hasPoints = card.rewardMode === "points" || card.rewardMode === "both";
   const hasCashback = card.rewardMode === "cashback" || card.rewardMode === "both";
+  // Em compras parceladas, cada competência rende somente sobre o valor da
+  // própria parcela. Isto também corrige snapshots antigos que tenham recebido
+  // por engano a recompensa do total da compra na primeira parcela.
+  const installmentReward = Boolean(transaction.installments);
   return {
-    points: transaction.rewardPoints ?? calculated.rewardPoints ?? 0,
-    cashback: transaction.rewardCashback ?? calculated.rewardCashback,
+    points: installmentReward ? calculated.rewardPoints ?? 0 : transaction.rewardPoints ?? calculated.rewardPoints ?? 0,
+    cashback: installmentReward ? calculated.rewardCashback : transaction.rewardCashback ?? calculated.rewardCashback,
     usdRate: transaction.rewardUsdRate ?? calculated.rewardUsdRate ?? 0,
-    estimated: (hasPoints && transaction.rewardPoints == null) || (hasCashback && transaction.rewardCashback == null),
+    estimated: installmentReward ? hasPoints && transaction.rewardUsdRate == null : (hasPoints && transaction.rewardPoints == null) || (hasCashback && transaction.rewardCashback == null),
   };
 }

@@ -1,13 +1,16 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { accounts, cards, categories, recurringEntries, rewardRedemptions, transactions, trips } from "../../../db/schema";
 import { ensureFinanceSchema } from "../../../db/ensure-schema";
 import { getDb } from "../../../db";
 import { businessDaysInMonth, effectiveRecurringDate } from "../../../lib/brazil-calendar";
-import { scopedImportFingerprint } from "../../../lib/import-fingerprint";
+import { importFingerprintCandidates, scopedImportFingerprint } from "../../../lib/import-fingerprint";
 import { normalizeCardOrder, sortFinanceCards } from "../../../lib/card-management";
-import type { FinanceCard, PaymentMethod, TransactionType } from "../../../lib/finance-types";
+import type { FinanceCard, FinanceTransaction, PaymentMethod, TransactionType } from "../../../lib/finance-types";
 import { cleanInstallmentDescription } from "../../../lib/import-parser";
+import { normalizeAccountCurrency } from "../../../lib/currency";
 import { webIdentityFrom } from "../../../lib/app-auth";
+import { activeInvoiceMonth } from "../../../lib/finance-period";
+import { rewardFor } from "../../../lib/rewards";
 
 function unauthorized() {
   return Response.json({ error: "Autenticação obrigatória", code: "AUTH_REQUIRED" }, { status: 401, headers: { "cache-control": "no-store" } });
@@ -91,65 +94,6 @@ function tripJson(row: typeof trips.$inferSelect) {
   };
 }
 
-async function seedDefaults(ownerId: string) {
-  const db = getDb();
-  const accountDefaults = [
-    ["Nubank", "nubank", "checking", "purple"],
-    ["Mercado Pago", "mercado-pago", "checking", "blue"],
-    ["Caju VA", "caju", "benefit", "orange"],
-    ["Dinheiro", "manual", "cash", "green"],
-    ["XP Investimentos", "xp", "investment", "gold"],
-    ["Reserva de emergência", "manual", "investment", "green"],
-    ["Nubank Ultravioleta", "nubank", "credit-card", "black"],
-  ] as const;
-  const categoryDefaults = [
-    ["Alimentação", "expense", "teal", "utensils", true],
-    ["Moradia", "expense", "blue", "home", true],
-    ["Transporte", "expense", "purple", "car", true],
-    ["Saúde", "expense", "green", "heart", true],
-    ["Lazer", "expense", "orange", "sparkles", false],
-    ["Educação", "expense", "blue", "book", false],
-    ["Outros", "expense", "gray", "circle", false],
-    ["Salário", "income", "green", "wallet", false],
-    ["Estética automotiva", "income", "purple", "sparkles", false],
-    ["Presentes", "income", "orange", "gift", false],
-    ["Benefício / VA", "income", "teal", "wallet", false],
-  ] as const;
-
-  await db.insert(accounts).values(accountDefaults.map(([name, institution, kind, color]) => ({
-    id: stableId(ownerId, `account-${name}`), ownerId, name, institution, kind, color,
-    fixed: name === "Reserva de emergência",
-  }))).onConflictDoNothing();
-  await db.insert(categories).values(categoryDefaults.map(([name, kind, color, icon, essential]) => ({
-    id: stableId(ownerId, `category-${name}`), ownerId, name, kind, color, icon, essential,
-  }))).onConflictDoNothing();
-  await db.insert(cards).values([
-    {
-      id: stableId(ownerId, "card-nubank-ultravioleta"), ownerId, name: "Nubank Ultravioleta",
-      linkedAccount: "Nubank Ultravioleta", kind: "credit", brand: "Mastercard", tier: "Black",
-      last4: "0000", closingDay: 1, dueDay: 8, dueAdjustment: "next",
-      pointsPerDollarMilli: 2200, cashbackBasisPoints: 125, rewardMode: "both", color: "uv", favorite: true, sortOrder: 0,
-    },
-    {
-      id: stableId(ownerId, "card-caju-va"), ownerId, name: "Caju VA",
-      linkedAccount: "Caju VA", kind: "debit", brand: "Visa", tier: "Benefícios", last4: "0000",
-      closingDay: 1, dueDay: 1, dueAdjustment: "next", color: "caju", sortOrder: 1,
-    },
-  ]).onConflictDoNothing();
-  await db.insert(recurringEntries).values([
-    {
-      id: stableId(ownerId, "recurring-salary"), ownerId, description: "Salário", category: "Salário",
-      account: "Nubank", amountCents: 220000, type: "income", dayOfMonth: 5, calculationMode: "fixed",
-      scheduleMode: "business-day-of-month", dateAdjustment: "previous", active: true,
-    },
-    {
-      id: stableId(ownerId, "recurring-benefit-va"), ownerId, description: "Crédito Caju VA", category: "Benefício / VA",
-      account: "Caju VA", amountCents: 2500, type: "income", dayOfMonth: 5, calculationMode: "business-day",
-      scheduleMode: "business-day-of-month", dateAdjustment: "previous", active: true,
-    },
-  ]).onConflictDoNothing();
-}
-
 async function adjustAccount(ownerId: string, name: string, deltaCents: number) {
   if (!deltaCents) return;
   const db = getDb();
@@ -167,17 +111,22 @@ function balanceEffect(item: { type: string; status: string; paymentMethod: stri
   return item.type === "income" ? item.amountCents : -item.amountCents;
 }
 
-function transactionJson(row: typeof transactions.$inferSelect) {
+function transactionJson(row: typeof transactions.$inferSelect): FinanceTransaction {
   return {
     id: row.id, description: row.installments ? cleanInstallmentDescription(row.description) : row.description, category: row.category, account: row.account,
     destinationAccount: row.destinationAccount ?? undefined,
-    date: row.occurredAt, amount: row.amountCents / 100, type: row.type,
-    paymentMethod: row.paymentMethod, cardId: row.cardId ?? undefined, tripId: row.tripId ?? undefined,
+    date: row.occurredAt, amount: row.amountCents / 100, type: row.type as TransactionType,
+    paymentMethod: row.paymentMethod as PaymentMethod, cardId: row.cardId ?? undefined, tripId: row.tripId ?? undefined,
     invoiceMonth: row.invoiceMonth ?? undefined, installments: row.installments ?? undefined,
+    installmentGroupId: row.installmentGroupId ?? undefined,
+    importBatchId: row.importBatchId ?? undefined,
+    importBatchName: row.importBatchName ?? undefined,
+    importBatchMonth: row.importBatchMonth ?? undefined,
+    importedAt: row.importedAt ?? undefined,
     rewardPoints: row.rewardPointsMilli == null ? undefined : row.rewardPointsMilli / 1000,
     rewardCashback: row.rewardCashbackCents == null ? undefined : row.rewardCashbackCents / 100,
     rewardUsdRate: row.rewardUsdRateMicros == null ? undefined : row.rewardUsdRateMicros / 1_000_000,
-    status: row.status, source: row.source, fingerprint: row.fingerprint ?? undefined,
+    status: row.status === "planned" ? "planned" : "confirmed", source: row.source as FinanceTransaction["source"], fingerprint: row.fingerprint ?? undefined,
     version: row.version, updatedAt: row.updatedAt, deletedAt: row.deletedAt ?? undefined,
     deviceId: row.deviceId ?? undefined,
   };
@@ -231,7 +180,6 @@ async function materializeRecurring(ownerId: string, rows: Array<typeof recurrin
 export async function financeGetForOwner(request: Request, ownerId: string) {
   try {
     await ensureFinanceSchema();
-    await seedDefaults(ownerId);
     const db = getDb();
     const month = new Date().toISOString().slice(0, 7);
     const [accountRows, categoryRows, cardRows, tripRows, recurringRows, redemptionRows] = await Promise.all([
@@ -248,7 +196,7 @@ export async function financeGetForOwner(request: Request, ownerId: string) {
     const benefit = recurringRows.find((row) => row.id === stableId(ownerId, "recurring-benefit-va"));
     const specialIds = new Set([stableId(ownerId, "recurring-salary"), stableId(ownerId, "recurring-benefit-va")]);
     return Response.json({
-      accounts: accountRows.map((row) => ({ id: row.id, name: row.name, institution: row.institution, kind: row.kind, balance: row.balanceCents / 100, goal: row.goalCents / 100, monthlyYieldPercent: row.monthlyYieldBasisPoints / 100, fixed: row.fixed, color: row.color })),
+      accounts: accountRows.map((row) => ({ id: row.id, name: row.name, institution: row.institution, currency: row.currency, kind: row.kind, balance: row.balanceCents / 100, goal: row.goalCents / 100, monthlyYieldPercent: row.monthlyYieldBasisPoints / 100, fixed: row.fixed, color: row.color })),
       categories: categoryRows,
       cards: sortFinanceCards(cardRows.map(cardJson) as FinanceCard[]),
       trips: tripRows.map(tripJson),
@@ -278,9 +226,8 @@ type RuleInput = {
 export async function financePostForOwner(request: Request, ownerId: string) {
   try {
     await ensureFinanceSchema();
-    await seedDefaults(ownerId);
     const payload = await request.json() as {
-      account?: { id?: string; name?: string; institution?: string; kind?: string; balance?: number; goal?: number; monthlyYieldPercent?: number; fixed?: boolean; color?: string };
+      account?: { id?: string; name?: string; institution?: string; currency?: string; kind?: string; balance?: number; goal?: number; monthlyYieldPercent?: number; fixed?: boolean; color?: string };
       category?: { id?: string; name?: string; originalName?: string; kind?: string; color?: string; icon?: string; essential?: boolean };
       card?: { id?: string; name?: string; linkedAccount?: string; kind?: string; brand?: string; tier?: string; last4?: string; limit?: number; closingDay?: number; dueDay?: number; dueAdjustment?: string; pointsPerDollar?: number; cashbackPercent?: number; rewardMode?: string; pointsGoal?: number; manualUsdRate?: number; color?: string; imageData?: string };
       cardOrder?: { ids?: string[]; favoriteId?: string };
@@ -291,7 +238,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       confirmSalary?: { month?: string };
       recurringRule?: { id?: string; description?: string; category?: string; account?: string; amount?: number; type?: string; dayOfMonth?: number; calculationMode?: string; scheduleMode?: string; dateAdjustment?: string; paymentMethod?: PaymentMethod; cardId?: string; active?: boolean };
       payInvoice?: { id?: string; cardId?: string; invoiceMonth?: string; sourceAccount?: string; amount?: number; date?: string };
-      transaction?: { id?: string; description?: string; category?: string; account?: string; destinationAccount?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
+      transaction?: { id?: string; description?: string; category?: string; account?: string; destinationAccount?: string; date?: string; amount?: number; type?: string; paymentMethod?: PaymentMethod; cardId?: string; tripId?: string; invoiceMonth?: string; installments?: string; installmentGroupId?: string; importBatchId?: string; importBatchName?: string; importBatchMonth?: string; importedAt?: string; status?: string; source?: string; fingerprint?: string; rewardPoints?: number; rewardCashback?: number; rewardUsdRate?: number };
     };
     const db = getDb();
 
@@ -348,7 +295,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       }
       const goal = Number(item.goal ?? 0); const monthlyYieldPercent = Number(item.monthlyYieldPercent ?? 0);
       if (!Number.isFinite(goal) || goal < 0 || !Number.isFinite(monthlyYieldPercent) || monthlyYieldPercent < 0) return Response.json({ error: "Meta ou rentabilidade inválida" }, { status: 400 });
-      const values = { name, institution: item.institution?.trim() || "manual", kind, balanceCents: Math.round(balance * 100), goalCents: Math.round(goal * 100), monthlyYieldBasisPoints: Math.round(monthlyYieldPercent * 100), fixed: existing?.fixed || item.fixed === true, color: item.color?.trim() || "teal", updatedAt: now };
+      const values = { name, institution: item.institution?.trim() || "manual", currency: normalizeAccountCurrency(item.currency), kind, balanceCents: Math.round(balance * 100), goalCents: Math.round(goal * 100), monthlyYieldBasisPoints: Math.round(monthlyYieldPercent * 100), fixed: existing?.fixed || item.fixed === true, color: item.color?.trim() || "teal", updatedAt: now };
       if (existing) await db.update(accounts).set(values).where(and(eq(accounts.ownerId, ownerId), eq(accounts.id, existing.id)));
       else await db.insert(accounts).values({ id, ownerId, ...values });
       if (existing && existing.name !== name) {
@@ -360,7 +307,7 @@ export async function financePostForOwner(request: Request, ownerId: string) {
           db.update(rewardRedemptions).set({ account: name }).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.account, existing.name))),
         ]);
       }
-      return Response.json({ account: { id, name, institution: values.institution, kind, balance, goal, monthlyYieldPercent, fixed: values.fixed, color: values.color } });
+      return Response.json({ account: { id, name, institution: values.institution, currency: values.currency, kind, balance, goal, monthlyYieldPercent, fixed: values.fixed, color: values.color } });
     }
 
     if (payload.category) {
@@ -442,11 +389,12 @@ export async function financePostForOwner(request: Request, ownerId: string) {
         db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.cardId, cardId), isNull(transactions.deletedAt))),
         db.select().from(rewardRedemptions).where(and(eq(rewardRedemptions.ownerId, ownerId), eq(rewardRedemptions.cardId, cardId))),
       ]);
-      const eligibleRows = purchaseRows.filter((row) => row.status === "confirmed" && row.type === "expense");
-      const pointsEnabled = card.rewardMode === "points" || card.rewardMode === "both"; const cashbackEnabled = card.rewardMode === "cashback" || card.rewardMode === "both";
+      const financeCard = cardJson(card) as FinanceCard;
+      const rewardCutoffMonth = activeInvoiceMonth(financeCard, new Date().toISOString().slice(0, 10));
+      const eligibleRows = purchaseRows.filter((row) => row.status === "confirmed" && row.type === "expense" && (row.invoiceMonth ?? row.occurredAt.slice(0, 7)) <= rewardCutoffMonth);
       const earnedMilli = kind === "points"
-        ? eligibleRows.reduce((sum, row) => sum + (row.rewardPointsMilli ?? (pointsEnabled && card.manualUsdRateMicros > 0 ? Math.round((row.amountCents * 10_000 / card.manualUsdRateMicros) * card.pointsPerDollarMilli) : 0)), 0)
-        : eligibleRows.reduce((sum, row) => sum + (row.rewardCashbackCents ?? (cashbackEnabled ? Math.round(row.amountCents * card.cashbackBasisPoints / 10_000) : 0)) * 10, 0);
+        ? eligibleRows.reduce((sum, row) => sum + Math.round(rewardFor(transactionJson(row), financeCard, financeCard.manualUsdRate).points * 1000), 0)
+        : eligibleRows.reduce((sum, row) => sum + Math.round(rewardFor(transactionJson(row), financeCard, financeCard.manualUsdRate).cashback * 1000), 0);
       const redeemedMilli = previousRedemptions.filter((row) => row.kind === kind).reduce((sum, row) => sum + row.amountMilli, 0);
       const amountMilli = Math.round(amount * 1000);
       if (amountMilli > earnedMilli - redeemedMilli) return Response.json({ error: `Saldo de ${kind === "points" ? "pontos" : "cashback"} insuficiente` }, { status: 400 });
@@ -594,8 +542,10 @@ export async function financePostForOwner(request: Request, ownerId: string) {
     let transactionId = item.id;
     const importFingerprint = scopedImportFingerprint(item);
     if (!previous && item.source === "import" && importFingerprint) {
-      const duplicate = (await db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), eq(transactions.fingerprint, importFingerprint))).limit(1))[0];
-      if (duplicate) { previous = duplicate; transactionId = duplicate.id; }
+      const aliases = importFingerprintCandidates(item);
+      const duplicate = (await db.select().from(transactions).where(and(eq(transactions.ownerId, ownerId), or(...aliases.map((fingerprint) => eq(transactions.fingerprint, fingerprint))))).limit(1))[0];
+      if (duplicate && !duplicate.deletedAt) return Response.json({ transaction: transactionJson(duplicate), duplicate: true, updatedDuplicate: true });
+      if (duplicate?.deletedAt) { previous = duplicate; transactionId = duplicate.id; }
     }
     let paymentMethod = ["credit", "debit", "cash", "transfer"].includes(item.paymentMethod ?? "") ? String(item.paymentMethod) : "other";
     let resolvedAccount = item.account?.trim() || "Nubank";
@@ -643,7 +593,13 @@ export async function financePostForOwner(request: Request, ownerId: string) {
       rewardPointsMilli: item.rewardPoints == null ? previous?.rewardPointsMilli ?? null : Math.round(Math.max(0, Number(item.rewardPoints)) * 1000),
       rewardCashbackCents: item.rewardCashback == null ? previous?.rewardCashbackCents ?? null : Math.round(Math.max(0, Number(item.rewardCashback)) * 100),
       rewardUsdRateMicros: item.rewardUsdRate == null ? previous?.rewardUsdRateMicros ?? null : Math.round(Math.max(0, Number(item.rewardUsdRate)) * 1_000_000),
-      installments: item.installments?.trim() || null, status: item.status === "planned" ? "planned" : "confirmed",
+      installments: item.installments?.trim() || null,
+      installmentGroupId: item.installments?.trim() ? item.installmentGroupId?.trim().slice(0, 160) || previous?.installmentGroupId || item.id.replace(/-\d+$/, "") : null,
+      importBatchId: source === "import" ? item.importBatchId?.trim().slice(0, 160) || previous?.importBatchId || null : null,
+      importBatchName: source === "import" ? item.importBatchName?.trim().slice(0, 180) || previous?.importBatchName || null : null,
+      importBatchMonth: source === "import" && /^\d{4}-\d{2}$/.test(item.importBatchMonth?.trim() || "") ? item.importBatchMonth!.trim() : previous?.importBatchMonth ?? null,
+      importedAt: source === "import" ? item.importedAt?.trim().slice(0, 40) || previous?.importedAt || now : null,
+      status: item.status === "planned" ? "planned" : "confirmed",
       source,
       fingerprint: importFingerprint || null, version: (previous?.version ?? 0) + 1,
       deletedAt: null, deviceId: "web", lastMutationId: null, updatedAt: now,
@@ -674,6 +630,24 @@ export async function financeDeleteForOwner(request: Request, ownerId: string) {
     const id = url.searchParams.get("id");
     if (!id) return Response.json({ error: "ID obrigatório" }, { status: 400 });
     const db = getDb();
+    if (url.searchParams.get("entity") === "import-batch") {
+      const rows = await db.select().from(transactions).where(and(
+        eq(transactions.ownerId, ownerId),
+        eq(transactions.importBatchId, id),
+        isNull(transactions.deletedAt),
+      ));
+      if (!rows.length) return Response.json({ ok: true, deleted: 0 });
+      const now = new Date().toISOString();
+      for (const row of rows) await applyAccountDeltas(ownerId, row, -1);
+      await db.update(transactions).set({
+        deletedAt: now,
+        version: sql`${transactions.version} + 1`,
+        deviceId: "web",
+        lastMutationId: null,
+        updatedAt: now,
+      }).where(and(eq(transactions.ownerId, ownerId), eq(transactions.importBatchId, id), isNull(transactions.deletedAt)));
+      return Response.json({ ok: true, deleted: rows.length });
+    }
     if (url.searchParams.get("entity") === "account") {
       const account = (await db.select().from(accounts).where(and(eq(accounts.id, id), eq(accounts.ownerId, ownerId))).limit(1))[0];
       if (!account) return Response.json({ ok: true });

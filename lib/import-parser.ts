@@ -13,7 +13,14 @@ function createId() {
 
 function parseMoney(value: string) {
   const cleaned = value.replace(/[R$\s"]/g, "");
-  return Number(cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned);
+  const comma = cleaned.lastIndexOf(",");
+  const dot = cleaned.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    const decimal = comma > dot ? "," : ".";
+    const thousands = decimal === "," ? /\./g : /,/g;
+    return Number(cleaned.replace(thousands, "").replace(decimal, "."));
+  }
+  return Number(comma >= 0 ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned);
 }
 
 function normalizeHeader(value: string) {
@@ -83,6 +90,26 @@ function fingerprintOf(date: string, description: string, amount: number, contex
   return `invoice:${context.invoiceMonth}|card:${context.cardId ?? "credit"}|installment:${context.installments ?? "single"}|${base}`;
 }
 
+function compactHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function installmentIdentity(description: string, amount: number, cardId: string | undefined, invoiceMonth: string, current: number, total: number, occurrence: number, bankId?: string) {
+  const anchorMonth = monthOffset(invoiceMonth, 1 - current);
+  const family = bankId
+    ? `card:${encodeURIComponent(cardId ?? "credit")}|fitid:${encodeURIComponent(bankId)}|occurrence:${occurrence}`
+    : `card:${cardId ?? "credit"}|anchor:${anchorMonth}|description:${normalizeHeader(description)}|amount:${amount.toFixed(2)}|total:${total}|occurrence:${occurrence}`;
+  return {
+    groupId: `import-installment-${compactHash(family)}`,
+    fingerprint: (installment: number) => `${bankId ? "ofx-installment" : "installment-family"}:${family}|part:${installment}/${total}`,
+  };
+}
+
 function isCardAccount(name: string) { return /ultravioleta|black/i.test(name); }
 const invoicePaymentPattern = /pagamento\s+(?:recebido|de\s+fatura|da\s+fatura)|recebimento\s+de\s+pagamento|pagamento\s+efetuado|credit[oó]\s+de\s+pagamento/i;
 
@@ -110,12 +137,12 @@ export function parseCsv(text: string, account: string, card?: FinanceCard, invo
     const occurrenceKey = `${date}|${normalizeHeader(description)}|${amount.toFixed(2)}|${referenceMonth ?? "account"}|${marker ? `${marker.current}/${marker.total}` : "single"}`;
     const occurrence = (occurrences.get(occurrenceKey) ?? 0) + 1; occurrences.set(occurrenceKey, occurrence);
     if (credit && referenceMonth && marker) {
-      const groupId = createId();
+      const identity = installmentIdentity(description, amount, card?.id, referenceMonth, marker.current, marker.total, occurrence);
       for (let installment = 1; installment <= marker.total; installment += 1) {
         const targetMonth = monthOffset(referenceMonth, installment - marker.current);
         const installmentDate = installment === marker.current ? date : dateInMonth(date, targetMonth);
         const installments = `${installment}/${marker.total}`;
-        items.push({ id: `${groupId}-${installment}`, description, category: "Outros", account, date: installmentDate, amount, type, paymentMethod: "credit", cardId: card?.id, invoiceMonth: targetMonth, installments, status: "confirmed", source: "import", fingerprint: fingerprintOf(installmentDate, description, amount, { cardId: card?.id, invoiceMonth: targetMonth, installments, occurrence }) });
+        items.push({ id: `${identity.groupId}-${installment}`, description, category: "Outros", account, date: installmentDate, amount, type, paymentMethod: "credit", cardId: card?.id, invoiceMonth: targetMonth, installments, installmentGroupId: identity.groupId, status: "confirmed", source: "import", fingerprint: identity.fingerprint(installment) });
       }
       expandedInstallments += marker.total - 1;
       continue;
@@ -125,14 +152,92 @@ export function parseCsv(text: string, account: string, card?: FinanceCard, invo
   return { items, ignored, ignoredReasons: [...reasons], expandedInstallments };
 }
 
-function ofxValue(block: string, tag: string) { return block.match(new RegExp(`<${tag}>([^<\\r\\n]+)`, "i"))?.[1]?.trim() ?? ""; }
+function decodeOfxText(value: string) {
+  const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);?/gi, (match, entity: string) => {
+    if (entity[0] === "#") {
+      const radix = entity[1]?.toLowerCase() === "x" ? 16 : 10;
+      const codePoint = Number.parseInt(entity.slice(radix === 16 ? 2 : 1), radix);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return entities[entity.toLowerCase()] ?? match;
+  }).replace(/\s+/g, " ").trim();
+}
 
-export function parseOfx(text: string, account: string): ImportResult {
-  const items = text.split(/<STMTTRN>/i).slice(1).flatMap((block) => {
-    const rawAmount = Number(ofxValue(block, "TRNAMT").replace(",", ".")); const rawDate = ofxValue(block, "DTPOSTED"); const description = ofxValue(block, "MEMO") || ofxValue(block, "NAME") || "Lançamento importado";
-    if (!Number.isFinite(rawAmount) || rawAmount === 0) return [];
-    const date = rawDate.match(/^\d{8}/) ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}` : isoDate(rawDate); const amount = Math.abs(rawAmount); const type = rawAmount >= 0 ? "income" as const : "expense" as const;
-    return [{ id: createId(), description, category: "Outros", account, date, amount, type, paymentMethod: type === "income" ? "transfer" as const : "debit" as const, status: "confirmed" as const, source: "import" as const, fingerprint: fingerprintOf(date, description, amount) }];
-  });
-  return { items, ignored: 0, ignoredReasons: [], expandedInstallments: 0 };
+function ofxValue(block: string, tag: string) {
+  const value = block.match(new RegExp(`<${tag}\\b[^>]*>\\s*([^<\\r\\n]*)`, "i"))?.[1] ?? "";
+  return decodeOfxText(value);
+}
+
+function ofxTransactionBlocks(text: string) {
+  return text
+    .replace(/^\uFEFF/, "")
+    .split(/<(?:STMTTRN|CCSTMTTRN)\b[^>]*>/i)
+    .slice(1)
+    .map((block) => block.split(/<\/(?:STMTTRN|CCSTMTTRN)\s*>/i)[0]);
+}
+
+function ofxDescription(block: string) {
+  const name = ofxValue(block, "NAME");
+  const memo = ofxValue(block, "MEMO");
+  if (!name) return memo || "Lançamento importado";
+  if (!memo || normalizeHeader(memo).includes(normalizeHeader(name))) return memo || name;
+  return `${name} - ${memo}`;
+}
+
+export function parseOfx(text: string, account: string, card?: FinanceCard, invoiceMonth?: string): ImportResult {
+  const items: FinanceTransaction[] = [];
+  const reasons = new Set<string>();
+  const occurrences = new Map<string, number>();
+  const credit = card?.kind === "credit" || isCardAccount(account);
+  const referenceMonth = credit && /^\d{4}-\d{2}$/.test(invoiceMonth ?? "") ? invoiceMonth! : undefined;
+  let ignored = 0;
+  let expandedInstallments = 0;
+
+  for (const block of ofxTransactionBlocks(text)) {
+    const rawAmount = parseMoney(ofxValue(block, "TRNAMT"));
+    const rawDate = ofxValue(block, "DTPOSTED") || ofxValue(block, "DTUSER") || ofxValue(block, "DTTRADE");
+    const rawDescription = ofxDescription(block);
+    const description = cleanInstallmentDescription(rawDescription);
+    if (!description || !Number.isFinite(rawAmount) || rawAmount === 0 || !rawDate) {
+      ignored += 1; reasons.add("lançamentos sem data, descrição ou valor"); continue;
+    }
+
+    const transactionKind = normalizeHeader(ofxValue(block, "TRNTYPE"));
+    const isCreditEntry = /^(credit|dep|directdep|int|div|reinvest|xfer)$/.test(transactionKind);
+    if (credit && (invoicePaymentPattern.test(normalizeHeader(rawDescription)) || isCreditEntry)) {
+      ignored += 1; reasons.add("pagamentos, créditos e estornos do cartão"); continue;
+    }
+
+    const date = rawDate.match(/^\d{8}/) ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}` : isoDate(rawDate);
+    const amount = Math.abs(rawAmount);
+    const type: TransactionType = credit ? "expense" : isCreditEntry || (!transactionKind && rawAmount >= 0) ? "income" : "expense";
+    const marker = credit ? installmentMarker(rawDescription) : null;
+    const occurrenceKey = `${date}|${normalizeHeader(description)}|${amount.toFixed(2)}|${referenceMonth ?? "account"}|${marker ? `${marker.current}/${marker.total}` : "single"}`;
+    const occurrence = (occurrences.get(occurrenceKey) ?? 0) + 1;
+    occurrences.set(occurrenceKey, occurrence);
+    const fitId = ofxValue(block, "FITID");
+
+    if (credit && referenceMonth && marker) {
+      // O Nubank mantém o FITID da compra ao longo de todas as parcelas, mesmo
+      // quando o arredondamento muda o valor em alguns centavos entre faturas.
+      // Ele identifica a família; a fração identifica cada parcela individual.
+      const identity = installmentIdentity(description, amount, card?.id, referenceMonth, marker.current, marker.total, occurrence, fitId || undefined);
+      for (let installment = 1; installment <= marker.total; installment += 1) {
+        const targetMonth = monthOffset(referenceMonth, installment - marker.current);
+        // A competência da fatura e o mês do lançamento não são necessariamente
+        // iguais. No OFX do Nubank, por exemplo, a fatura de julho traz a parcela
+        // lançada em junho. Preserve esse deslocamento ao projetar as demais.
+        const transactionMonth = monthOffset(date.slice(0, 7), installment - marker.current);
+        const installmentDate = installment === marker.current ? date : dateInMonth(date, transactionMonth);
+        const installments = `${installment}/${marker.total}`;
+        items.push({ id: `${identity.groupId}-${installment}`, description, category: "Outros", account, date: installmentDate, amount, type: "expense", paymentMethod: "credit", cardId: card?.id, invoiceMonth: targetMonth, installments, installmentGroupId: identity.groupId, status: "confirmed", source: "import", fingerprint: identity.fingerprint(installment) });
+      }
+      expandedInstallments += marker.total - 1;
+      continue;
+    }
+
+    items.push({ id: createId(), description, category: "Outros", account, date, amount, type, paymentMethod: credit ? "credit" : type === "income" ? "transfer" : "debit", cardId: card?.id, invoiceMonth: referenceMonth, status: "confirmed", source: "import", fingerprint: fitId ? `ofx:${fitId}` : fingerprintOf(date, description, amount, { cardId: card?.id, invoiceMonth: referenceMonth, occurrence }) });
+  }
+  return { items, ignored, ignoredReasons: [...reasons], expandedInstallments };
 }

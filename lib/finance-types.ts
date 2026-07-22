@@ -17,6 +17,13 @@ export type FinanceTransaction = {
   tripId?: string;
   invoiceMonth?: string;
   installments?: string;
+  /** Identifica todas as parcelas originadas da mesma compra. */
+  installmentGroupId?: string;
+  /** Identifica o arquivo de fatura que criou este conjunto de lançamentos. */
+  importBatchId?: string;
+  importBatchName?: string;
+  importBatchMonth?: string;
+  importedAt?: string;
   status?: "confirmed" | "planned";
   source?: "manual" | "import" | "recurring" | "invoice-payment" | "account-transfer";
   fingerprint?: string;
@@ -45,6 +52,7 @@ export type FinanceAccount = {
   id: string;
   name: string;
   institution: string;
+  currency: string;
   kind: "checking" | "cash" | "investment" | "credit-card" | "benefit" | string;
   balance: number;
   goal: number;

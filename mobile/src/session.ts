@@ -1,6 +1,9 @@
 import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
 import * as SecureStore from "expo-secure-store";
+import * as WebBrowser from "expo-web-browser";
+import { readApiResponse } from "./http";
+import { parseMobileAuthCallback } from "./mobile-auth";
 
 const API_ORIGIN = "https://fluxo-pessoal.yan-scholze.chatgpt.site";
 const keys = {
@@ -43,43 +46,39 @@ export async function getSession(): Promise<MobileSession | null> {
   return { deviceId, deviceToken, gatewayToken: gatewayToken || undefined, expiresAt, user: { id: userId, email, displayName } };
 }
 
-async function authenticate(input: { action: "login" | "register"; email: string; password: string; displayName?: string }) {
+function gatewayHeaders(deviceToken: string, gatewayToken: string) {
+  return {
+    "content-type": "application/json",
+    "authorization": `Bearer ${deviceToken}`,
+    "OAI-Sites-Authorization": `Bearer ${gatewayToken}`,
+  };
+}
+
+export async function connectWithBrowser() {
   const deviceId = await getDeviceId();
   const deviceName = Device.deviceName || Device.modelName || "Android";
-  const response = await fetch(`${API_ORIGIN}/api/v1/auth`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...input,
-      device: { deviceId, deviceName, appVersion: "0.4.5" },
-    }),
+  const state = `${Crypto.randomUUID()}${Crypto.randomUUID()}`.replace(/-/g, "");
+  const query = new URLSearchParams({ device_id: deviceId, device_name: deviceName, app_version: "0.4.2", state });
+  const result = await WebBrowser.openAuthSessionAsync(`${API_ORIGIN}/conectar-android?${query}`, "fluxo://auth");
+  if (result.type !== "success" || !result.url) throw new Error(result.type === "cancel" ? "Conexão cancelada" : "Não foi possível concluir a conexão");
+  const callback = parseMobileAuthCallback(result.url, state);
+  const response = await fetch(`${API_ORIGIN}/api/v1/profile`, {
+    headers: gatewayHeaders(callback.token, callback.gatewayToken),
   });
-  const result = await response.json() as {
-    error?: string;
-    deviceToken?: string;
-    gatewayToken?: string;
-    expiresAt?: string;
-    user?: { id: string; email: string; displayName: string };
-  };
-  if (!response.ok || !result.deviceToken || !result.expiresAt || !result.user) throw new Error(result.error || "Não foi possível entrar");
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error("O servidor não concluiu a conexão segura. Tente novamente.");
+  const profile = await readApiResponse<{ error?: string; user?: { id: string; email: string; displayName: string; avatarData?: string | null } }>(response);
+  if (!response.ok || !profile.user) throw new Error(profile.error || "Não foi possível identificar sua conta");
 
   await Promise.all([
-    SecureStore.setItemAsync(keys.deviceToken, result.deviceToken),
-    result.gatewayToken ? SecureStore.setItemAsync(keys.gatewayToken, result.gatewayToken) : SecureStore.deleteItemAsync(keys.gatewayToken),
-    SecureStore.setItemAsync(keys.expiresAt, result.expiresAt),
-    SecureStore.setItemAsync(keys.userId, result.user.id),
-    SecureStore.setItemAsync(keys.email, result.user.email),
-    SecureStore.setItemAsync(keys.displayName, result.user.displayName),
+    SecureStore.setItemAsync(keys.deviceToken, callback.token),
+    SecureStore.setItemAsync(keys.gatewayToken, callback.gatewayToken),
+    SecureStore.setItemAsync(keys.expiresAt, callback.expiresAt),
+    SecureStore.setItemAsync(keys.userId, profile.user.id),
+    SecureStore.setItemAsync(keys.email, profile.user.email),
+    SecureStore.setItemAsync(keys.displayName, profile.user.displayName),
   ]);
-  return { deviceId, deviceToken: result.deviceToken, gatewayToken: result.gatewayToken, expiresAt: result.expiresAt, user: result.user } satisfies MobileSession;
-}
-
-export function loginWithPassword(email: string, password: string) {
-  return authenticate({ action: "login", email, password });
-}
-
-export function registerWithPassword(displayName: string, email: string, password: string) {
-  return authenticate({ action: "register", displayName, email, password });
+  return { deviceId, deviceToken: callback.token, gatewayToken: callback.gatewayToken, expiresAt: callback.expiresAt, user: profile.user } satisfies MobileSession;
 }
 
 export async function logoutSession() {

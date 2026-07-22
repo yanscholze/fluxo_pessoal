@@ -15,6 +15,7 @@ import type {
   FinanceTransaction,
 } from "../lib/finance-types";
 import { sortFinanceCards } from "../lib/card-management";
+import { importFingerprintCandidates } from "../lib/import-fingerprint";
 
 export type SyncStatus = "connecting" | "synced" | "saving" | "offline" | "error";
 
@@ -32,6 +33,10 @@ function saveList(key: string, value: FinanceTransaction[]) {
 }
 
 export function clearFinanceLocalData(ownerKey: string) {
+  window.localStorage.removeItem(`fluxo-finance-cache-v5:${ownerKey}`);
+  window.localStorage.removeItem(`fluxo-finance-queue-v5:${ownerKey}`);
+  window.localStorage.removeItem(`fluxo-finance-cache-v4:${ownerKey}`);
+  window.localStorage.removeItem(`fluxo-finance-queue-v4:${ownerKey}`);
   window.localStorage.removeItem(`fluxo-finance-cache-v3:${ownerKey}`);
   window.localStorage.removeItem(`fluxo-finance-queue-v3:${ownerKey}`);
 }
@@ -62,8 +67,8 @@ async function getSnapshot() {
 }
 
 export function useFinanceSync(ownerKey: string) {
-  const cacheKey = `fluxo-finance-cache-v3:${ownerKey}`;
-  const queueKey = `fluxo-finance-queue-v3:${ownerKey}`;
+  const cacheKey = `fluxo-finance-cache-v5:${ownerKey}`;
+  const queueKey = `fluxo-finance-queue-v5:${ownerKey}`;
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
@@ -184,17 +189,25 @@ export function useFinanceSync(ownerKey: string) {
   }, [applySnapshot, cacheKey, flushQueue, queueKey]);
 
   const addTransactions = useCallback(async (items: FinanceTransaction[]) => {
+    const existingIds = new Set(transactionsRef.current.map((item) => item.id));
     const existingByFingerprint = new Map(
       transactionsRef.current
         .filter((item) => item.source === "import" && item.fingerprint)
-        .map((item) => [item.fingerprint!, item.id]),
+        .flatMap((item) => importFingerprintCandidates(item).map((fingerprint) => [fingerprint, item.id] as const)),
     );
-    const prepared = items.map((item) => {
-      const existingId = item.source === "import" && item.fingerprint ? existingByFingerprint.get(item.fingerprint) : undefined;
-      const preparedItem = { ...item, id: existingId ?? item.id, pendingSync: true };
-      if (item.source === "import" && item.fingerprint) existingByFingerprint.set(item.fingerprint, preparedItem.id);
-      return preparedItem;
-    });
+    const prepared: FinanceTransaction[] = [];
+    for (const item of items) {
+      // Uma edição sempre mantém o próprio ID. O fingerprint serve apenas para
+      // deduplicar uma nova importação, nunca para transformar uma parcela em outra.
+      const editsExistingId = existingIds.has(item.id);
+      const candidates = importFingerprintCandidates(item);
+      const duplicateId = !editsExistingId ? candidates.map((fingerprint) => existingByFingerprint.get(fingerprint)).find(Boolean) : undefined;
+      if (duplicateId) continue;
+      const preparedItem = { ...item, pendingSync: true };
+      candidates.forEach((fingerprint) => existingByFingerprint.set(fingerprint, preparedItem.id));
+      prepared.push(preparedItem);
+    }
+    if (!prepared.length) return true;
     const next = mergeById(prepared, transactionsRef.current);
     setTransactions(next);
     transactionsRef.current = next;
@@ -214,6 +227,36 @@ export function useFinanceSync(ownerKey: string) {
     saveList(cacheKey, next);
     await refreshSnapshot();
     setStatus("synced");
+  }, [cacheKey, refreshSnapshot]);
+
+  const removeTransactions = useCallback(async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids)];
+    if (!uniqueIds.length) return;
+    setStatus("saving");
+    for (const id of uniqueIds) {
+      const response = await fetch(`/api/finance?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Não foi possível excluir todas as parcelas");
+    }
+    const next = transactionsRef.current.filter((item) => !uniqueIds.includes(item.id));
+    transactionsRef.current = next;
+    setTransactions(next);
+    saveList(cacheKey, next);
+    await refreshSnapshot();
+    setStatus("synced");
+  }, [cacheKey, refreshSnapshot]);
+
+  const removeImportBatch = useCallback(async (batchId: string) => {
+    setStatus("saving");
+    const response = await fetch(`/api/finance?entity=import-batch&id=${encodeURIComponent(batchId)}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => null) as { error?: string; deleted?: number } | null;
+    if (!response.ok) { setStatus("error"); throw new Error(payload?.error || "Não foi possível excluir a fatura importada"); }
+    const next = transactionsRef.current.filter((item) => item.importBatchId !== batchId);
+    transactionsRef.current = next;
+    setTransactions(next);
+    saveList(cacheKey, next);
+    await refreshSnapshot();
+    setStatus("synced");
+    return payload?.deleted ?? 0;
   }, [cacheKey, refreshSnapshot]);
 
   const saveAccount = useCallback(async (account: Omit<FinanceAccount, "id"> & { id?: string }) => {
@@ -354,7 +397,7 @@ export function useFinanceSync(ownerKey: string) {
 
   return {
     transactions, accounts, categories, cards, trips, rewardRedemptions, salaryRule, benefitRule, recurringRules, exchangeRate, status,
-    addTransactions, removeTransaction, saveAccount, removeAccount, saveCategory, saveCard, saveCardOrder, saveIncomeRules,
+    addTransactions, removeTransaction, removeTransactions, removeImportBatch, saveAccount, removeAccount, saveCategory, saveCard, saveCardOrder, saveIncomeRules,
     saveRecurringRule, saveTrip, removeTrip, payInvoice, redeemReward, confirmSalary, retrySync: flushQueue,
   };
 }

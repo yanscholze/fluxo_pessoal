@@ -67,6 +67,21 @@ export function moveDashboardWidget(layout: DashboardWidgetPreference[], id: Das
   return next;
 }
 
+export function moveVisibleDashboardWidget(layout: DashboardWidgetPreference[], id: DashboardWidgetId, offset: number) {
+  const visible = layout.filter((item) => item.visible);
+  const fromVisible = visible.findIndex((item) => item.id === id);
+  if (fromVisible < 0) return layout;
+  const toVisible = Math.max(0, Math.min(visible.length - 1, fromVisible + offset));
+  if (fromVisible === toVisible) return layout;
+  const from = layout.findIndex((item) => item.id === id);
+  const targetId = visible[toVisible]?.id;
+  const to = layout.findIndex((item) => item.id === targetId);
+  if (from < 0 || to < 0) return layout;
+  const next = [...layout];
+  [next[from], next[to]] = [next[to]!, next[from]!];
+  return next;
+}
+
 export function updateDashboardWidget(layout: DashboardWidgetPreference[], id: DashboardWidgetId, changes: Partial<Omit<DashboardWidgetPreference, "id">>) {
   return layout.map((item) => item.id === id ? { ...item, ...changes } : item);
 }

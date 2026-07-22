@@ -1,4 +1,5 @@
 import { API_ORIGIN, getSession } from "./session";
+import { readApiResponse } from "./http";
 import type { FinancialCoachResult, NotificationsResult, ProfileResult, ReceiptScanResult, SyncMutation, SyncResponse } from "./types";
 
 function authenticatedHeaders(session: Awaited<ReturnType<typeof getSession>>) {
@@ -17,11 +18,11 @@ export async function syncApi(deviceId: string, mutations: SyncMutation[]): Prom
     method: "POST",
     headers: authenticatedHeaders(session),
     body: JSON.stringify({
-      device: { id: deviceId, name: "Fluxo Android", platform: "android", appVersion: "0.4.5" },
+      device: { id: deviceId, name: "Fluxo Android", platform: "android", appVersion: "0.3.0" },
       mutations,
     }),
   });
-  const data = await response.json() as SyncResponse & { error?: string; code?: string };
+  const data = await readApiResponse<SyncResponse & { error?: string; code?: string }>(response);
   if (!response.ok) throw new Error(data.code || data.error || "SYNC_FAILED");
   return data;
 }
@@ -34,7 +35,7 @@ export async function financeApi<T>(body: unknown): Promise<T> {
     headers: authenticatedHeaders(session),
     body: JSON.stringify(body),
   });
-  const data = await response.json() as T & { error?: string };
+  const data = await readApiResponse<T & { error?: string }>(response);
   if (!response.ok) throw new Error(data.error || "Não foi possível concluir a operação");
   return data;
 }
@@ -47,7 +48,7 @@ export async function scanReceiptApi(input: { imageBase64: string; mimeType: str
     headers: authenticatedHeaders(session),
     body: JSON.stringify(input),
   });
-  const data = await response.json() as { receipt?: ReceiptScanResult; error?: string };
+  const data = await readApiResponse<{ receipt?: ReceiptScanResult; error?: string }>(response);
   if (!response.ok || !data.receipt) throw new Error(data.error || "Não consegui ler este cupom");
   return data.receipt;
 }
@@ -60,7 +61,7 @@ export async function financialCoachApi(question: string, period?: string) {
     headers: authenticatedHeaders(session),
     body: JSON.stringify({ question, period }),
   });
-  const data = await response.json() as { advice?: FinancialCoachResult; period?: string; error?: string };
+  const data = await readApiResponse<{ advice?: FinancialCoachResult; period?: string; error?: string }>(response);
   if (!response.ok || !data.advice) throw new Error(data.error || "Não consegui gerar esta análise");
   return { advice: data.advice, period: data.period };
 }
@@ -73,7 +74,7 @@ export async function profileApi(payload?: Record<string, unknown>) {
     headers: authenticatedHeaders(session),
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  const data = await response.json() as ProfileResult & { error?: string; requiresLogin?: boolean };
+  const data = await readApiResponse<ProfileResult & { error?: string; requiresLogin?: boolean }>(response);
   if (!response.ok) throw new Error(data.error || "Não consegui atualizar o perfil");
   return data;
 }
@@ -86,7 +87,7 @@ export async function notificationsApi(payload?: Record<string, unknown>) {
     headers: authenticatedHeaders(session),
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  const data = await response.json() as NotificationsResult & { error?: string };
+  const data = await readApiResponse<NotificationsResult & { error?: string }>(response);
   if (!response.ok) throw new Error(data.error || "Não consegui atualizar as notificações");
   return data;
 }

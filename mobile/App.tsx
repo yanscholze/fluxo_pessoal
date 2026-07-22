@@ -1,8 +1,10 @@
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import { SQLiteProvider, useSQLiteContext } from "expo-sqlite";
+import { CreditCard, LayoutDashboard, Plane, Plus, ReceiptText, WalletCards } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, FlatList, Image, Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Animated, AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, Text, TextInput, useColorScheme, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { financeApi, notificationsApi, profileApi } from "./src/api";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ImportSheet } from "./src/components/ImportSheet";
@@ -19,53 +21,68 @@ import { newId, synchronize } from "./src/sync";
 import { makeStyles, palettes, type Palette, type ThemeName } from "./src/theme";
 import { Notifications, registerForPushNotifications, unregisterPushNotifications } from "./src/notifications";
 import type { AppNotification, FinanceCard, FinanceSnapshot, FinanceTransaction, NotificationsResult, ProfileResult } from "./src/types";
+import { databaseNameFor } from "./src/database-name";
+import { ApiResponseError } from "./src/http";
+import { updateAndroidWidgets } from "./src/android-widgets";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const emptySnapshot: FinanceSnapshot = { accounts: [], categories: [], cards: [], trips: [], transactions: [], rewardRedemptions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
-const tabs = ["Início", "Lançamentos", "Cartões", "Contas", "Viagens"] as const;
+const tabs = ["Início", "Lançamentos", "Contas", "Cartões", "Viagens"] as const;
+const tabIcons = { "Início": LayoutDashboard, "Lançamentos": ReceiptText, "Contas": WalletCards, "Cartões": CreditCard, "Viagens": Plane } as const;
 type Tab = typeof tabs[number] | "Ajustes";
 type ImportMode = { kind: "history" } | { kind: "card"; card: FinanceCard; month: string };
 type PayState = { card: FinanceCard; remaining: number } | null;
 
 export default function App() {
+  return <SafeAreaProvider><AppRoot /></SafeAreaProvider>;
+}
+
+function AppRoot() {
   const systemTheme = useColorScheme();
   const theme: ThemeName = systemTheme === "light" ? "light" : "dark";
   const [session, setSession] = useState<MobileSession | null>(null);
   const [ready, setReady] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   useEffect(() => { getSession().then(setSession).finally(() => setReady(true)); }, []);
+  useEffect(() => {
+    const accept = (url: string | null) => { if (url?.startsWith("fluxo://new-transaction")) setPendingAction("new-transaction"); };
+    void Linking.getInitialURL().then(accept);
+    const subscription = Linking.addEventListener("url", ({ url }) => accept(url));
+    return () => subscription.remove();
+  }, []);
   if (!ready) return <SafeAreaView style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: palettes[theme].bg }}><StatusBar style={theme === "dark" ? "light" : "dark"} /><ActivityIndicator color={palettes[theme].accent} /></SafeAreaView>;
   if (!session) return <AuthScreen theme={theme} onAuthenticated={setSession} />;
   return <SQLiteProvider key={session.user.id} databaseName={databaseNameFor(session.user.id)} onInit={migrateDatabase} useSuspense>
-    <FluxoApp session={session} onSignedOut={() => setSession(null)} onUserUpdated={async (user) => { await updateStoredUser(user); setSession((current) => current ? { ...current, user } : current); }} />
+    <FluxoApp session={session} pendingAction={pendingAction} onActionHandled={() => setPendingAction(null)} onSignedOut={() => setSession(null)} onUserUpdated={async (user) => { await updateStoredUser(user); setSession((current) => current ? { ...current, user } : current); }} />
   </SQLiteProvider>;
 }
 
-function databaseNameFor(userId: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < userId.length; index += 1) hash = Math.imul(hash ^ userId.charCodeAt(index), 16777619);
-  return `fluxo-${(hash >>> 0).toString(16)}.db`;
-}
-
-function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSession; onSignedOut: () => void; onUserUpdated: (user: MobileSession["user"]) => Promise<void> }) {
+function FluxoApp({ session, pendingAction, onActionHandled, onSignedOut, onUserUpdated }: { session: MobileSession; pendingAction: string | null; onActionHandled: () => void; onSignedOut: () => void; onUserUpdated: (user: MobileSession["user"]) => Promise<void> }) {
   const db = useSQLiteContext(); const systemTheme = useColorScheme();
   const [theme, setTheme] = useState<ThemeName>(systemTheme === "light" ? "light" : "dark"); const palette = palettes[theme]; const styles = useMemo(() => makeStyles(palette), [palette]);
   const [themeReady, setThemeReady] = useState(false);
-  const [snapshot, setSnapshot] = useState(emptySnapshot); const [connected, setConnected] = useState(true); const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline" | "error">("idle");
+  const [snapshot, setSnapshot] = useState(emptySnapshot); const [connected, setConnected] = useState(false); const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline" | "error">("syncing"); const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const [tab, setTab] = useState<Tab>("Início"); const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [composerOpen, setComposerOpen] = useState(false); const [composerCardId, setComposerCardId] = useState<string>(); const [importMode, setImportMode] = useState<ImportMode | null>(null); const [payState, setPayState] = useState<PayState>(null); const [message, setMessage] = useState("");
   const [notificationState, setNotificationState] = useState<NotificationsResult>({ notifications: [], unreadCount: 0 }); const [notificationsOpen, setNotificationsOpen] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
-  const refresh = useCallback(async () => setSnapshot(await readLocalSnapshot(db)), [db]);
+  const refresh = useCallback(async () => {
+    const next = await readLocalSnapshot(db);
+    setSnapshot(next);
+    void updateAndroidWidgets(next).catch(() => undefined);
+  }, [db]);
   const syncNow = useCallback(async () => {
     const session = await getSession(); setConnected(Boolean(session)); if (!session) return;
     setSyncState("syncing");
-    try { await synchronize(db); await refresh(); setSyncState("idle"); }
+    try { await synchronize(db); await refresh(); setConnected(true); setLastSyncAt(new Date()); setSyncState("idle"); }
     catch (error) {
-      if (error instanceof Error && error.message === "AUTH_REQUIRED") {
+      setConnected(false);
+      if ((error instanceof Error && error.message === "AUTH_REQUIRED") || (error instanceof ApiResponseError && error.code === "SITE_GATEWAY_REQUIRED")) {
         setConnected(false);
         await clearSession();
         onSignedOut();
+        return;
       }
       setSyncState("offline");
     }
@@ -76,7 +93,12 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
 
   useEffect(() => { readThemePreference(db).then((saved) => { if (saved) setTheme(saved); setThemeReady(true); }); }, [db]);
   useEffect(() => { if (themeReady) void saveThemePreference(db, theme); }, [db, theme, themeReady]);
-  useEffect(() => { refresh().then(syncNow); const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void syncNow(); }); return () => subscription.remove(); }, [refresh, syncNow]);
+  useEffect(() => {
+    void refresh().then(syncNow);
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void syncNow(); });
+    const interval = setInterval(() => { if (AppState.currentState === "active") void syncNow(); }, 60_000);
+    return () => { subscription.remove(); clearInterval(interval); };
+  }, [refresh, syncNow]);
   useEffect(() => { fade.setValue(0); Animated.timing(fade, { toValue: 1, duration: 260, useNativeDriver: true }).start(); }, [fade, tab]);
   useEffect(() => {
     void registerForPushNotifications().catch(() => undefined);
@@ -95,6 +117,10 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
     return () => { received.remove(); opened.remove(); };
   }, [refreshNotifications]);
   useEffect(() => { void Notifications.setBadgeCountAsync(notificationState.unreadCount).catch(() => undefined); }, [notificationState.unreadCount]);
+  useEffect(() => {
+    if (pendingAction !== "new-transaction") return;
+    setTab("Início"); setComposerCardId(undefined); setComposerOpen(true); onActionHandled();
+  }, [onActionHandled, pendingAction]);
 
   async function signOut() {
     setMessage("");
@@ -140,15 +166,15 @@ function FluxoApp({ session, onSignedOut, onUserUpdated }: { session: MobileSess
     <StatusBar style={theme === "dark" ? "light" : "dark"} />
     <View style={styles.app}>
       <Animated.View style={[styles.content, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
-        {tab === "Início" && <DashboardScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} userName={session.user.displayName} avatarData={session.user.avatarData} connected={connected} syncState={syncState} unreadCount={notificationState.unreadCount} theme={theme} palette={palette} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onSync={syncNow} onNotifications={() => setNotificationsOpen(true)} onConfirmIncome={() => void confirmIncome()} onOpen={openWidget} onProfile={() => setTab("Ajustes")} />}
+        {tab === "Início" && <DashboardScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} userName={session.user.displayName} avatarData={session.user.avatarData} connected={connected} syncState={syncState} lastSyncAt={lastSyncAt} unreadCount={notificationState.unreadCount} theme={theme} palette={palette} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onSync={syncNow} onNotifications={() => setNotificationsOpen(true)} onConfirmIncome={() => void confirmIncome()} onOpen={openWidget} onProfile={() => setTab("Ajustes")} />}
         {tab === "Lançamentos" && <TransactionsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
         {tab === "Cartões" && <CardsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} palette={palette} onImport={(card) => setImportMode({ kind: "card", card, month: selectedMonth })} onPay={(card, remaining) => setPayState({ card, remaining })} onPurchase={openComposer} onRedeem={redeemReward} />}
         {tab === "Contas" && <AccountsScreen snapshot={snapshot} month={selectedMonth} onMonth={setSelectedMonth} styles={styles} palette={palette} />}
         {tab === "Viagens" && <TravelScreen snapshot={snapshot} styles={styles} />}
         {tab === "Ajustes" && <SettingsScreen user={session.user} connected={connected} theme={theme} message={message} onLogout={() => void signOut()} onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onImport={() => setImportMode({ kind: "history" })} onUserUpdated={onUserUpdated} styles={styles} />}
       </Animated.View>
-      {tab !== "Ajustes" && <Pressable accessibilityRole="button" accessibilityLabel="Novo lançamento" style={({ pressed }) => [styles.fab, pressed && styles.pressed]} onPress={() => openComposer()}><Text style={styles.fabText}>＋</Text></Pressable>}
-      <View style={styles.bottomNav}>{tabs.map((item) => <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}><View style={[styles.navDot, tab === item && styles.navDotActive]} /><Text style={[styles.navLabel, tab === item && styles.navLabelActive]}>{item}</Text></Pressable>)}</View>
+      {tab !== "Ajustes" && <Pressable accessibilityRole="button" accessibilityLabel="Novo lançamento" style={({ pressed }) => [styles.fab, pressed && styles.pressed]} onPress={() => openComposer()}><Plus color="#fff" size={27} strokeWidth={2.4} /></Pressable>}
+      <View style={styles.bottomNav}>{tabs.map((item) => { const Icon = tabIcons[item]; const active = tab === item; return <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} accessibilityLabel={item} key={item} style={[styles.navItem, active && styles.navItemActive]} onPress={() => setTab(item)}><View style={[styles.navIndicator, active && styles.navIndicatorActive]} /><Icon color={active ? palette.accent : palette.muted} size={20} strokeWidth={active ? 2.4 : 1.9} /><Text style={[styles.navLabel, active && styles.navLabelActive]}>{item}</Text></Pressable>; })}</View>
     </View>
     <TransactionComposer open={composerOpen} snapshot={snapshot} initialCardId={composerCardId} palette={palette} onClose={() => setComposerOpen(false)} onSaved={async () => { setComposerOpen(false); await refresh(); void syncNow(); }} />
     {importMode && <ImportSheet key={`${importMode.kind}-${importMode.kind === "card" ? `${importMode.card.id}-${importMode.month}` : "history"}`} open mode={importMode} snapshot={snapshot} palette={palette} onClose={() => setImportMode(null)} onImport={importItems} />}

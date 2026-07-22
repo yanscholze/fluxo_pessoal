@@ -18,6 +18,15 @@ if [[ ! -x "${vinext}" ]]; then
   exit 69
 fi
 
+tsc="${SITES_PROJECT_ROOT}/node_modules/.bin/tsc"
+if [[ ! -x "${tsc}" ]]; then
+  echo "TypeScript is unavailable. Run npm run install:ci and wait for it to finish before building." >&2
+  exit 69
+fi
+
+echo "Running TypeScript validation..."
+"${tsc}" --project "${SITES_PROJECT_ROOT}/tsconfig.ui.json"
+
 echo "Running bounded vinext build..."
 timeout \
   --signal=TERM \

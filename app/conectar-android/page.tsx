@@ -24,8 +24,8 @@ async function ProtectedConnect({ searchParams }: { searchParams: SearchParams }
   if (params.appVersion) returnParams.set("app_version", params.appVersion);
   if (params.state) returnParams.set("state", params.state);
   const suffix = returnParams.size ? `?${returnParams}` : "";
-  const user = await requireChatGPTUser(`/conectar-android${suffix}`);
-  return <MobileConnectClient {...params} ownerName={user.displayName} />;
+  await requireChatGPTUser(`/conectar-android${suffix}`);
+  return <MobileConnectClient {...params} />;
 }
 
 export default function ConnectAndroidPage({ searchParams }: { searchParams: SearchParams }) {

@@ -30,3 +30,12 @@ test("limite usado considera fatura atual e parcelas futuras, descontando pagame
   ];
   assert.equal(cardLimitUsage(rows, uv, "2026-07"), 900);
 });
+
+test("pagamento de fatura nunca vira compra no limite, mesmo em registro legado", () => {
+  const uv = card("uv", "Nubank Ultravioleta", 0, true);
+  const purchase: FinanceTransaction = { id: "purchase", description: "Compra", category: "Outros", account: uv.linkedAccount, cardId: uv.id, date: "2026-07-20", amount: 500, type: "expense", paymentMethod: "credit", invoiceMonth: "2026-07", status: "confirmed" };
+  const legacyPayment: FinanceTransaction = { ...purchase, id: "invoice-payment:legacy", description: "Pagamento da fatura", source: "invoice-payment", paymentMethod: "transfer", amount: 200 };
+
+  assert.equal(cardLimitUsage([purchase], uv, "2026-07"), 500);
+  assert.equal(cardLimitUsage([purchase, legacyPayment], uv, "2026-07"), 300);
+});

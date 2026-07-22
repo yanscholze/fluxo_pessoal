@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountBalanceAtMonth, cardLimitUsage, defaultInvoiceMonthForCard, financialMonthOf, flowTotals, invoiceDueDate, transactionsForInvoiceMonth, transactionsForMonth } from "../src/finance-period.ts";
+import { accountBalanceAtMonth, budgetTotals, cardLimitUsage, committedExpensesTotal, currentInvoiceTotals, defaultInvoiceMonthForCard, financialMonthOf, flowTotals, invoiceDueDate, isCardLoanTransaction, transactionsForInvoiceMonth, transactionsForMonth } from "../src/finance-period.ts";
 
 const transactions = [
   { id: "credit", description: "Compra", category: "Casa", account: "Cartão", date: "2026-07-28", amount: 200, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-08" },
@@ -44,4 +44,28 @@ test("limite do cartão inclui parcelas futuras e desconta a fatura paga", () =>
   const payment = { ...purchase, id: "pay", description: "Pagamento", type: "transfer" as const, paymentMethod: "transfer" as const, source: "invoice-payment" as const, amount: 200 };
   const future = { ...purchase, id: "future", invoiceMonth: "2026-08", amount: 400 };
   assert.equal(cardLimitUsage([purchase, payment, future], card, "2026-07"), 700);
+});
+
+test("empréstimo de cartão é reconhecido pela categoria real do lançamento", () => {
+  const base = { id: "loan", description: "Compra de terceiro", category: "  EMPRÉSTIMO   DE CARTÃO ", account: "Cartão", date: "2026-08-10", amount: 700, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-08", status: "confirmed" as const };
+  assert.equal(isCardLoanTransaction(base), true);
+  assert.equal(committedExpensesTotal([base, { ...base, id: "mine", category: "Casa", amount: 300, status: "planned" }], "2026-08"), 300);
+});
+
+test("livre usa salário previsto até o recebimento ser lançado e ignora empréstimo de cartão", () => {
+  const salaryRule = { id: "salary", description: "Salário", type: "income" as const, category: "Salário", account: "Nubank", amount: 2200, projectedAmount: 2450, dayOfMonth: 5, active: true };
+  const loan = { id: "loan", description: "Compra de terceiro", category: "Empréstimo de Cartão", account: "Cartão", date: "2026-08-10", amount: 700, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-08", status: "confirmed" as const };
+  const mine = { ...loan, id: "mine", category: "Casa", amount: 300 };
+  const snapshot = { accounts: [], categories: [], cards: [], trips: [], transactions: [loan, mine], rewardRedemptions: [], salaryRule, benefitRule: null, recurringRules: [], serverTime: "" };
+  assert.deepEqual(budgetTotals(snapshot, "2026-08"), { income: 2450, expenses: 300, free: 2150 });
+  const received = { ...mine, id: "received", description: "Salário", category: "Salário", amount: 2400, type: "income" as const, paymentMethod: "transfer" as const };
+  assert.deepEqual(budgetTotals({ ...snapshot, transactions: [...snapshot.transactions, received] }, "2026-08"), { income: 2400, expenses: 300, free: 2100 });
+});
+
+test("painel soma a fatura corrente de cada cartão, não o mês selecionado", () => {
+  const card = { id: "uv", name: "UV", linkedAccount: "Cartão", kind: "credit" as const, brand: "Mastercard", tier: "Black", last4: "0000", limit: 10000, closingDay: 15, dueDay: 22, pointsPerDollar: 0, cashbackPercent: 0, rewardMode: "none", pointsGoal: 0, color: "uv" };
+  const july = { id: "july", description: "Antiga", category: "Casa", account: "Cartão", cardId: "uv", date: "2026-07-10", amount: 100, type: "expense" as const, paymentMethod: "credit" as const, invoiceMonth: "2026-07", status: "confirmed" as const };
+  const august = { ...july, id: "august", description: "Atual", date: "2026-07-20", amount: 450, invoiceMonth: "2026-08" };
+  const snapshot = { accounts: [], categories: [], cards: [card], trips: [], transactions: [july, august], rewardRedemptions: [], salaryRule: null, benefitRule: null, recurringRules: [], serverTime: "" };
+  assert.deepEqual(currentInvoiceTotals(snapshot, "2026-07-21"), { items: [august], gross: 450, paid: 0, total: 450 });
 });

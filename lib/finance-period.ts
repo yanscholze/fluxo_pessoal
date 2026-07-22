@@ -1,5 +1,33 @@
 import { effectiveRecurringDate } from "./brazil-calendar.ts";
-import type { FinanceAccount, FinanceCard, FinanceTransaction } from "./finance-types";
+import type { FinanceAccount, FinanceCard, FinanceSalaryRule, FinanceTransaction } from "./finance-types";
+
+const FREE_TO_SPEND_EXCLUDED_CATEGORIES = new Set([
+  "emprestimo de cartao",
+  "emprestimo do cartao",
+]);
+
+function normalizedLabel(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+export function isExcludedFromFreeToSpend(item: Pick<FinanceTransaction, "category">) {
+  return FREE_TO_SPEND_EXCLUDED_CATEGORIES.has(normalizedLabel(item.category));
+}
+
+export function isSalaryReceived(rule: FinanceSalaryRule | null, items: FinanceTransaction[], month: string) {
+  if (!rule) return true;
+  if (rule.lastConfirmedMonth === month) return true;
+  const fingerprint = `recurring:${rule.id}:${month}`;
+  return items.some((item) => !item.deletedAt && item.status !== "planned" && item.type === "income" && (
+    item.fingerprint === fingerprint
+    || (normalizedLabel(item.category) === normalizedLabel(rule.category) && normalizedLabel(item.description) === normalizedLabel(rule.description))
+  ));
+}
+
+export function salaryForecastAmount(rule: FinanceSalaryRule | null, items: FinanceTransaction[], month: string) {
+  if (!rule?.active || (rule.effectiveDate && rule.effectiveDate.slice(0, 7) > month) || isSalaryReceived(rule, items, month)) return 0;
+  return rule.projectedAmount ?? rule.amount;
+}
 
 export function monthOffset(month: string, offset: number) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -23,12 +51,24 @@ export function transactionsForCommitmentMonth(items: FinanceTransaction[], mont
   return items.filter((item) => !item.deletedAt && financialMonthOf(item) === month);
 }
 
+export function committedExpensesTotal(items: FinanceTransaction[], month: string) {
+  return transactionsForCommitmentMonth(items, month)
+    .filter((item) => item.type === "expense" && !isExcludedFromFreeToSpend(item))
+    .reduce((sum, item) => sum + item.amount, 0);
+}
+
 export function transactionsForInvoiceMonth(items: FinanceTransaction[], month: string) {
   return items.filter((item) => !item.deletedAt && (item.invoiceMonth ?? item.date.slice(0, 7)) === month);
 }
 
 export function belongsToCard(item: FinanceTransaction, card: FinanceCard) {
   return item.cardId === card.id || (!item.cardId && item.account === card.linkedAccount);
+}
+
+export function isInvoicePayment(item: FinanceTransaction) {
+  return item.source === "invoice-payment"
+    || item.id.startsWith("invoice-payment:")
+    || Boolean(item.fingerprint?.startsWith("invoice-payment:"));
 }
 
 export function activeInvoiceMonth(card: FinanceCard, today: string) {
@@ -52,8 +92,8 @@ export function defaultInvoiceMonthForCard(card: FinanceCard, items: FinanceTran
   const months = [...new Set(cardItems.map((item) => item.invoiceMonth ?? item.date.slice(0, 7)))].filter((month) => month < activeMonth).sort();
   const unpaid = months.find((month) => {
     const rows = cardItems.filter((item) => (item.invoiceMonth ?? item.date.slice(0, 7)) === month);
-    const purchases = rows.filter((item) => item.type === "expense" && (item.paymentMethod === "credit" || !item.cardId)).reduce((sum, item) => sum + item.amount, 0);
-    const paid = rows.filter((item) => item.type === "transfer" && item.source === "invoice-payment").reduce((sum, item) => sum + item.amount, 0);
+    const purchases = rows.filter((item) => !isInvoicePayment(item) && item.type === "expense" && (item.paymentMethod === "credit" || !item.cardId)).reduce((sum, item) => sum + item.amount, 0);
+    const paid = rows.filter(isInvoicePayment).reduce((sum, item) => sum + Math.abs(item.amount), 0);
     return purchases - paid > .005;
   });
   return unpaid ?? activeMonth;
@@ -66,10 +106,26 @@ export function cardLimitUsage(items: FinanceTransaction[], card: FinanceCard, f
     const month = item.invoiceMonth ?? item.date.slice(0, 7);
     if (month < fromInvoiceMonth) return;
     const current = invoices.get(month) ?? 0;
-    if (item.type === "expense" && (item.paymentMethod === "credit" || item.cardId === card.id)) invoices.set(month, current + item.amount);
-    else if (item.type === "transfer" && item.source === "invoice-payment" && item.cardId === card.id) invoices.set(month, current - item.amount);
+    if (isInvoicePayment(item)) invoices.set(month, current - Math.abs(item.amount));
+    else if (item.type === "expense" && (item.paymentMethod === "credit" || item.cardId === card.id)) invoices.set(month, current + item.amount);
   });
   return [...invoices.values()].reduce((sum, amount) => sum + Math.max(0, amount), 0);
+}
+
+export function currentInvoiceTotals(items: FinanceTransaction[], cards: FinanceCard[], today: string) {
+  const purchases: FinanceTransaction[] = [];
+  let gross = 0;
+  let paid = 0;
+  for (const card of cards.filter((item) => item.kind === "credit")) {
+    const invoiceMonth = activeInvoiceMonth(card, today);
+    const rows = items.filter((item) => !item.deletedAt && item.status !== "planned" && belongsToCard(item, card) && (item.invoiceMonth ?? item.date.slice(0, 7)) === invoiceMonth);
+    const cardPurchases = rows.filter((item) => !isInvoicePayment(item) && item.type === "expense" && (item.paymentMethod === "credit" || item.cardId === card.id));
+    const cardPayments = rows.filter((item) => isInvoicePayment(item) && item.cardId === card.id);
+    purchases.push(...cardPurchases);
+    gross += cardPurchases.reduce((sum, item) => sum + item.amount, 0);
+    paid += cardPayments.reduce((sum, item) => sum + Math.abs(item.amount), 0);
+  }
+  return { purchases, gross, paid, total: Math.max(0, gross - paid) };
 }
 
 function balanceEffect(item: FinanceTransaction) {
@@ -95,6 +151,7 @@ export function contextualFinancialTip(transactions: FinanceTransaction[], month
   const totals = (items: FinanceTransaction[]) => ({
     income: items.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0),
     expenses: items.filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0),
+    freeToSpendExpenses: items.filter((item) => item.type === "expense" && !isExcludedFromFreeToSpend(item)).reduce((sum, item) => sum + item.amount, 0),
   });
   const now = today.toISOString().slice(0, 7); const currentTotals = totals(current); const previousTotals = totals(previous);
   if (!current.length) return `Ainda não há lançamentos em ${month.slice(5, 7)}/${month.slice(0, 4)}. Importe o histórico ou registre o primeiro movimento.`;
@@ -102,9 +159,9 @@ export function contextualFinancialTip(transactions: FinanceTransaction[], month
     const closing = cards.filter((card) => card.kind === "credit").map((card) => ({ card, distance: card.closingDay - today.getDate() })).filter((item) => item.distance >= 0 && item.distance <= 2).sort((a, b) => a.distance - b.distance)[0];
     if (closing) return closing.distance === 0 ? `A fatura do ${closing.card.name} fecha hoje. Revise as compras.` : `A fatura do ${closing.card.name} fecha em ${closing.distance} dia${closing.distance === 1 ? "" : "s"}.`;
   }
-  const currentFree = currentTotals.income - currentTotals.expenses; const previousFree = previousTotals.income - previousTotals.expenses;
+  const currentFree = currentTotals.income - currentTotals.freeToSpendExpenses; const previousFree = previousTotals.income - previousTotals.freeToSpendExpenses;
   if (previous.length && currentFree > previousFree) return `Você está economizando ${brl.format(currentFree - previousFree)} a mais que no mês anterior.`;
-  const nextCommitted = transactionsForCommitmentMonth(transactions, monthOffset(month, 1)).filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
+  const nextCommitted = committedExpensesTotal(transactions, monthOffset(month, 1));
   if (nextCommitted > Math.max(currentFree, 0)) return `O próximo mês já tem ${brl.format(nextCommitted)} comprometidos. Evite antecipar novas compras.`;
   const categories = new Map<string, number>(); const oldCategories = new Map<string, number>();
   current.filter((item) => item.type === "expense").forEach((item) => categories.set(item.category, (categories.get(item.category) ?? 0) + item.amount));

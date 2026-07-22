@@ -6,6 +6,7 @@ import { getDb } from "../../../../../db";
 import { consumeAiQuota } from "../../../../../lib/ai-quota";
 import { apiIdentityFrom, apiUnauthorized } from "../../../../../lib/api-v1-auth";
 import { askFinancialCoach } from "../../../../../lib/financial-coach";
+import { isExcludedFromFreeToSpend } from "../../../../../lib/finance-period";
 
 const headers = { "cache-control": "no-store", "x-fluxo-api-version": "1" };
 
@@ -44,24 +45,30 @@ export async function POST(request: Request) {
         gte(transactions.occurredAt, start), lte(transactions.occurredAt, end),
       )).limit(600),
     ]);
-    const periodRows = transactionRows.filter((item) => item.occurredAt.startsWith(period));
+    const brlAccounts = new Set(accountRows.filter((item) => item.currency === "BRL").map((item) => item.name));
+    const knownAccounts = new Set(accountRows.map((item) => item.name));
+    const currencyFor = (account: string) => accountRows.find((item) => item.name === account)?.currency ?? "BRL";
+    const periodRows = transactionRows.filter((item) => item.occurredAt.startsWith(period) && (!knownAccounts.has(item.account) || brlAccounts.has(item.account)));
     const totals = periodRows.reduce((acc, item) => {
       if (item.status === "confirmed" || item.status === "planned") {
         if (item.type === "income") acc.income += item.amountCents;
-        else if (item.type === "expense") acc.expense += item.amountCents;
+        else if (item.type === "expense") {
+          acc.expense += item.amountCents;
+          if (!isExcludedFromFreeToSpend(item)) acc.freeToSpendExpense += item.amountCents;
+        }
       }
       return acc;
-    }, { income: 0, expense: 0 });
+    }, { income: 0, expense: 0, freeToSpendExpense: 0 });
     const categoryTotals = Object.entries(periodRows.filter((item) => item.type === "expense").reduce<Record<string, number>>((acc, item) => {
       acc[item.category] = (acc[item.category] ?? 0) + item.amountCents; return acc;
     }, {})).sort((a, b) => b[1] - a[1]).map(([category, cents]) => ({ category, amount: cents / 100 }));
     const context = {
       period,
-      totals: { income: totals.income / 100, expense: totals.expense / 100, freeCashFlow: (totals.income - totals.expense) / 100 },
-      accounts: accountRows.map((item) => ({ name: item.name, kind: item.kind, balance: item.balanceCents / 100, goal: item.goalCents / 100 })),
+      totals: { income: totals.income / 100, expense: totals.expense / 100, freeCashFlow: (totals.income - totals.freeToSpendExpense) / 100 },
+      accounts: accountRows.map((item) => ({ name: item.name, kind: item.kind, currency: item.currency, balance: item.balanceCents / 100, goal: item.goalCents / 100 })),
       cards: cardRows.map((item) => ({ name: item.name, kind: item.kind, limit: item.limitCents / 100, closingDay: item.closingDay, dueDay: item.dueDay })),
       expensesByCategory: categoryTotals,
-      transactions: transactionRows.map((item) => ({ date: item.occurredAt, description: item.description, category: item.category, amount: item.amountCents / 100, type: item.type, status: item.status, paymentMethod: item.paymentMethod, invoiceMonth: item.invoiceMonth })),
+      transactions: transactionRows.map((item) => ({ date: item.occurredAt, description: item.description, category: item.category, account: item.account, currency: currencyFor(item.account), amount: item.amountCents / 100, type: item.type, status: item.status, paymentMethod: item.paymentMethod, invoiceMonth: item.invoiceMonth })),
     };
     await consumeAiQuota(identity.ownerId, "financial-advice", 60);
     const advice = await askFinancialCoach({ ...ai, question, context });

@@ -97,6 +97,7 @@ export function ensureFinanceSchema() {
         owner_id TEXT NOT NULL,
         name TEXT NOT NULL,
         institution TEXT NOT NULL DEFAULT 'manual',
+        currency_code TEXT NOT NULL DEFAULT 'BRL',
         kind TEXT NOT NULL DEFAULT 'checking',
         balance_cents INTEGER NOT NULL DEFAULT 0,
         goal_cents INTEGER NOT NULL DEFAULT 0,
@@ -144,6 +145,7 @@ export function ensureFinanceSchema() {
         amount_cents INTEGER NOT NULL,
         type TEXT NOT NULL,
         installments TEXT,
+        installment_group_id TEXT,
         status TEXT NOT NULL DEFAULT 'confirmed',
         source TEXT NOT NULL DEFAULT 'manual',
         payment_method TEXT NOT NULL DEFAULT 'other',
@@ -163,6 +165,7 @@ export function ensureFinanceSchema() {
       )`,
       `CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions (owner_id, occurred_at)`,
       `CREATE INDEX IF NOT EXISTS transactions_owner_updated_idx ON transactions (owner_id, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS transactions_owner_installment_group_idx ON transactions (owner_id, installment_group_id)`,
       `CREATE UNIQUE INDEX IF NOT EXISTS transactions_owner_fingerprint_idx ON transactions (owner_id, fingerprint)`,
       `CREATE TABLE IF NOT EXISTS sync_mutations (
         id TEXT PRIMARY KEY NOT NULL,
@@ -266,6 +269,13 @@ export function ensureFinanceSchema() {
     if (!transactionColumns.has("trip_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN trip_id TEXT").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS transactions_owner_trip_idx ON transactions (owner_id, trip_id)").run();
     if (!transactionColumns.has("invoice_month")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN invoice_month TEXT").run();
+    if (!transactionColumns.has("installment_group_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN installment_group_id TEXT").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS transactions_owner_installment_group_idx ON transactions (owner_id, installment_group_id)").run();
+    if (!transactionColumns.has("import_batch_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN import_batch_id TEXT").run();
+    if (!transactionColumns.has("import_batch_name")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN import_batch_name TEXT").run();
+    if (!transactionColumns.has("import_batch_month")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN import_batch_month TEXT").run();
+    if (!transactionColumns.has("imported_at")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN imported_at TEXT").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS transactions_owner_import_batch_idx ON transactions (owner_id, import_batch_id)").run();
     if (!transactionColumns.has("reward_points_milli")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN reward_points_milli INTEGER").run();
     if (!transactionColumns.has("reward_cashback_cents")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN reward_cashback_cents INTEGER").run();
     if (!transactionColumns.has("reward_usd_rate_micros")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN reward_usd_rate_micros INTEGER").run();
@@ -275,6 +285,7 @@ export function ensureFinanceSchema() {
     if (!transactionColumns.has("last_mutation_id")) await env.DB.prepare("ALTER TABLE transactions ADD COLUMN last_mutation_id TEXT").run();
     const accountInfo = await env.DB.prepare("PRAGMA table_info(accounts)").all<{ name: string }>();
     const accountColumns = new Set(accountInfo.results.map((column) => column.name));
+    if (!accountColumns.has("currency_code")) await env.DB.prepare("ALTER TABLE accounts ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'BRL'").run();
     if (!accountColumns.has("goal_cents")) await env.DB.prepare("ALTER TABLE accounts ADD COLUMN goal_cents INTEGER NOT NULL DEFAULT 0").run();
     if (!accountColumns.has("monthly_yield_basis_points")) await env.DB.prepare("ALTER TABLE accounts ADD COLUMN monthly_yield_basis_points INTEGER NOT NULL DEFAULT 0").run();
     if (!accountColumns.has("fixed")) await env.DB.prepare("ALTER TABLE accounts ADD COLUMN fixed INTEGER NOT NULL DEFAULT 0").run();

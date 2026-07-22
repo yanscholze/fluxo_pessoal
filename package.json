@@ -20,6 +20,7 @@
     "test:ocr": "node --experimental-strip-types --test tests/receipt-ocr.test.ts",
     "test:travel": "node --experimental-strip-types --test tests/travel-mode.test.ts",
     "test:cards": "node --experimental-strip-types --test tests/card-management.test.ts",
+    "test:installments": "node --experimental-strip-types --test tests/installments.test.ts",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"

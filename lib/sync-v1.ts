@@ -1,7 +1,7 @@
 import type { FinanceTransaction } from "./finance-types";
 
 export const SYNC_API_VERSION = "1" as const;
-export const SYNC_SCHEMA_VERSION = 2;
+export const SYNC_SCHEMA_VERSION = 3;
 export const MAX_SYNC_MUTATIONS = 50;
 
 export type SyncEntityV1 = "transaction";
