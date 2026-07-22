@@ -17,7 +17,7 @@ export async function syncApi(deviceId: string, mutations: SyncMutation[]): Prom
     method: "POST",
     headers: authenticatedHeaders(session),
     body: JSON.stringify({
-      device: { id: deviceId, name: "Fluxo Android", platform: "android", appVersion: "0.3.0" },
+      device: { id: deviceId, name: "Fluxo Android", platform: "android", appVersion: "0.4.5" },
       mutations,
     }),
   });
