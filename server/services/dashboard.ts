@@ -156,7 +156,9 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     loadLedger(userId),
     freeToSpendExclusions(userId),
     transactionIndex(userId),
-    listTransactions(userId, { limit: 10 }),
+    // "Últimos" é o que já aconteceu. Sem o corte por data, as parcelas
+    // futuras — que têm data lá na frente — ocupavam a lista inteira.
+    listTransactions(userId, { limit: 10, to: today, states: ["confirmed"] }),
   ]);
 
   const positionInput = {
@@ -261,7 +263,8 @@ function summarizeCard(card: CardRecord, entries: readonly LedgerEntry[], today:
     color: card.color,
     isPrimary: card.isPrimary,
     limitCents: card.limitCents,
-    availableLimitCents: isCredit ? availableLimit(entries, card.id, card.limitCents as Cents, active) : 0,
+    // Sem piso de competência: fatura atrasada continua ocupando limite.
+    availableLimitCents: isCredit ? availableLimit(entries, card.id, card.limitCents as Cents) : 0,
     daysUntilClosing: isCredit ? daysUntilClosing(card, today) : 0,
     currentInvoice: isCredit ? toInvoiceSummary(card, entries, active) : null,
     overdueInvoices: isCredit

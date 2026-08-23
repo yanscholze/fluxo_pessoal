@@ -41,21 +41,31 @@ function fromSql(text: string): (database: Database) => Promise<void> {
 }
 
 /**
- * Tabelas da primeira implementação que colidem em nome com as novas.
+ * Nomes de tabela que uma migration cria.
  *
- * Elas são renomeadas antes de o schema novo ser criado, e não apagadas: são a
- * origem da migração de dados e a última linha de defesa se algo der errado.
- * As demais tabelas antigas ficam onde estão até a limpeza final.
+ * Extraído do próprio SQL em vez de mantido numa lista à mão: uma lista
+ * manual esquece um nome — foi assim que `user_profiles` passou batido e a
+ * migration quebrou com "table already exists" na primeira execução.
  */
-const COLLIDING_LEGACY_TABLES = ["users", "accounts", "categories", "cards", "trips", "transactions"] as const;
+function tablesCreatedBy(text: string): string[] {
+  const matches = text.matchAll(/CREATE TABLE(?:\s+IF NOT EXISTS)?\s+[`"]?([A-Za-z_][\w]*)[`"]?/gi);
+  return [...matches].map((match) => match[1]);
+}
 
+/**
+ * Afasta as tabelas da primeira implementação que colidem em nome com as novas.
+ *
+ * Elas são renomeadas, não apagadas: são a origem da migração de dados e a
+ * última linha de defesa se algo der errado. As tabelas antigas sem colisão
+ * ficam onde estão até a limpeza final.
+ */
 async function renameLegacyTables(database: Database): Promise<void> {
   const rows = await database.all<{ name: string }>(
     sql`SELECT name FROM sqlite_master WHERE type = 'table'`,
   );
   const present = new Set(rows.map((row) => row.name));
 
-  for (const table of COLLIDING_LEGACY_TABLES) {
+  for (const table of tablesCreatedBy(inicial)) {
     const legacy = `legacy_${table}`;
     // Só renomeia o que existe e ainda não foi renomeado. Num banco novo
     // (desenvolvimento, teste) nada acontece.
@@ -69,8 +79,17 @@ async function renameLegacyTables(database: Database): Promise<void> {
  * fim, jamais editar uma existente — quem já rodou a antiga não roda de novo.
  */
 const MIGRATIONS: readonly Migration[] = [
-  { id: 0, name: "renomeia-tabelas-legadas", run: renameLegacyTables },
-  { id: 1, name: "schema-inicial", run: fromSql(inicial) },
+  {
+    id: 0,
+    name: "schema-inicial",
+    // Afastar o legado e criar o schema são o mesmo passo. Separá-los deixaria
+    // o banco num estado onde o primeiro já rodou e o segundo não, e o retry
+    // pularia justamente a parte que precisava rodar de novo.
+    run: async (database) => {
+      await renameLegacyTables(database);
+      await fromSql(inicial)(database);
+    },
+  },
 ];
 
 let applied: Promise<void> | null = null;

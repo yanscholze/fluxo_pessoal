@@ -352,4 +352,93 @@ describe("fluxo futuro", () => {
     assert.equal(pontos[0].projectedBalance, 400000);
     assert.equal(pontos[1].projectedBalance, 900000);
   });
+
+  it("projeta o pagamento da fatura como saída de caixa", () => {
+    const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(1000000) })];
+    // Compra na fatura de setembro, que vence em 21/09 (20/09 é domingo).
+    const entries = razao(
+      lancamento({
+        id: "compra",
+        kind: "expense",
+        amount: cents(300000),
+        origin: cardParty(CARTAO),
+        occurredOn: localDate("2026-08-20"),
+        competence: competence("2026-09"),
+      }),
+    );
+
+    const pontos = projectCashflow({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      today: localDate("2026-08-31"),
+      competences: [competence("2026-09"), competence("2026-10")],
+    });
+
+    assert.equal(pontos[0].outflow, 300000, "a fatura vira saída no mês em que vence");
+    assert.equal(pontos[0].projectedBalance, 700000);
+    assert.equal(pontos[1].outflow, 0, "não cobra a mesma fatura duas vezes");
+  });
+
+  it("traz a fatura atrasada para o primeiro mês da projeção", () => {
+    const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(1000000) })];
+    // Fatura de julho, vencida em 20/07 e nunca paga.
+    const entries = razao(
+      lancamento({
+        id: "atrasada",
+        kind: "expense",
+        amount: cents(150000),
+        origin: cardParty(CARTAO),
+        occurredOn: localDate("2026-06-20"),
+        competence: competence("2026-07"),
+      }),
+    );
+
+    const pontos = projectCashflow({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      today: localDate("2026-08-31"),
+      competences: [competence("2026-09"), competence("2026-10")],
+    });
+
+    // Sem isso a dívida mais urgente simplesmente sumiria do gráfico.
+    assert.equal(pontos[0].outflow, 150000);
+    assert.equal(pontos[0].projectedBalance, 850000);
+  });
+
+  it("não projeta fatura já quitada", () => {
+    const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(1000000) })];
+    const entries = razao(
+      lancamento({
+        id: "compra",
+        kind: "expense",
+        amount: cents(300000),
+        origin: cardParty(CARTAO),
+        occurredOn: localDate("2026-08-20"),
+        competence: competence("2026-09"),
+      }),
+      lancamento({
+        id: "pagamento",
+        kind: "invoice_payment",
+        amount: cents(300000),
+        origin: accountParty(CONTA),
+        destination: cardParty(CARTAO),
+        occurredOn: localDate("2026-09-21"),
+        competence: competence("2026-09"),
+      }),
+    );
+
+    const pontos = projectCashflow({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      today: localDate("2026-08-31"),
+      competences: [competence("2026-09")],
+    });
+
+    // O pagamento já é uma movimentação de conta e entra pelo caminho normal;
+    // projetá-lo de novo cobraria a fatura em dobro.
+    assert.equal(pontos[0].outflow, 300000);
+  });
 });

@@ -7,7 +7,7 @@
  */
 
 import { type Cents, ZERO, clampToZero, sum } from "../../kernel/money.ts";
-import type { Competence } from "../../time/competence.ts";
+import { type Competence, competenceOf } from "../../time/competence.ts";
 import { type LocalDate, firstDayOfMonth, lastDayOfMonth } from "../../time/local-date.ts";
 import { type Account, liquidAccounts } from "../account/types.ts";
 import {
@@ -15,6 +15,7 @@ import {
   type CycleWindow,
   activeCompetence,
   activeCycleWindow,
+  dueDateFor,
 } from "../card/invoice-cycle.ts";
 import { accountBalance, cardDebt, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
 import type { LedgerEntry } from "../ledger/types.ts";
@@ -225,6 +226,8 @@ export function projectCashflow(
     ),
   );
 
+  const invoiceOutflows = foldBeforeWindow(projectedInvoicePayments(input), input.competences);
+
   return input.competences.map((competence) => {
     let inflow = 0;
     let outflow = 0;
@@ -235,6 +238,13 @@ export function projectCashflow(
       if (entry.amount > 0) inflow += entry.amount;
       else outflow -= entry.amount;
     }
+
+    // A fatura só vira saída de caixa quando é paga, e até lá não existe
+    // movimentação em conta nenhuma. Sem projetá-la, o fluxo futuro mostraria
+    // um saldo folgado que ignora a maior despesa recorrente de quem usa
+    // cartão — inclusive as parcelas já comprometidas.
+    outflow += invoiceOutflows.get(competence) ?? 0;
+
     running = (running + inflow - outflow) as Cents;
     return {
       competence,
@@ -244,6 +254,60 @@ export function projectCashflow(
       projectedBalance: running,
     };
   });
+}
+
+/**
+ * Traz para o primeiro mês exibido tudo que venceria antes dele.
+ *
+ * Uma fatura atrasada cai numa competência anterior à janela da projeção e
+ * simplesmente sumiria do gráfico — justo a dívida mais urgente. Ela continua
+ * sendo devida, então aparece no primeiro mês que a tela mostra.
+ */
+function foldBeforeWindow(
+  outflows: Map<Competence, number>,
+  competences: readonly Competence[],
+): Map<Competence, number> {
+  const first = competences[0];
+  if (!first) return outflows;
+
+  const folded = new Map<Competence, number>();
+  for (const [competence, amount] of outflows) {
+    const target = competence < first ? first : competence;
+    folded.set(target, (folded.get(target) ?? 0) + amount);
+  }
+  return folded;
+}
+
+/**
+ * Pagamentos de fatura esperados, na competência em que cada uma vence.
+ *
+ * Só entram faturas com saldo devedor: o que já foi pago saiu do saldo, e
+ * projetá-lo de novo cobraria a mesma fatura duas vezes.
+ */
+function projectedInvoicePayments(input: PositionInput): Map<Competence, number> {
+  const outflows = new Map<Competence, number>();
+
+  for (const card of input.cards) {
+    if (card.kind !== "credit") continue;
+
+    const competences = new Set<Competence>();
+    for (const entry of input.entries) {
+      if (entry.party.kind === "card" && entry.party.cardId === card.id) competences.add(entry.competence);
+    }
+
+    for (const competence of competences) {
+      const { outstanding } = invoiceTotals(input.entries, card.id, competence);
+      if (outstanding <= 0) continue;
+
+      const dueDate = dueDateFor(card, competence);
+      // Fatura vencida e não paga é dívida de hoje, não projeção: some no mês
+      // corrente para não desaparecer da previsão.
+      const target = dueDate < input.today ? competenceOf(input.today) : competenceOf(dueDate);
+      outflows.set(target, (outflows.get(target) ?? 0) + outstanding);
+    }
+  }
+
+  return outflows;
 }
 
 export const EMPTY_FREE_TO_SPEND: FreeToSpend = {

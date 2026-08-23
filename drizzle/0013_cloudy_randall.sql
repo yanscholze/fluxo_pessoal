@@ -1,1 +1,0 @@
-ALTER TABLE `accounts` ADD `currency_code` text DEFAULT 'BRL' NOT NULL;

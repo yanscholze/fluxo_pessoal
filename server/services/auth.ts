@@ -26,6 +26,7 @@ import {
   needsRehash,
   verifyPassword,
 } from "../auth/password.ts";
+import { seedDefaults } from "./catalog.ts";
 
 const MAX_FAILURES = 8;
 const WINDOW_MINUTES = 15;
@@ -139,6 +140,10 @@ export async function signUp(input: SignUpInput, now: Date = new Date()): Promis
     passwordSalt: password.salt,
     passwordIterations: password.iterations,
   });
+
+  // Uma conta recém-criada abre numa tela vazia que não ensina nada. As
+  // categorias padrão dão ponto de partida e podem ser trocadas à vontade.
+  await seedDefaults(userId, now);
 
   const session = await issueSession({ userId, kind: "web", now });
   return { user: { id: userId, email, displayName }, session };

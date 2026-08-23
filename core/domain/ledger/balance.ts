@@ -156,18 +156,25 @@ export function cardDebt(entries: readonly LedgerEntry[], cardId: string): Cents
 }
 
 /**
- * Limite comprometido: soma do que está em aberto na fatura atual e nas
- * seguintes. Parcelas futuras já ocupam limite, mesmo sem terem "acontecido".
+ * Limite comprometido: tudo que o cartão deve, em qualquer competência.
+ *
+ * Parcelas futuras ocupam limite mesmo sem terem "acontecido", e fatura
+ * atrasada continua ocupando — não pagar não devolve limite. Faturas quitadas
+ * zeram sozinhas, porque compras e pagamentos se anulam dentro da competência.
+ *
+ * `fromCompetence` limita o horizonte quando se quer olhar só daqui pra
+ * frente; omitido, considera o histórico inteiro, que é o que "limite
+ * disponível" significa.
  */
 export function committedLimit(
   entries: readonly LedgerEntry[],
   cardId: string,
-  fromCompetence: Competence,
+  fromCompetence?: Competence,
 ): Cents {
   const byCompetence = new Map<Competence, number>();
   for (const entry of entries) {
     if (entry.party.kind !== "card" || entry.party.cardId !== cardId) continue;
-    if (entry.competence < fromCompetence) continue;
+    if (fromCompetence && entry.competence < fromCompetence) continue;
     byCompetence.set(entry.competence, (byCompetence.get(entry.competence) ?? 0) + entry.amount);
   }
   // Cada fatura contribui no máximo com o que deve; uma paga a mais não abate
@@ -182,7 +189,7 @@ export function availableLimit(
   entries: readonly LedgerEntry[],
   cardId: string,
   creditLimit: Cents,
-  fromCompetence: Competence,
+  fromCompetence?: Competence,
 ): Cents {
   return clampToZero((creditLimit - committedLimit(entries, cardId, fromCompetence)) as Cents);
 }

@@ -6,7 +6,7 @@
  * então não existe nada para corrigir.
  */
 
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { postTransaction } from "../../core/domain/ledger/posting.ts";
 import type { LedgerEntry, Transaction } from "../../core/domain/ledger/types.ts";
@@ -71,6 +71,8 @@ export type TransactionQuery = {
   readonly from?: LocalDate;
   readonly to?: LocalDate;
   readonly limit?: number;
+  /** Recorta por situação. Omitido, traz tudo que não foi excluído. */
+  readonly states?: readonly Transaction["state"][];
 };
 
 export async function listTransactions(userId: string, query: TransactionQuery = {}): Promise<Transaction[]> {
@@ -78,6 +80,7 @@ export async function listTransactions(userId: string, query: TransactionQuery =
   const filters = [eq(transactions.userId, userId), isNull(transactions.deletedAt)];
   if (query.from) filters.push(gte(transactions.occurredOn, query.from));
   if (query.to) filters.push(lte(transactions.occurredOn, query.to));
+  if (query.states?.length) filters.push(inArray(transactions.state, [...query.states]));
 
   const rows = await database
     .select()
