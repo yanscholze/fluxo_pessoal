@@ -22,6 +22,7 @@ export const NAV: readonly NavItem[] = [
   { href: "/contas", label: "Contas" },
   { href: "/cartoes", label: "Cartões" },
   { href: "/parcelamentos", label: "Parcelamentos" },
+  { href: "/recompensas", label: "Recompensas" },
   { href: "/planejamento", label: "Planejamento" },
   { href: "/orcamentos", label: "Orçamentos" },
   { href: "/metas", label: "Metas" },

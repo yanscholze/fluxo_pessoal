@@ -119,6 +119,16 @@ export const transactions = sqliteTable(
     /** Regra que gerou este lançamento, quando veio de uma recorrência. */
     recurrenceId: text("recurrence_id"),
 
+    /**
+     * Recompensa apurada no momento da compra.
+     *
+     * Congelada de propósito: recalcular com a cotação de hoje faria o extrato
+     * do mês passado mudar sozinho toda vez que o dólar mexesse.
+     */
+    rewardPointsMilli: integer("reward_points_milli"),
+    rewardCashbackCents: integer("reward_cashback_cents"),
+    rewardUsdRateMicros: integer("reward_usd_rate_micros"),
+
     notes: text("notes"),
     /** Identidade canônica para deduplicação de importação e recorrência. */
     fingerprint: text("fingerprint"),

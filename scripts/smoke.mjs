@@ -82,6 +82,11 @@ async function main() {
       closingDay: 13,
       dueDay: 20,
       limit: 500000,
+      rewardMode: "both",
+      pointsPerDollarMilli: 1500,
+      cashbackBasisPoints: 150,
+      pointsGoal: 50000,
+      manualUsdRateMicros: 5000000,
     },
   });
   console.log("2. Conta e cartão cadastrados (fecha dia 13, vence dia 20)");
@@ -378,6 +383,44 @@ async function main() {
   const mes = painel.monthFlow;
   conferir("transferência não infla a saída do mês", mes.expenseCents, 0);
 
+  // --- Recompensas ---------------------------------------------------------
+  const recompensas = await api("/api/v1/rewards");
+  const cartaoRecompensa = recompensas.cards.find((item) => item.cardId === cartaoId);
+  conferir("cartão com recompensa aparece", Boolean(cartaoRecompensa), true);
+
+  // Só fatura fechada rende: a compra de 20/08 caiu na fatura de setembro, que
+  // ainda está aberta, então o saldo dela fica pendente.
+  conferir(
+    "compra em fatura aberta não vira saldo resgatável",
+    cartaoRecompensa.balance.pendingCashbackCents > 0,
+    true,
+  );
+
+  // Cashback é 1,5% — o mesmo percentual, qualquer que seja a cotação.
+  const somaCashback = cartaoRecompensa.entries.reduce((soma, item) => soma + item.cashbackCents, 0);
+  const somaCompras = cartaoRecompensa.entries.reduce((soma, item) => soma + item.amountCents, 0);
+  conferir("cashback é 1,5% das compras", somaCashback, Math.round((somaCompras * 150) / 10_000));
+
+  // Cada parcela rende sobre o próprio valor, não sobre o total da compra.
+  const parcelas = cartaoRecompensa.entries.filter((item) => item.description === "Fone de ouvido");
+  conferir("as 3 parcelas renderam separadamente", parcelas.length, 3);
+  conferir(
+    "cashback da parcela é sobre o valor dela",
+    parcelas[0].cashbackCents,
+    Math.round((parcelas[0].amountCents * 150) / 10_000),
+  );
+
+  let recusouResgateAlto = false;
+  try {
+    await api("/api/v1/rewards", {
+      method: "POST",
+      body: { cardId: cartaoId, kind: "cashback", amount: 999999, accountId: contaId },
+    });
+  } catch {
+    recusouResgateAlto = true;
+  }
+  conferir("recusa resgate acima do saldo", recusouResgateAlto, true);
+
   // --- Telas ---------------------------------------------------------------
   // As rotas foram exercitadas com token de dispositivo; as páginas precisam do
   // cookie da sessão web, que é outro caminho de autenticação.
@@ -397,6 +440,7 @@ async function main() {
     "/contas",
     "/cartoes",
     "/parcelamentos",
+    "/recompensas",
     "/planejamento",
     "/orcamentos",
     "/metas",

@@ -27,7 +27,8 @@ import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
 import { installmentPlans } from "../db/schema/index.ts";
-import { findAccount, findCard, listCategories } from "../repositories/catalog.ts";
+import { type CardRecord, findAccount, findCard, listCategories } from "../repositories/catalog.ts";
+import { earningForPurchase } from "./rewards.ts";
 import { ensureInvoices, findInvoice } from "../repositories/invoices.ts";
 import {
   findTransaction,
@@ -78,7 +79,14 @@ export async function recordTransaction(
     if (origin.party.kind !== "card") {
       throw conflict("Só é possível parcelar compra no cartão de crédito");
     }
-    return recordInstallmentPurchase(userId, input, origin.party, origin.cycle!, installmentCount, now);
+    return recordInstallmentPurchase(
+      userId,
+      input,
+      origin.party,
+      origin.card!,
+      installmentCount,
+      now,
+    );
   }
 
   const competence =
@@ -107,11 +115,16 @@ export async function recordTransaction(
     notes: input.notes ?? null,
   };
 
-  if (origin.party.kind === "card") {
+  // Compra no crédito apura a recompensa agora, com a cotação de hoje.
+  let reward = null;
+  if (origin.party.kind === "card" && origin.card) {
     await ensureInvoices({ userId, cardId: origin.party.cardId, cycle: origin.cycle!, competences: [competence] });
+    reward = await earningForPurchase(origin.card, input.amount, now);
   }
 
-  await saveTransactionBatch([{ transaction, options: { deviceId: input.deviceId ?? null } }]);
+  await saveTransactionBatch([
+    { transaction, options: { deviceId: input.deviceId ?? null, reward } },
+  ]);
   return { ids: [transaction.id], installmentPlanId: null, competence };
 }
 
@@ -119,10 +132,11 @@ async function recordInstallmentPurchase(
   userId: string,
   input: RecordTransactionInput,
   card: Extract<Party, { kind: "card" }>,
-  cycle: CycleConfig,
+  cardRecord: CardRecord,
   installmentCount: number,
   now: Date,
 ): Promise<RecordedTransaction> {
+  const cycle = cardRecord;
   const schedule = scheduleInstallments({
     totalAmount: input.amount,
     installmentCount,
@@ -155,8 +169,15 @@ async function recordInstallmentPurchase(
     competences: schedule.map((item) => item.competence),
   });
 
-  const transactions: { transaction: Transaction; options: { deviceId: string | null } }[] = schedule.map(
-    (installment) => ({
+  // Cada parcela rende sobre o próprio valor, não sobre o total da compra: é
+  // assim que o emissor credita, e apurar tudo na primeira parcela daria um
+  // saldo de pontos que não bate com o extrato do cartão.
+  const recompensas = await Promise.all(
+    schedule.map((installment) => earningForPurchase(cardRecord, installment.amount, now)),
+  );
+
+  const transactions = schedule.map(
+    (installment, indice) => ({
       transaction: {
         id: newId(now.getTime()),
         userId,
@@ -178,8 +199,8 @@ async function recordInstallmentPurchase(
         installmentNumber: installment.number,
         recurrenceId: null,
         notes: input.notes ?? null,
-      },
-      options: { deviceId: input.deviceId ?? null },
+      } satisfies Transaction,
+      options: { deviceId: input.deviceId ?? null, reward: recompensas[indice] },
     }),
   );
 
@@ -192,7 +213,7 @@ async function recordInstallmentPurchase(
   };
 }
 
-type ResolvedOrigin = { party: Party; cycle: CycleConfig | null };
+type ResolvedOrigin = { party: Party; cycle: CycleConfig | null; card: CardRecord | null };
 
 async function resolveOrigin(userId: string, input: RecordTransactionInput): Promise<ResolvedOrigin> {
   if (input.cardId && input.accountId) {
@@ -210,7 +231,7 @@ async function resolveOrigin(userId: string, input: RecordTransactionInput): Pro
     if (card.kind !== "credit") {
       throw conflict("Compra no crédito exige um cartão de crédito");
     }
-    return { party: cardParty(card.id), cycle: card };
+    return { party: cardParty(card.id), cycle: card, card };
   }
 
   if (!input.accountId) {
@@ -223,7 +244,7 @@ async function resolveOrigin(userId: string, input: RecordTransactionInput): Pro
   if (!account) throw notFound("Conta", input.accountId);
   if (account.archivedAt) throw conflict("Esta conta está arquivada");
 
-  return { party: accountParty(account.id), cycle: null };
+  return { party: accountParty(account.id), cycle: null, card: null };
 }
 
 async function resolveDestination(userId: string, input: RecordTransactionInput): Promise<Party | null> {

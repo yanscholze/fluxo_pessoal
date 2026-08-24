@@ -17,6 +17,7 @@ import vinculoRecorrencia from "./migrations/0001_recurrence-link.sql?raw";
 import naturezaMovimentacao from "./migrations/0002_ledger-kind.sql?raw";
 import importacao from "./migrations/0003_import-pipeline.sql?raw";
 import planejamento from "./migrations/0004_planning-modules.sql?raw";
+import recompensas from "./migrations/0005_rewards.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -98,6 +99,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 2, name: "natureza-da-movimentacao", run: fromSql(naturezaMovimentacao) },
   { id: 3, name: "pipeline-de-importacao", run: fromSql(importacao) },
   { id: 4, name: "orcamentos-metas-investimentos", run: fromSql(planejamento) },
+  { id: 5, name: "recompensas-e-cambio", run: fromSql(recompensas) },
 ];
 
 let applied: Promise<void> | null = null;

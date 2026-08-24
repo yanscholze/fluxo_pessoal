@@ -121,6 +121,16 @@ export type PersistOptions = {
   readonly deviceId?: string | null;
   readonly mutationId?: string | null;
   readonly version?: number;
+  /**
+   * Recompensa apurada no momento da compra, congelada junto com o lançamento.
+   * Recalcular depois faria o extrato do mês passado mudar quando o dólar
+   * mexesse.
+   */
+  readonly reward?: {
+    readonly pointsMilli: number;
+    readonly cashbackCents: number;
+    readonly usdRateMicros: number;
+  } | null;
 };
 
 /**
@@ -179,6 +189,9 @@ function buildSaveStatements(transaction: Transaction, options: PersistOptions) 
     installmentNumber: transaction.installmentNumber,
     invoiceId: options.invoiceId ?? null,
     recurrenceId: options.recurrenceId ?? transaction.recurrenceId ?? null,
+    rewardPointsMilli: options.reward?.pointsMilli ?? null,
+    rewardCashbackCents: options.reward?.cashbackCents ?? null,
+    rewardUsdRateMicros: options.reward?.usdRateMicros ?? null,
     notes: transaction.notes,
     fingerprint: options.fingerprint ?? null,
     version: options.version ?? 1,
