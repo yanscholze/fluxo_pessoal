@@ -378,6 +378,48 @@ async function main() {
   const mes = painel.monthFlow;
   conferir("transferência não infla a saída do mês", mes.expenseCents, 0);
 
+  // --- Telas ---------------------------------------------------------------
+  // As rotas foram exercitadas com token de dispositivo; as páginas precisam do
+  // cookie da sessão web, que é outro caminho de autenticação.
+  const entrada = await fetch(`${BASE}/api/v1/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "signin", email, password: "senha-de-teste-123", kind: "web" }),
+  });
+  const sessaoWeb = (entrada.headers.get("set-cookie") ?? "").split(";")[0];
+  conferir("sessão web emitida por cookie", sessaoWeb.startsWith("fluxo_session="), true);
+
+  // Um serviço que quebra derruba a página inteira; render é a única prova de
+  // que a pilha toda — rota, serviço, domínio, banco — chega até o HTML.
+  const paginas = [
+    "/",
+    "/lancamentos",
+    "/contas",
+    "/cartoes",
+    "/parcelamentos",
+    "/planejamento",
+    "/orcamentos",
+    "/metas",
+    "/investimentos",
+    "/saude",
+    "/relatorios",
+    "/importar",
+    "/configuracoes",
+  ];
+
+  let renderizaram = 0;
+  const quebradas = [];
+  for (const caminho of paginas) {
+    const resposta = await fetch(`${BASE}${caminho}`, { headers: { cookie: sessaoWeb } });
+    if (resposta.ok) renderizaram += 1;
+    else quebradas.push(`${caminho} (${resposta.status})`);
+  }
+  conferir(
+    quebradas.length ? `telas renderizam — quebradas: ${quebradas.join(", ")}` : "todas as telas renderizam",
+    renderizaram,
+    paginas.length,
+  );
+
   console.log("\n5. Livre para gastar:");
   const livre = painel.freeToSpend;
   console.log(`     saldo hoje          ${real(livre.liquidBalanceCents)}`);

@@ -87,7 +87,16 @@ export function Shell({ userName, children }: { userName: string; children: Reac
         </ul>
 
         <div className="mt-6 border-t border-line pt-4 lg:absolute lg:bottom-5 lg:w-[12.5rem]">
-          <p className="truncate px-3 text-[0.8125rem] text-ink">{userName}</p>
+          <Link
+            href="/configuracoes"
+            className={`block truncate rounded-[--radius-control] px-3 py-2 text-[0.8125rem] transition-colors ${
+              pathname.startsWith("/configuracoes")
+                ? "bg-accent-wash font-medium text-accent"
+                : "text-ink hover:bg-surface-sunken"
+            }`}
+          >
+            {userName}
+          </Link>
           <div className="mt-2 flex gap-1.5 px-1">
             <ThemeToggle />
             <SignOutButton />
