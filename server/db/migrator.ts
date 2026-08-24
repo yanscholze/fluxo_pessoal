@@ -18,6 +18,7 @@ import naturezaMovimentacao from "./migrations/0002_ledger-kind.sql?raw";
 import importacao from "./migrations/0003_import-pipeline.sql?raw";
 import planejamento from "./migrations/0004_planning-modules.sql?raw";
 import recompensas from "./migrations/0005_rewards.sql?raw";
+import usoDaIa from "./migrations/0006_ai-usage.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -100,6 +101,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 3, name: "pipeline-de-importacao", run: fromSql(importacao) },
   { id: 4, name: "orcamentos-metas-investimentos", run: fromSql(planejamento) },
   { id: 5, name: "recompensas-e-cambio", run: fromSql(recompensas) },
+  { id: 6, name: "uso-da-ia", run: fromSql(usoDaIa) },
 ];
 
 let applied: Promise<void> | null = null;

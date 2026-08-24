@@ -31,6 +31,7 @@ export const NAV: readonly NavItem[] = [
   { href: "/saude", label: "Saúde" },
   { href: "/relatorios", label: "Relatórios" },
   { href: "/importar", label: "Importar" },
+  { href: "/assistente", label: "Assistente" },
 ];
 
 export function Shell({ userName, children }: { userName: string; children: ReactNode }) {

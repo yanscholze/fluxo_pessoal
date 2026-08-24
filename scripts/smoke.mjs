@@ -421,6 +421,34 @@ async function main() {
   }
   conferir("recusa resgate acima do saldo", recusouResgateAlto, true);
 
+  // --- Assistente ----------------------------------------------------------
+  const assistente = await api("/api/v1/assistant");
+  conferir("cota diária do assistente exposta", assistente.advice.limit, 60);
+  conferir("cota diária de leitura de cupom exposta", assistente.receipt.limit, 30);
+
+  // Sem OPENAI_API_KEY o app funciona normal, só sem as duas features de IA —
+  // e a tentativa não pode queimar a cota de algo que nunca rodou.
+  if (!assistente.configured) {
+    let recusouSemChave = false;
+    try {
+      await api("/api/v1/assistant", { method: "POST", body: { question: "Posso gastar 500 reais?" } });
+    } catch {
+      recusouSemChave = true;
+    }
+    conferir("recusa consulta sem chave configurada", recusouSemChave, true);
+
+    const depois = await api("/api/v1/assistant");
+    conferir("tentativa sem chave não consome cota", depois.advice.used, 0);
+  }
+
+  let recusouImagemInvalida = false;
+  try {
+    await api("/api/v1/receipts", { method: "POST", body: { image: "isso-nao-e-uma-imagem" } });
+  } catch {
+    recusouImagemInvalida = true;
+  }
+  conferir("recusa arquivo que não é imagem", recusouImagemInvalida, true);
+
   // --- Telas ---------------------------------------------------------------
   // As rotas foram exercitadas com token de dispositivo; as páginas precisam do
   // cookie da sessão web, que é outro caminho de autenticação.
@@ -449,6 +477,7 @@ async function main() {
     "/saude",
     "/relatorios",
     "/importar",
+    "/assistente",
     "/configuracoes",
   ];
 

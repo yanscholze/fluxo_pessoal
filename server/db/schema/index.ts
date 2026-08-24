@@ -17,3 +17,4 @@ export * from "./automation.ts";
 export * from "./imports.ts";
 export * from "./planning.ts";
 export * from "./rewards.ts";
+export * from "./ai.ts";
