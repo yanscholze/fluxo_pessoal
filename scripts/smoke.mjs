@@ -401,6 +401,7 @@ async function main() {
     "/orcamentos",
     "/metas",
     "/investimentos",
+    "/viagens",
     "/saude",
     "/relatorios",
     "/importar",
