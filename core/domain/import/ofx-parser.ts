@@ -7,12 +7,13 @@
  * Um parser de XML rejeita esses arquivos — por isso aqui é fatiamento de
  * texto, não árvore.
  *
- * Este estágio não decide nada de negócio: devolve a linha como o arquivo
- * trouxe, com sinal, e só descarta o que não é lançamento nenhum. Classificar
- * entrada/saída, categoria e duplicidade é trabalho dos estágios seguintes.
+ * Este estágio devolve a linha como o arquivo trouxe, com sinal, e descarta só
+ * o que o próprio arquivo já denuncia não ser lançamento — inclusive pagamento
+ * de fatura e estorno, que o arquivo identifica quando a seção é de cartão.
+ * Classificar entrada/saída, categoria e duplicidade é dos estágios seguintes.
  */
 
-import { type Cents, isNegative, isZero, negate, parseMoney } from "../../kernel/money.ts";
+import { type Cents, MoneyError, isNegative, isPositive, isZero, negate, parseMoney } from "../../kernel/money.ts";
 import { type LocalDate, parseLocalDate } from "../../time/local-date.ts";
 import { MAX_INSTALLMENTS } from "../installment/plan.ts";
 import type { DiscardReason, DiscardedRow, ParseResult, ParsedRow } from "./types.ts";
@@ -26,7 +27,7 @@ export function parseOfx(text: string): ParseResult {
 
   for (const block of sliceBlocks(text)) {
     const rawText = clampRawText(block.raw);
-    const outcome = readBlock(block.content);
+    const outcome = readBlock(block.content, block.isCard);
     if (typeof outcome === "string") discarded.push({ reason: outcome, rawText });
     else rows.push({ ...outcome, rawText });
   }
@@ -41,20 +42,28 @@ export function parseOfx(text: string): ParseResult {
  * checagens é a do que falta primeiro: sem data, valor ou descrição o bloco não
  * é lançamento; só depois faz sentido perguntar *que* lançamento é.
  */
-function readBlock(content: string): DiscardReason | Omit<ParsedRow, "rawText"> {
+function readBlock(content: string, isCard: boolean): DiscardReason | Omit<ParsedRow, "rawText"> {
   const rawDate = field(content, "DTPOSTED");
-  const date = rawDate === null ? null : parseOfxDate(rawDate);
+  if (rawDate === null) return "sem_data";
+  const date = parseOfxDate(rawDate);
   if (date === null) return "sem_data";
 
   const rawAmount = field(content, "TRNAMT");
-  const signedAmount = rawAmount === null ? null : parseOfxAmount(rawAmount);
+  if (rawAmount === null) return "sem_valor";
+  const signedAmount = parseOfxAmount(rawAmount);
   // Zero também entra como "sem valor": não move saldo, não vira lançamento e
   // só faria volume na tela de revisão.
   if (signedAmount === null || isZero(signedAmount)) return "sem_valor";
+  const amount = applySignFromType(signedAmount, field(content, "TRNTYPE"), rawAmount);
 
   const description = joinDescription(field(content, "NAME"), field(content, "MEMO"));
   if (description === null) return "sem_descricao";
-  if (INVOICE_PAYMENT.test(flatten(description))) return "pagamento_de_fatura";
+  const flatDescription = flatten(description);
+  // Fatura e estorno só são descarte no cartão. No extrato da conta, "pagamento
+  // de fatura" é a despesa de verdade — a que abate o saldo — e sumir com ela
+  // deixaria o mês inteiro com dinheiro que o usuário não tem mais.
+  if (isCard && INVOICE_PAYMENT.test(flatDescription)) return "pagamento_de_fatura";
+  if (isCard && isPositive(amount) && REFUND.test(flatDescription)) return "estorno";
 
   const marker = extractInstallment(description);
 
@@ -64,14 +73,14 @@ function readBlock(content: string): DiscardReason | Omit<ParsedRow, "rawText"> 
     // Se a limpeza esvaziou a descrição (o texto era só o marcador), fica a
     // original: perder o lançamento por causa de cosmética seria pior.
     description: marker === null || marker.cleaned === "" ? description : marker.cleaned,
-    amount: applySignFromType(signedAmount, field(content, "TRNTYPE"), rawAmount),
+    amount,
     installment: marker === null ? null : marker.installment,
   };
 }
 
 // --- fatiamento --------------------------------------------------------------
 
-type BlockSlice = { readonly raw: string; readonly content: string };
+type BlockSlice = { readonly raw: string; readonly content: string; readonly isCard: boolean };
 
 const BLOCK_OPENING = /<(STMTTRN|CCSTMTTRN)>/gi;
 
@@ -90,13 +99,49 @@ function sliceBlocks(text: string): BlockSlice[] {
     openings.push({ start: match.index, contentStart: match.index + match[0].length, tag: match[1].toUpperCase() });
   }
 
+  const accounts = accountMarkers(text);
+
   return openings.map((opening, index) => {
     const limit = index + 1 < openings.length ? openings[index + 1].start : text.length;
     const region = text.slice(opening.contentStart, limit);
     const closing = new RegExp(`</${opening.tag}\\s*>`, "i").exec(region);
     const end = closing === null ? region.length : closing.index + closing[0].length;
-    return { raw: text.slice(opening.start, opening.contentStart + end), content: region.slice(0, end) };
+    return {
+      raw: text.slice(opening.start, opening.contentStart + end),
+      content: region.slice(0, end),
+      isCard: opening.tag === "CCSTMTTRN" || isCardContext(accounts, opening.start),
+    };
   });
+}
+
+type AccountMarker = { readonly at: number; readonly card: boolean };
+
+const ACCOUNT_MARKER = /<(CC|BANK)ACCTFROM>/gi;
+
+function accountMarkers(text: string): AccountMarker[] {
+  const markers: AccountMarker[] = [];
+  ACCOUNT_MARKER.lastIndex = 0;
+  for (let match = ACCOUNT_MARKER.exec(text); match !== null; match = ACCOUNT_MARKER.exec(text)) {
+    markers.push({ at: match.index, card: match[1].toUpperCase() === "CC" });
+  }
+  return markers;
+}
+
+/**
+ * Diz se o bloco pertence a um cartão.
+ *
+ * A tag não basta: há exportador que usa `STMTTRN` dentro da seção de cartão.
+ * Vale a última conta declarada antes do bloco, porque um mesmo arquivo pode
+ * trazer extrato e fatura em sequência — e a diferença decide se um pagamento
+ * de fatura é descarte ou é a despesa que o usuário pagou.
+ */
+function isCardContext(markers: readonly AccountMarker[], at: number): boolean {
+  let card = false;
+  for (const marker of markers) {
+    if (marker.at > at) break;
+    card = marker.card;
+  }
+  return card;
 }
 
 function clampRawText(text: string): string {
@@ -172,23 +217,46 @@ function parseOfxDate(raw: string): LocalDate | null {
 
 // --- valor -------------------------------------------------------------------
 
-const OFX_AMOUNT = /^([+-]?)(\d*)(?:[.,](\d+))?$/;
+const OFX_AMOUNT = /^[+-]?[\d.,]+$/;
+const OFX_DECIMAL = /^([+-]?)(\d*)[.,](\d+)$/;
 
 /**
  * Converte `TRNAMT` em centavos, preservando o sinal do arquivo.
  *
- * O separador do OFX é sempre decimal, mas `parseMoney` precisa adivinhar isso
- * sozinho e leria "1.500" como mil e quinhentos. Preenchendo a fração até
- * quatro casas a ambiguidade some (milhar só agrupa de três em três) e o
- * arredondamento continua sendo o do kernel.
+ * Com um separador só vale a regra do OFX — ele é decimal —, e `parseMoney`
+ * sozinho leria "1.500" como mil e quinhentos: preencher a fração até quatro
+ * casas mata a ambiguidade (milhar só agrupa de três em três) sem duplicar o
+ * arredondamento do kernel. Com dois ou mais o agrupamento é explícito
+ * ("1.234,56", que exportador brasileiro emite mesmo fora do padrão) e o kernel
+ * já sabe qual deles é o decimal.
  */
 function parseOfxAmount(raw: string): Cents | null {
-  const match = OFX_AMOUNT.exec(raw.replace(/\s/g, ""));
-  if (match === null) return null;
+  const compact = raw.replace(/\s/g, "");
+  if (!OFX_AMOUNT.test(compact) || !/\d/.test(compact)) return null;
+
+  const separators = (compact.match(/[.,]/g) ?? []).length;
+  if (separators !== 1) return money(compact);
+
+  const match = OFX_DECIMAL.exec(compact);
+  if (match === null) return money(compact);
   const [, sign, whole, fraction] = match;
-  if (whole === "" && fraction === undefined) return null;
-  const body = fraction === undefined ? whole : `${whole}.${fraction.padEnd(4, "0")}`;
-  return parseMoney(`${sign}${body}`);
+  return money(`${sign}${whole}.${fraction.padEnd(4, "0")}`);
+}
+
+/**
+ * `parseMoney` que não derruba a importação.
+ *
+ * Valor fora da faixa representável lança — e um único `TRNAMT` absurdo num
+ * arquivo de trezentas linhas levaria o arquivo inteiro junto. Vira descarte de
+ * uma linha, que é o que o usuário consegue entender e corrigir.
+ */
+function money(text: string): Cents | null {
+  try {
+    return parseMoney(text);
+  } catch (error) {
+    if (error instanceof MoneyError) return null;
+    throw error;
+  }
 }
 
 /** Tipos em que o dinheiro sai, sem ambiguidade de contexto. */
@@ -246,6 +314,16 @@ function flatten(text: string): string {
  * como a despesa já lançada do lado da conta que pagou.
  */
 const INVOICE_PAYMENT = /pagamento recebido|de fatura|pagamento efetuado|credito de pagamento/i;
+
+/**
+ * Estorno de compra na fatura.
+ *
+ * Só crédito com palavra explícita de devolução. Descartar **todo** crédito do
+ * cartão, como a regra geral sugere, apagaria o arquivo inteiro do emissor que
+ * exporta compra com sinal positivo; decidir isso exige olhar a convenção de
+ * sinal do arquivo todo, e é trabalho da normalização.
+ */
+const REFUND = /\bestorn|\breembolso|\bdevolucao|\bchargeback|cancelamento de compra/;
 
 // --- parcelas ----------------------------------------------------------------
 

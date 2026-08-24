@@ -145,6 +145,55 @@ describe("detecção de transferência", () => {
     assert.equal(items[0].transferCounterpartId, null);
   });
 
+  it("não casa a marca no meio de outra palavra", () => {
+    const items = buildReview(
+      parsed(
+        row("UNITED AIRLINES 0161", -285000),
+        row("AMAZON SERVICES LIMITED LTDA", -4990),
+        row("DOCUMENTO CARTORIO", -9000),
+      ),
+      contextWith({ categoryRules: [{ match: "united airlines", categoryId: "cat-viagem" }] }),
+    );
+
+    for (const item of items) {
+      assert.notEqual(item.verdict, "possivel_transferencia");
+    }
+    assert.equal(items[0].suggestedCategoryId, "cat-viagem");
+  });
+
+  it("reconhece a marca no fim da linha, sem espaço depois", () => {
+    const items = buildReview(parsed(row("PAGAMENTO TED", -50000), row("TRANSFERENCIAS PIX", -1000)), contextWith());
+
+    for (const item of items) {
+      assert.equal(item.verdict, "possivel_transferencia");
+    }
+  });
+
+  it("não propõe transferência da conta importada para ela mesma", () => {
+    const items = buildReview(
+      parsed(row("TARIFA MENSAL CONTA CORRENTE", -3490)),
+      contextWith({ accounts: [{ id: "acc-corrente", name: "Conta Corrente" }] }),
+    );
+
+    assert.equal(items[0].transferCounterpartId, null);
+    assert.equal(items[0].verdict, "sem_categoria");
+  });
+
+  it("ainda aponta o outro lado quando o nome não é o da conta importada", () => {
+    const items = buildReview(
+      parsed(row("TRANSFERENCIA PARA Conta Poupança", -50000)),
+      contextWith({
+        accounts: [
+          { id: "acc-corrente", name: "Conta Corrente" },
+          { id: "acc-poupanca", name: "Conta Poupança" },
+        ],
+      }),
+    );
+
+    assert.equal(items[0].verdict, "possivel_transferencia");
+    assert.equal(items[0].transferCounterpartId, "acc-poupanca");
+  });
+
   it("vence a categorização: transferência não é gasto", () => {
     const items = buildReview(
       parsed(row("TRANSFERENCIA MERCADO PAGO", -20000)),

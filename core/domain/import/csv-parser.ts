@@ -49,25 +49,24 @@ const COLUMN_KEYWORDS: ReadonlyArray<readonly [ColumnRole, readonly string[]]> =
 ];
 
 export function parseCsv(text: string): ParseResult {
-  // O BOM gruda no primeiro cabeçalho ("﻿Data") e faria a coluna de data
+  // O BOM gruda no primeiro cabeçalho ("\uFEFFData") e faria a coluna de data
   // não ser reconhecida por diferença de um caractere invisível.
-  const source = text.replace(/^﻿/, "");
+  const source = text.replace(/^\uFEFF/, "");
   const records = tokenize(source, detectDelimiter(source));
 
   const rows: ParsedRow[] = [];
   const discarded: DiscardedRow[] = [];
 
-  const firstFilled = records.findIndex((record) => !isBlank(record));
-  if (firstFilled === -1) {
+  const headerAt = findHeaderRecord(records);
+  const dataStart = headerAt >= 0 ? headerAt + 1 : firstDataRecord(records);
+  if (dataStart === -1) {
     for (const record of records) discarded.push({ reason: "nao_e_lancamento", rawText: record.raw });
     return { format: "csv", rows, discarded };
   }
 
-  const header = mapHeader(records[firstFilled].fields);
-  const hasHeader = isUsable(header);
-  const dataStart = hasHeader ? firstFilled + 1 : firstFilled;
+  const header = headerAt >= 0 ? mapHeader(records[headerAt].fields) : EMPTY_COLUMNS;
   const sample = records.slice(dataStart).find((record) => !isBlank(record));
-  const columns = resolveColumns(header, hasHeader, sample);
+  const columns = resolveColumns(header, headerAt >= 0, sample);
 
   records.forEach((record, index) => {
     if (index < dataStart) {
@@ -83,11 +82,42 @@ export function parseCsv(text: string): ParseResult {
 }
 
 /**
- * Escolhe o delimitador contando `;` e `,` **fora de aspas** na primeira linha.
+ * Acha o cabeçalho, que nem sempre é a primeira linha.
+ *
+ * Exportação de banco costuma abrir com título, período e linhas em branco.
+ * Parar na primeira linha faria o cabeçalho de verdade cair como dado e o
+ * arquivo inteiro sair como `sem_data` — perda silenciosa do extrato todo.
+ * A varredura termina na primeira linha com data: dali em diante é dado, e um
+ * cabeçalho que aparecesse depois seria coincidência de palavra.
+ */
+function findHeaderRecord(records: readonly CsvRecord[]): number {
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (isBlank(record)) continue;
+    if (hasDate(record)) return -1;
+    if (isUsable(mapHeader(record.fields))) return index;
+  }
+  return -1;
+}
+
+/** Sem cabeçalho, a régua das colunas é a primeira linha com data. */
+function firstDataRecord(records: readonly CsvRecord[]): number {
+  const dated = records.findIndex((record) => hasDate(record));
+  return dated >= 0 ? dated : records.findIndex((record) => !isBlank(record));
+}
+
+function hasDate(record: CsvRecord): boolean {
+  return record.fields.some((field) => parseCsvDate(field) !== null);
+}
+
+/**
+ * Escolhe o delimitador contando `;` e `,` **fora de aspas** na primeira linha
+ * que tenha algum dos dois.
  *
  * Contar dentro de aspas inverteria a decisão em arquivos como
- * `Data;Descrição;Valor` com um `"MERCADO, LTDA"` logo abaixo. O empate fica
- * com `;`, que é o que Excel e bancos brasileiros geram.
+ * `Data;Descrição;Valor` com um `"MERCADO, LTDA"` logo abaixo. Linha sem
+ * separador nenhum é preâmbulo e não descreve o formato do arquivo. O empate
+ * fica com `;`, que é o que Excel e bancos brasileiros geram.
  */
 function detectDelimiter(text: string): string {
   let quoted = false;
@@ -196,7 +226,7 @@ function isBlank(record: CsvRecord): boolean {
 function normalizeKey(value: string): string {
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
 }
@@ -325,7 +355,9 @@ function findInstallment(text: string): InstallmentMatch | null {
   for (const match of text.matchAll(INSTALLMENT_MARKER)) {
     const current = Number(match[1]);
     const total = Number(match[2]);
-    if (current < 1 || total < 1 || current > total || total > MAX_INSTALLMENTS) continue;
+    // `total < 2` não é parcelamento: "1/1" é à vista, e tratá-lo como plano
+    // criaria um parcelamento de uma parcela só na tela de acompanhamento.
+    if (current < 1 || total < 2 || current > total || total > MAX_INSTALLMENTS) continue;
     const start = match.index ?? 0;
     return { current, total, start, end: start + match[0].length };
   }
@@ -389,11 +421,26 @@ function readRow(record: CsvRecord, columns: ColumnMap): RowOutcome {
  * senão uma despesa entraria como receita.
  */
 function readAmount(amountCell: string, creditCell: string, debitCell: string): Cents | null {
-  const direct = parseMoney(amountCell);
+  const direct = money(amountCell);
   if (direct !== null) return direct;
 
-  const credit = parseMoney(creditCell);
-  const debit = parseMoney(debitCell);
+  const credit = money(creditCell);
+  const debit = money(debitCell);
   if (credit === null && debit === null) return null;
   return subtract(credit ?? ZERO, abs(debit ?? ZERO));
+}
+
+/**
+ * Interpreta dinheiro sem deixar uma célula estragada derrubar o arquivo.
+ *
+ * `parseMoney` lança quando o valor não cabe na faixa representável. Um extrato
+ * com uma linha corrompida levaria junto as outras trezentas — o descarte
+ * precisa ser da linha, não do arquivo.
+ */
+function money(cell: string): Cents | null {
+  try {
+    return parseMoney(cell);
+  } catch {
+    return null;
+  }
 }

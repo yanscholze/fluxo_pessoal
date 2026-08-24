@@ -175,10 +175,47 @@ describe("tolerância de arredondamento", () => {
     assert.equal(isDuplicate(linha, faturaAgosto, conhecidos(doCsv, faturaAgosto)), true);
   });
 
-  it("linha sem parcela tem candidato único", () => {
+  it("linha sem parcela e sem FITID tem candidato único", () => {
     assert.deepEqual(duplicateCandidates(row(), conta), [fingerprintOf(row(), conta)]);
-    const comFitid = row({ externalId: "FIT-1" });
-    assert.deepEqual(duplicateCandidates(comFitid, conta), [fingerprintOf(comFitid, conta)]);
+  });
+});
+
+describe("mistura de formatos", () => {
+  it("acha pelo composto a linha que entrou por CSV antes, mesmo sem parcela", () => {
+    // Importar o CSV da fatura e depois o OFX da mesma fatura é rotina de quem
+    // baixa o que o banco oferece primeiro. O OFX traz FITID, o CSV não: se o
+    // FITID fosse o único candidato, cada linha voltaria como nova.
+    const doCsv = row();
+    const doOfx = row({ externalId: "FIT-1" });
+
+    assert.equal(isDuplicate(doOfx, faturaAgosto, new Set([fingerprintOf(doCsv, faturaAgosto)])), true);
+  });
+
+  it("mantém o FITID como identidade gravada, não o composto", () => {
+    const doOfx = row({ externalId: "FIT-1" });
+
+    assert.equal(fingerprintOf(doOfx, conta), "account|acc-1|fitid|FIT-1");
+    assert.deepEqual(duplicateCandidates(doOfx, conta), [
+      "account|acc-1|fitid|FIT-1",
+      "account|acc-1|2026-08-13|mercado sao paulo|-15990",
+    ]);
+  });
+
+  it("o composto alternativo continua preso ao alvo e à competência", () => {
+    const doCsv = row();
+    const doOfx = row({ externalId: "FIT-1" });
+
+    assert.equal(isDuplicate(doOfx, conta, new Set([fingerprintOf(doCsv, outraConta)])), false);
+    assert.equal(isDuplicate(doOfx, faturaAgosto, new Set([fingerprintOf(doCsv, faturaSetembro)])), false);
+  });
+
+  it("duas linhas do OFX com FITIDs distintos não se anulam entre si", () => {
+    // Compras iguais no mesmo dia: a canônica gravada é o FITID, então a
+    // primeira aceita não puxa a segunda para duplicada.
+    const primeira = row({ externalId: "FIT-1" });
+    const segunda = row({ externalId: "FIT-2" });
+
+    assert.equal(isDuplicate(segunda, conta, new Set([fingerprintOf(primeira, conta)])), false);
   });
 });
 

@@ -130,8 +130,20 @@ function compileRules(rules: readonly { readonly match: string; readonly categor
     .sort((left, right) => right.needle.length - left.needle.length);
 }
 
-function compileAccounts(accounts: readonly { readonly id: string; readonly name: string }[]): CompiledAccount[] {
+/**
+ * A conta que está recebendo o arquivo fica de fora: transferência tem dois
+ * lados diferentes, e o nome dela aparece na própria descrição com frequência
+ * (`TARIFA MENSAL CONTA CORRENTE`). Mantê-la na lista propunha uma
+ * transferência da conta para ela mesma — que o cadastro depois recusaria — e
+ * ainda escondia a linha atrás do veredito de transferência.
+ */
+function compileAccounts(
+  accounts: readonly { readonly id: string; readonly name: string }[],
+  target: ImportTarget,
+): CompiledAccount[] {
+  const targetAccountId = target.kind === "account" ? target.accountId : null;
   return accounts
+    .filter((account) => account.id !== targetAccountId)
     .map((account) => ({ needle: normalizeText(account.name), id: account.id }))
     .filter((account) => account.needle.length > 0)
     .sort((left, right) => right.needle.length - left.needle.length);

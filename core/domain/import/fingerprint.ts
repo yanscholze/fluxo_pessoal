@@ -113,13 +113,20 @@ export function fingerprintOf(row: ParsedRow, target: ImportTarget): string {
 
 /**
  * Todas as identidades sob as quais esta linha pode já ter sido gravada: a
- * canônica mais as variantes de arredondamento.
+ * canônica mais as alternativas.
  *
- * As variantes só existem para parcela. Fora dela, um centavo de diferença é
- * outra compra, e tolerar isso fundiria duas despesas legítimas do mesmo dia
- * no mesmo estabelecimento. Numa parcela com `FITID`, a variante é da
- * identidade composta — a do `FITID` não carrega valor para variar, e é a
- * composta que estará gravada se aquela parcela entrou por um CSV antes.
+ * A composta entra sempre, mesmo quando a canônica é o `FITID`. O CSV não tem
+ * `FITID`, então uma transação que entrou por CSV está gravada sob a composta;
+ * sem essa alternativa, quem importa o CSV da fatura e depois o OFX da mesma
+ * fatura vê **tudo** duplicar. O preço é conhecido: duas compras genuinamente
+ * iguais no mesmo dia (mesmo valor, mesmo estabelecimento) compartilham a
+ * composta, e a segunda cai como duplicada se a primeira veio de CSV. Isso já
+ * é limitação da identidade composta, e o veredito só marca a linha na
+ * revisão — quem decide é o usuário.
+ *
+ * As variantes de arredondamento só existem para parcela. Fora dela, um
+ * centavo de diferença é outra compra, e tolerar isso fundiria duas despesas
+ * legítimas do mesmo dia no mesmo estabelecimento.
  */
 export function duplicateCandidates(row: ParsedRow, target: ImportTarget): string[] {
   const candidates = [fingerprintOf(row, target)];
@@ -127,8 +134,10 @@ export function duplicateCandidates(row: ParsedRow, target: ImportTarget): strin
     if (!candidates.includes(candidate)) candidates.push(candidate);
   };
 
+  // Sem `FITID` a canônica já é a composta, e o `push` descarta a repetição.
+  push(compositeFingerprint(row, target, row.amount));
+
   if (row.installment) {
-    push(compositeFingerprint(row, target, row.amount));
     for (let delta = 1; delta <= INSTALLMENT_CENT_TOLERANCE; delta += 1) {
       push(compositeFingerprint(row, target, cents(row.amount + delta)));
       push(compositeFingerprint(row, target, cents(row.amount - delta)));
