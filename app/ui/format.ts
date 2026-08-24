@@ -25,6 +25,14 @@ export function moneyCompact(value: number, currency = "BRL"): string {
   return formatCompact(cents(value), { currency });
 }
 
+/** Número decimal em pt-BR: `10,1`. `toFixed` devolveria `10.1`. */
+export function decimal(value: number, fractionDigits = 1): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
 export function percent(value: number, fractionDigits = 0): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "percent",
