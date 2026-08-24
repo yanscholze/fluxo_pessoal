@@ -243,7 +243,39 @@ de depuração do Android sai do repositório.
 
 ---
 
-## 9. UI
+## 9. Estado da reconstrução
+
+Construído e verificado (351 testes de domínio, 51 verificações de ponta a
+ponta contra o servidor, 16 telas renderizando):
+
+| Módulo | Domínio | Serviço | Rota | Tela |
+| --- | --- | --- | --- | --- |
+| Razão, saldo, patrimônio | ✓ | ✓ | ✓ | ✓ |
+| Competência e fatura | ✓ | ✓ | ✓ | ✓ |
+| Parcelamento e antecipação | ✓ | ✓ | ✓ | ✓ |
+| Recorrências | ✓ | ✓ | ✓ | ✓ |
+| Importação OFX/CSV | ✓ | ✓ | ✓ | ✓ |
+| Orçamentos | ✓ | ✓ | ✓ | ✓ |
+| Metas | ✓ | ✓ | ✓ | ✓ |
+| Investimentos | — | ✓ | ✓ | ✓ |
+| Viagens | — | ✓ | ✓ | ✓ |
+| Recompensas de cartão | ✓ | ✓ | ✓ | ✓ |
+| Relatórios | — | ✓ | ✓ | ✓ |
+| Saúde financeira | — | ✓ | ✓ | ✓ |
+| Assistente e OCR | — | ✓ | ✓ | ✓ |
+
+Investimentos, viagens, relatórios e saúde financeira não têm módulo próprio em
+`core/` porque não têm regra própria: são leituras sobre o razão e sobre o que
+os outros módulos já calculam. Criar uma camada de domínio só para repassar
+dados seria abstração sem uso.
+
+Pendente: migração dos dados da primeira implementação (as tabelas estão
+preservadas como `legacy_*`), aplicativo Android, sincronização offline-first e
+captura automática por notificação.
+
+---
+
+## 10. UI
 
 Reconstruída, não copiada. Rotas de verdade (uma por módulo), componentes
 pequenos, estado de servidor separado de estado de tela. Hierarquia visual:
