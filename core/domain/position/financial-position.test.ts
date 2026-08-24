@@ -292,6 +292,26 @@ describe("posição financeira", () => {
     assert.equal(posicao.committed, 120000);
   });
 
+  it("não soma conta em moeda estrangeira ao patrimônio em reais", () => {
+    const emDolar = conta({
+      id: "conta-usd",
+      kind: "checking",
+      currency: "USD",
+      openingBalance: cents(100000),
+    });
+
+    const posicao = computeFinancialPosition({
+      accounts: [...contas, emDolar],
+      cards: [cartaoFecha13],
+      entries: [],
+      today: hoje,
+    });
+
+    // Somar centavos de dólar como centavos de real inventaria patrimônio.
+    assert.equal(posicao.totalAssets, 1300000);
+    assert.equal(posicao.investments, 1000000);
+  });
+
   it("dinheiro futuro não aparece como saldo atual", () => {
     const entries = razao(
       lancamento({
@@ -378,6 +398,33 @@ describe("fluxo futuro", () => {
     assert.equal(pontos[0].outflow, 300000, "a fatura vira saída no mês em que vence");
     assert.equal(pontos[0].projectedBalance, 700000);
     assert.equal(pontos[1].outflow, 0, "não cobra a mesma fatura duas vezes");
+  });
+
+  it("traz para o primeiro mês o previsto de competência anterior à janela", () => {
+    const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(1000000) })];
+    const entries = razao(
+      lancamento({
+        id: "conta-de-luz",
+        kind: "expense",
+        amount: cents(30000),
+        state: "planned",
+        occurredOn: localDate("2026-08-28"),
+        competence: competence("2026-08"),
+      }),
+    );
+
+    const pontos = projectCashflow({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      today: localDate("2026-08-24"),
+      competences: [competence("2026-09"), competence("2026-10")],
+    });
+
+    // Ainda não aconteceu e continua devendo acontecer: sumir da projeção
+    // mostraria um saldo mais folgado do que o real.
+    assert.equal(pontos[0].outflow, 30000);
+    assert.equal(pontos[0].projectedBalance, 970000);
   });
 
   it("traz a fatura atrasada para o primeiro mês da projeção", () => {

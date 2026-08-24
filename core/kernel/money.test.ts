@@ -10,11 +10,21 @@ import {
   format,
   fromDecimal,
   multiply,
+  negate,
   parseMoney,
   percentOf,
   sum,
   toDecimal,
 } from "./money.ts";
+
+/**
+ * O ICU separa "R$" do numero com espaco nao-quebravel (U+00A0) e usa U+202F
+ * em alguns locales. Comparar com espaco comum falharia por um caractere
+ * invisivel, entao normalizamos por codigo.
+ */
+function semEspacoEstranho(texto: string): string {
+  return texto.replace(/[  ]/g, " ");
+}
 
 describe("money", () => {
   it("constrói a partir de decimais sem erro de ponto flutuante", () => {
@@ -45,6 +55,16 @@ describe("money", () => {
       ["12,5", 1250],
       ["1.234", 123400],
       ["100", 10000],
+      // Mais de um grupo de milhar: o separador repetido não pode ser decimal.
+      ["1.500.000", 150000000],
+      ["12.345.678", 1234567800],
+      ["R$ 2.350.000", 235000000],
+      // Parte inteira "0" denuncia fração, não milhar.
+      ["0,005", 1],
+      ["0,999", 100],
+      ["0.005", 1],
+      // Parte inteira longa demais para ser um grupo de milhar.
+      ["12345.678", 1234568],
       ["-12,50", -1250],
       ["(12,50)", -1250],
       ["", null],
@@ -115,10 +135,17 @@ describe("money", () => {
     });
   });
 
+  it("nunca produz zero negativo", () => {
+    // `-0` some em toda comparação mas o Intl o formata como "-R$ 0,00".
+    assert.ok(!Object.is(multiply(cents(-20), 0.01), -0));
+    assert.ok(!Object.is(negate(cents(0)), -0));
+    assert.ok(!Object.is(percentOf(cents(-20), 1), -0));
+    assert.equal(semEspacoEstranho(format(percentOf(cents(-20), 1))), "R$ 0,00");
+    assert.ok(allocate(cents(-1), 3).every((parte) => !Object.is(parte, -0)));
+  });
+
   it("formata em reais", () => {
-    // O separador de milhar do ICU é U+00A0 em pt-BR; comparamos normalizando.
-    const texto = format(cents(123456)).replace(/ /g, " ");
-    assert.equal(texto, "R$ 1.234,56");
-    assert.equal(format(cents(-500)).replace(/ /g, " "), "-R$ 5,00");
+    assert.equal(semEspacoEstranho(format(cents(123456))), "R$ 1.234,56");
+    assert.equal(semEspacoEstranho(format(cents(-500))), "-R$ 5,00");
   });
 });

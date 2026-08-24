@@ -178,6 +178,7 @@ function buildSaveStatements(transaction: Transaction, options: PersistOptions) 
     installmentPlanId: transaction.installmentPlanId,
     installmentNumber: transaction.installmentNumber,
     invoiceId: options.invoiceId ?? null,
+    recurrenceId: options.recurrenceId ?? transaction.recurrenceId ?? null,
     notes: transaction.notes,
     fingerprint: options.fingerprint ?? null,
     version: options.version ?? 1,
@@ -199,6 +200,7 @@ function buildSaveStatements(transaction: Transaction, options: PersistOptions) 
       effectiveOn: draft.effectiveOn as string,
       competence: draft.competence as string,
       state: draft.state,
+      kind: draft.kind,
     };
   });
 

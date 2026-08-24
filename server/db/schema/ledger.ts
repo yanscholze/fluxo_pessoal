@@ -116,6 +116,9 @@ export const transactions = sqliteTable(
     /** Preenchido quando o lançamento quita uma fatura específica. */
     invoiceId: text("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
 
+    /** Regra que gerou este lançamento, quando veio de uma recorrência. */
+    recurrenceId: text("recurrence_id"),
+
     notes: text("notes"),
     /** Identidade canônica para deduplicação de importação e recorrência. */
     fingerprint: text("fingerprint"),
@@ -165,6 +168,17 @@ export const ledgerEntries = sqliteTable(
     effectiveOn: text("effective_on").notNull(),
     competence: text("competence").notNull(),
     state: text("state", { enum: ["confirmed", "planned"] }).notNull(),
+    /**
+     * Natureza do fato de origem, copiada do lançamento.
+     *
+     * Denormalizado de propósito: sem ela, toda consulta de "quanto gastei"
+     * precisaria de junção com `transactions` só para descartar a perna de uma
+     * transferência — e quem esquecesse a junção contaria remanejamento como
+     * despesa.
+     */
+    kind: text("kind", { enum: ["expense", "income", "transfer", "invoice_payment"] })
+      .notNull()
+      .default("expense"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [

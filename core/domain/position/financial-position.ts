@@ -179,7 +179,17 @@ export type FinancialPosition = {
 export function computeFinancialPosition(input: PositionInput): FinancialPosition {
   const freeToSpend = computeFreeToSpend(input);
 
-  const active = input.accounts.filter((account) => account.archivedAt === null && account.includeInTotals);
+  /**
+   * Só contas em reais entram no patrimônio.
+   *
+   * Somar o saldo de uma conta em dólar como se fossem centavos de real
+   * inventa ou destrói patrimônio conforme o câmbio. Enquanto não houver
+   * conversão, o saldo em moeda estrangeira aparece na própria conta e fica
+   * fora do total — melhor faltar do que estar errado.
+   */
+  const active = input.accounts.filter(
+    (account) => account.archivedAt === null && account.includeInTotals && account.currency === "BRL",
+  );
   const liquidIds = new Set(liquidAccounts(input.accounts).map((account) => account.id));
 
   const balanceOf = (account: Account) =>
@@ -227,14 +237,21 @@ export function projectCashflow(
   );
 
   const invoiceOutflows = foldBeforeWindow(projectedInvoicePayments(input), input.competences);
+  const first = input.competences[0];
 
   return input.competences.map((competence) => {
     let inflow = 0;
     let outflow = 0;
     for (const entry of input.entries) {
       if (entry.party.kind !== "account" || !liquidIds.has(entry.party.accountId)) continue;
-      if (entry.competence !== competence) continue;
       if (entry.effectiveOn <= input.today && entry.state === "confirmed") continue; // já está no saldo
+
+      // Previsto de competência anterior à janela não desaparece: ainda não
+      // aconteceu e continua devendo acontecer, então é trazido para o
+      // primeiro mês exibido — o mesmo tratamento das faturas atrasadas.
+      const alvo = first && entry.competence < first ? first : entry.competence;
+      if (alvo !== competence) continue;
+
       if (entry.amount > 0) inflow += entry.amount;
       else outflow -= entry.amount;
     }

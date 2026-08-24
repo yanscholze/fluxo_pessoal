@@ -314,6 +314,16 @@ export async function payInvoice(
   }
 
   const paidOn = input.paidOn ?? todayIn(now);
+
+  // Pagamento é fato consumado. Aceitar data futura fazia a dívida do cartão
+  // cair hoje enquanto o dinheiro só sairia da conta depois — o patrimônio
+  // subia sozinho. Agendar pagamento é outra coisa, e seria um previsto.
+  if (paidOn > todayIn(now)) {
+    throw validationError("O pagamento não pode ter data futura", [
+      { path: "paidOn", message: "Informe a data em que o pagamento aconteceu" },
+    ]);
+  }
+
   const available = accountBalance(entries, account.id, paidOn, account.openingBalance);
   if (available < amount) {
     throw conflict("Saldo insuficiente na conta escolhida", {

@@ -84,6 +84,7 @@ type LedgerEntryRow = {
   effectiveOn: string;
   competence: string;
   state: string;
+  kind: string;
 };
 
 export function toLedgerEntry(row: LedgerEntryRow): LedgerEntry {
@@ -96,6 +97,7 @@ export function toLedgerEntry(row: LedgerEntryRow): LedgerEntry {
     effectiveOn: localDate(row.effectiveOn),
     competence: competence(row.competence),
     state: row.state as LedgerEntry["state"],
+    kind: row.kind as LedgerEntry["kind"],
   };
 }
 
@@ -133,6 +135,7 @@ type TransactionRow = {
   tripId: string | null;
   installmentPlanId: string | null;
   installmentNumber: number | null;
+  recurrenceId: string | null;
   notes: string | null;
 };
 
@@ -157,7 +160,7 @@ export function toTransaction(row: TransactionRow): Transaction {
     tripId: row.tripId,
     installmentPlanId: row.installmentPlanId,
     installmentNumber: row.installmentNumber,
-    recurrenceId: null,
+    recurrenceId: row.recurrenceId,
     notes: row.notes,
   };
 }

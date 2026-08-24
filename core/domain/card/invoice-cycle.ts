@@ -103,10 +103,18 @@ export function dueDateFor(config: CycleConfig, competence: Competence): LocalDa
  * pergunta: "uma compra feita nesta data cai em qual fatura?".
  */
 export function competenceForPurchase(config: CycleConfig, purchaseDate: LocalDate): Competence {
-  const calendarCompetence = competenceOf(purchaseDate);
-  return purchaseDate <= closingDateFor(config, calendarCompetence)
-    ? calendarCompetence
-    : next(calendarCompetence);
+  // A competência certa é a primeira cujo fechamento ainda não passou.
+  //
+  // Um único passo à frente não basta: com fechamento no dia 1 ou 2, o
+  // fechamento efetivo recua para o mês anterior, e a compra do fim do mês
+  // fica depois do fechamento de **duas** competências seguidas. Dar um passo
+  // só jogava a compra numa fatura já fechada.
+  let candidate = competenceOf(purchaseDate);
+  for (let guard = 0; guard < 4; guard += 1) {
+    if (purchaseDate <= closingDateFor(config, candidate)) return candidate;
+    candidate = next(candidate);
+  }
+  return candidate;
 }
 
 /** A fatura que está aberta e recebendo compras na data informada. */
@@ -133,9 +141,16 @@ export function isWithinCycle(window: CycleWindow, date: LocalDate): boolean {
   return date >= window.start && date <= window.end;
 }
 
-/** Quantos dias faltam para o fechamento. Negativo quando já fechou. */
+/**
+ * Quantos dias faltam para o fechamento da fatura **ativa**.
+ *
+ * Ancorar no mês civil devolvia número negativo para uma fatura diferente da
+ * que a tela mostra ao lado: com fechamento dia 13 e hoje dia 20, a fatura
+ * aberta é a do mês seguinte, mas a contagem olhava o fechamento que já
+ * passou e exibia "em −7 dias".
+ */
 export function daysUntilClosing(config: CycleConfig, today: LocalDate): number {
-  return daysBetween(today, closingDateFor(config, competenceOf(today)));
+  return daysBetween(today, closingDateFor(config, activeCompetence(config, today)));
 }
 
 /**

@@ -6,6 +6,7 @@ import { type Cents, cents } from "../../kernel/money.ts";
 import { competence } from "../../time/competence.ts";
 import { localDate } from "../../time/local-date.ts";
 import {
+  CONSUMPTION,
   accountBalance,
   availableLimit,
   cardDebt,
@@ -119,6 +120,56 @@ describe("postagem", () => {
       "2026-08",
       "a perna do cartão pertence à fatura quitada, não ao mês do pagamento",
     );
+  });
+
+  it("as duas pernas da transferência ficam na mesma competência", () => {
+    // A data ajustada pode cair fora do mês civil da competência (recorrência
+    // no dia 1 com ajuste para o dia útil anterior). Se as pernas divergirem,
+    // a transferência aparece como saída num mês e entrada em outro.
+    const entries = postTransaction(
+      lancamento({
+        kind: "transfer",
+        amount: cents(20000),
+        occurredOn: localDate("2026-07-31"),
+        competence: competence("2026-08"),
+        origin: accountParty(CONTA),
+        destination: accountParty(POUPANCA),
+      }),
+    );
+
+    assert.equal(entries[0].competence, "2026-08");
+    assert.equal(entries[1].competence, "2026-08");
+  });
+
+  it("o pagamento de fatura sai no mês em que o dinheiro saiu", () => {
+    const entries = postTransaction(
+      lancamento({
+        kind: "invoice_payment",
+        amount: cents(200000),
+        occurredOn: localDate("2026-09-05"),
+        origin: accountParty(CONTA),
+        destination: cardParty(CARTAO),
+        competence: competence("2026-07"),
+      }),
+    );
+
+    assert.equal(entries[0].competence, "2026-09", "a saída de caixa é de setembro");
+    assert.equal(entries[1].competence, "2026-07", "mas abate a fatura de julho");
+  });
+
+  it("carrega a natureza do fato em cada movimentação", () => {
+    const [despesa] = postTransaction(lancamento({ kind: "expense", amount: cents(100) }));
+    assert.equal(despesa.kind, "expense");
+
+    const transferencia = postTransaction(
+      lancamento({
+        kind: "transfer",
+        amount: cents(100),
+        origin: accountParty(CONTA),
+        destination: accountParty(POUPANCA),
+      }),
+    );
+    assert.ok(transferencia.every((entry) => entry.kind === "transfer"));
   });
 
   it("lançamento em revisão não move dinheiro", () => {
@@ -399,6 +450,27 @@ describe("fluxo do período", () => {
     assert.equal(totais.inflow, 500000);
     assert.equal(totais.outflow, 150000);
     assert.equal(totais.net, 350000);
+  });
+
+  it("não conta transferência como despesa ao recortar por conta", () => {
+    const entries = razao(
+      lancamento({ id: "t1", kind: "expense", amount: cents(30000), occurredOn: localDate("2026-08-10") }),
+      lancamento({
+        id: "t2",
+        kind: "transfer",
+        amount: cents(200000),
+        occurredOn: localDate("2026-08-12"),
+        origin: accountParty(CONTA),
+        destination: accountParty(POUPANCA),
+      }),
+    );
+
+    // Só a conta corrente no recorte: a perna que sobra da transferência
+    // apareceria como saída de R$2.000 que nunca foi gasto.
+    const soConta = { accountIds: new Set([CONTA]) };
+    assert.equal(flow(entries, soConta).outflow, 230000, "sem filtro de natureza, infla");
+    assert.equal(flow(entries, { ...soConta, kinds: CONSUMPTION }).outflow, 30000);
+    assert.equal(flow(entries, { ...soConta, kinds: CONSUMPTION }).net, -30000);
   });
 
   it("recorta por janela de datas", () => {

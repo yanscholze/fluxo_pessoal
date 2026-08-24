@@ -284,6 +284,100 @@ async function main() {
   }
   conferir("recusa transferência para a mesma conta", recusouMesmaConta, true);
 
+  // --- Recorrências --------------------------------------------------------
+  // Criar a regra não pode gravar lançamento: a projeção é derivada dela.
+  const extratoAntesDaRegra = await api("/api/v1/transactions?from=2026-09-01&to=2026-09-30&limit=100");
+
+  const { id: salarioId } = await api("/api/v1/recurrences", {
+    method: "POST",
+    body: {
+      role: "salary",
+      kind: "income",
+      description: "Salário",
+      amount: 520000,
+      scheduleMode: "business_day_of_month",
+      scheduleDay: 5,
+      accountId: contaId,
+      categoryId: salarioCat.id,
+      startsOn: "2026-01-01",
+    },
+  });
+
+  await api("/api/v1/recurrences", {
+    method: "POST",
+    body: {
+      role: "benefit",
+      kind: "income",
+      description: "Vale-alimentação",
+      amount: 3500,
+      amountMode: "per_business_day",
+      scheduleMode: "day_of_month",
+      scheduleDay: 5,
+      accountId: contaId,
+      categoryId: salarioCat.id,
+      startsOn: "2026-01-01",
+    },
+  });
+
+  const extratoDepoisDaRegra = await api("/api/v1/transactions?from=2026-09-01&to=2026-09-30&limit=100");
+  conferir(
+    "criar recorrência não grava lançamento",
+    extratoDepoisDaRegra.length,
+    extratoAntesDaRegra.length,
+  );
+
+  const regras = await api("/api/v1/recurrences");
+  const salario = regras.find((item) => item.id === salarioId);
+  conferir("próxima ocorrência do salário", salario.next.date, "2026-09-08");
+
+  const va = regras.find((item) => item.description === "Vale-alimentação");
+  // Setembro/2026 tem 21 dias úteis: 35,00 × 21 = 735,00.
+  conferir("vale-alimentação varia com os dias úteis", va.next.amountCents, 73500);
+
+  painel = await api("/api/v1/dashboard");
+  const agenda = painel.upcoming.map((item) => item.description);
+  conferir("projeção do salário aparece na agenda", agenda.includes("Salário"), true);
+  conferir("projeção do VA aparece na agenda", agenda.includes("Vale-alimentação"), true);
+
+  // Confirmar torna real, e a projeção precisa sumir para não contar em dobro.
+  const confirmacao = await api("/api/v1/recurrences/confirm", {
+    method: "POST",
+    body: { recurrenceId: salarioId, competence: "2026-09" },
+  });
+  conferir("confirmação usa o valor da regra", confirmacao.amountCents, 520000);
+
+  const repetida = await api("/api/v1/recurrences/confirm", {
+    method: "POST",
+    body: { recurrenceId: salarioId, competence: "2026-09" },
+  });
+  conferir("confirmar de novo é idempotente", repetida.alreadyConfirmed, true);
+
+  const lancamentosDeSetembro = await api("/api/v1/transactions?from=2026-09-01&to=2026-09-30&limit=100");
+  conferir(
+    "o salário confirmado existe uma única vez",
+    lancamentosDeSetembro.filter((item) => item.description === "Salário").length,
+    1,
+  );
+
+  // --- Guardas encontradas pela revisão adversarial ------------------------
+  let recusouFuturo = false;
+  try {
+    await api("/api/v1/invoices/pay", {
+      method: "POST",
+      body: { cardId: cartaoId, competence: "2026-09", accountId: contaId, amount: 1000, paidOn: "2027-01-10" },
+    });
+  } catch {
+    recusouFuturo = true;
+  }
+  // Aceitar data futura derrubava a dívida hoje e só tiraria o dinheiro da
+  // conta depois — o patrimônio subia sozinho.
+  conferir("recusa pagamento de fatura com data futura", recusouFuturo, true);
+
+  // A transferência para a reserva não pode aparecer como saída do mês: ela só
+  // mudou o dinheiro de lugar.
+  const mes = painel.monthFlow;
+  conferir("transferência não infla a saída do mês", mes.expenseCents, 0);
+
   console.log("\n5. Livre para gastar:");
   const livre = painel.freeToSpend;
   console.log(`     saldo hoje          ${real(livre.liquidBalanceCents)}`);

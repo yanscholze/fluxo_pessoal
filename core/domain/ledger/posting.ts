@@ -39,6 +39,7 @@ export function postTransaction(transaction: Transaction): DraftLedgerEntry[] {
     effectiveOn: transaction.occurredOn,
     competence: transaction.competence,
     state: transaction.state,
+    kind: transaction.kind,
   } as const;
 
   switch (transaction.kind) {
@@ -48,19 +49,35 @@ export function postTransaction(transaction: Transaction): DraftLedgerEntry[] {
     case "income":
       return [{ ...base, party: transaction.origin, amount: transaction.amount }];
 
-    case "transfer":
-    case "invoice_payment": {
+    case "transfer": {
+      // As duas pernas vivem na **mesma** competência, senão a transferência
+      // deixa de se anular: apareceria como saída num mês e entrada em outro,
+      // inflando despesa de um e receita do outro.
       const destination = transaction.destination as Party;
       return [
         { ...base, party: transaction.origin, amount: negate(transaction.amount) },
+        { ...base, party: destination, amount: transaction.amount },
+      ];
+    }
+
+    case "invoice_payment": {
+      const destination = transaction.destination as Party;
+      return [
         {
+          ...base,
+          party: transaction.origin,
+          amount: negate(transaction.amount),
+          // A saída de caixa pertence ao mês em que o dinheiro saiu da conta.
+          // Herdar a competência da fatura tirava o pagamento do mês em que
+          // ele realmente aconteceu.
+          competence: competenceOf(transaction.occurredOn),
+        },
+        {
+          // Já a perna do cartão pertence à fatura que está sendo quitada, que
+          // pode ser de uma competência anterior.
           ...base,
           party: destination,
           amount: transaction.amount,
-          // A perna do cartão pertence à competência da fatura que está sendo
-          // quitada, que pode ser anterior à data do pagamento.
-          competence:
-            transaction.kind === "invoice_payment" ? transaction.competence : competenceOf(transaction.occurredOn),
         },
       ];
     }

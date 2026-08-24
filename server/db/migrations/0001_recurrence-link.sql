@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `recurrence_id` text;

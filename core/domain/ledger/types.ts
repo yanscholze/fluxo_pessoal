@@ -112,6 +112,14 @@ export type LedgerEntry = {
   readonly competence: Competence;
   /** Espelha a situação do lançamento; `review` nunca gera movimentação. */
   readonly state: Exclude<TransactionState, "review">;
+  /**
+   * Natureza do fato que originou a movimentação.
+   *
+   * Sem isto, uma consulta de "quanto gastei" não consegue distinguir a perna
+   * de saída de uma transferência de uma despesa de verdade, e passa a contar
+   * como gasto o dinheiro que só mudou de conta.
+   */
+  readonly kind: TransactionKind;
 };
 
 /** Movimentação ainda sem identidade, como sai das regras de postagem. */

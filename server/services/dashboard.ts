@@ -10,12 +10,14 @@
 import { liquidAccounts } from "../../core/domain/account/types.ts";
 import { activeCompetence, daysUntilClosing, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import {
+  CONSUMPTION,
   accountBalance,
   availableLimit,
   flow,
   invoiceTotals,
   overdueCompetences,
 } from "../../core/domain/ledger/balance.ts";
+import { projectRecurrences } from "../../core/domain/recurrence/projection.ts";
 import type { LedgerEntry } from "../../core/domain/ledger/types.ts";
 import {
   computeFinancialPosition,
@@ -39,6 +41,7 @@ import {
   loadLedger,
   transactionIndex,
 } from "../repositories/ledger.ts";
+import { confirmedOccurrenceKeys, listRecurrences } from "../repositories/recurrences.ts";
 
 export type AccountSummary = {
   readonly id: string;
@@ -145,33 +148,68 @@ const UPCOMING_LIMIT = 8;
 const CATEGORY_LIMIT = 6;
 const CASHFLOW_MONTHS = 6;
 const UPCOMING_INVOICES = 3;
+/** Horizonte de projeção das recorrências. Cobre o gráfico de fluxo futuro. */
+const PROJECTION_MONTHS = 12;
 
 export async function buildDashboard(userId: string, now: Date = new Date()): Promise<Dashboard> {
   const today = todayIn(now);
 
-  const [accounts, cards, categories, entries, excludedCategoryIds, index, recent] = await Promise.all([
-    listAccounts(userId),
-    listCards(userId),
-    listCategories(userId),
-    loadLedger(userId),
-    freeToSpendExclusions(userId),
-    transactionIndex(userId),
-    // "Últimos" é o que já aconteceu. Sem o corte por data, as parcelas
-    // futuras — que têm data lá na frente — ocupavam a lista inteira.
-    listTransactions(userId, { limit: 10, to: today, states: ["confirmed"] }),
-  ]);
+  const [accounts, cards, categories, storedEntries, excludedCategoryIds, index, recent, rules, confirmedKeys] =
+    await Promise.all([
+      listAccounts(userId),
+      listCards(userId),
+      listCategories(userId),
+      loadLedger(userId),
+      freeToSpendExclusions(userId),
+      transactionIndex(userId),
+      // "Últimos" é o que já aconteceu. Sem o corte por data, as parcelas
+      // futuras — que têm data lá na frente — ocupavam a lista inteira.
+      listTransactions(userId, { limit: 10, to: today, states: ["confirmed"] }),
+      listRecurrences(userId, true),
+      confirmedOccurrenceKeys(userId),
+    ]);
+
+  const competence = competenceOf(today);
+
+  /**
+   * As recorrências entram como lançamentos virtuais, calculados agora a
+   * partir da regra. Nada é gravado — a versão anterior inseria treze meses de
+   * previsões no banco como efeito colateral de uma leitura, e editar a regra
+   * deixava as previsões velhas para trás.
+   */
+  const cycleByCard = new Map(cards.map((card) => [card.id, card]));
+  const projection = projectRecurrences({
+    rules,
+    from: shift(competence, -1),
+    to: shift(competence, PROJECTION_MONTHS),
+    confirmedKeys,
+    cycleOf: (cardId) => cycleByCard.get(cardId) ?? null,
+  });
+
+  const entries = [...storedEntries, ...projection.entries];
+  const categoryByTransaction = new Map([...categoriesFrom(index), ...projection.categoryByTransaction]);
+
+  // O índice precisa cobrir também os virtuais: sem isso a agenda mostraria
+  // "Lançamento previsto" no lugar de "Salário".
+  const meta = new Map<string, TransactionMeta>(index);
+  for (const transaction of projection.transactions) {
+    meta.set(transaction.id, {
+      categoryId: transaction.categoryId,
+      description: transaction.description,
+      kind: transaction.kind,
+    });
+  }
 
   const positionInput = {
     accounts,
     cards,
     entries,
-    categoryByTransaction: categoriesFrom(index),
+    categoryByTransaction,
     today,
     policy: { excludedCategoryIds },
   };
 
   const position = computeFinancialPosition(positionInput);
-  const competence = competenceOf(today);
 
   return {
     today,
@@ -196,8 +234,8 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     monthFlow: monthFlow(entries, accounts, competence),
     accounts: summarizeAccounts(accounts, entries, today),
     cards: cards.map((card) => summarizeCard(card, entries, today)),
-    upcoming: upcomingCommitments(entries, index, today),
-    categorySpend: spendByCategory(entries, index, categories, competence),
+    upcoming: upcomingCommitments(entries, meta, today),
+    categorySpend: spendByCategory(entries, meta, categories, competence),
     cashflow: projectCashflow({
       ...positionInput,
       competences: series(shift(competence, 1), CASHFLOW_MONTHS),
@@ -284,7 +322,11 @@ function monthFlow(
   competence: Competence,
 ): Dashboard["monthFlow"] {
   const accountIds = new Set(liquidAccounts(accounts).map((account) => account.id));
-  const totals = flow(entries, { accountIds, competence, states: ["confirmed"] });
+  // `CONSUMPTION` tira transferência e pagamento de fatura da conta: eles
+  // movem dinheiro entre lugares que já são do usuário. Como o recorte é só
+  // das contas de uso corrente, a perna que fica de fora apareceria como
+  // despesa que nunca existiu.
+  const totals = flow(entries, { accountIds, competence, states: ["confirmed"], kinds: CONSUMPTION });
   return { incomeCents: totals.inflow, expenseCents: totals.outflow, netCents: totals.net };
 }
 

@@ -8,6 +8,20 @@
       "when": 1787526375638,
       "tag": "0000_inicial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787544539113,
+      "tag": "0001_recurrence-link",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787585551914,
+      "tag": "0002_ledger-kind",
+      "breakpoints": true
     }
   ]
 }

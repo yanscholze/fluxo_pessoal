@@ -10,7 +10,7 @@
 import { type Cents, ZERO, clampToZero, negate, sum } from "../../kernel/money.ts";
 import type { Competence } from "../../time/competence.ts";
 import type { LocalDate } from "../../time/local-date.ts";
-import { type LedgerEntry, type Party, isSameParty } from "./types.ts";
+import { type LedgerEntry, type Party, type TransactionKind, isSameParty } from "./types.ts";
 
 export type EntryState = LedgerEntry["state"];
 
@@ -25,7 +25,12 @@ export type EntryFilter = {
   /** Inclui movimentações a partir desta data, inclusive. */
   readonly from?: LocalDate;
   readonly competence?: Competence;
+  /** Natureza do fato de origem. Use para separar consumo de remanejamento. */
+  readonly kinds?: readonly TransactionKind[];
 };
+
+/** Movimentações que representam consumo — o que conta como receita e despesa. */
+export const CONSUMPTION: readonly TransactionKind[] = ["expense", "income"];
 
 /** Apenas o que já aconteceu. */
 const CONFIRMED: readonly EntryState[] = ["confirmed"];
@@ -42,6 +47,7 @@ export function matches(entry: LedgerEntry, filter: EntryFilter): boolean {
   if (filter.upTo && entry.effectiveOn > filter.upTo) return false;
   if (filter.from && entry.effectiveOn < filter.from) return false;
   if (filter.competence && entry.competence !== filter.competence) return false;
+  if (filter.kinds && !filter.kinds.includes(entry.kind)) return false;
   return true;
 }
 
@@ -224,9 +230,10 @@ export type FlowTotals = {
 /**
  * Entradas e saídas de um recorte.
  *
- * Transferência entre contas próprias se anula naturalmente: as duas pernas
- * entram, uma positiva e uma negativa, e o líquido é zero. Por isso ela nunca
- * infla receita nem despesa.
+ * Transferência entre contas próprias só se anula quando **as duas pernas**
+ * estão no recorte. Ao filtrar por um subconjunto de contas — o caso normal do
+ * painel, que olha só as contas de uso corrente — a perna que sobra vira uma
+ * saída que nunca foi gasto. Para medir consumo, passe `kinds: CONSUMPTION`.
  */
 export function flow(entries: readonly LedgerEntry[], filter: EntryFilter): FlowTotals {
   let inflow = 0;

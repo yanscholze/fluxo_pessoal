@@ -1,0 +1,1 @@
+ALTER TABLE `ledger_entries` ADD `kind` text DEFAULT 'expense' NOT NULL;

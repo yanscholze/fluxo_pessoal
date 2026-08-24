@@ -140,10 +140,52 @@ describe("ciclo de fatura", () => {
     });
   });
 
-  it("conta os dias até o fechamento", () => {
+  it("conta os dias até o fechamento da fatura aberta", () => {
     assert.equal(daysUntilClosing(fecha13, localDate("2026-08-11")), 2);
     assert.equal(daysUntilClosing(fecha13, localDate("2026-08-13")), 0);
-    assert.equal(daysUntilClosing(fecha13, localDate("2026-08-14")), -1);
+    // Passado o fechamento, a fatura aberta é a de setembro, que fecha em
+    // 11/09 (13/09 é domingo) — não faz sentido contar dias negativos para
+    // uma fatura que a tela nem está mostrando.
+    assert.equal(daysUntilClosing(fecha13, localDate("2026-08-14")), 28);
+    assert.equal(daysUntilClosing(fecha13, localDate("2026-08-20")), 22);
+  });
+
+  describe("fechamento que recua para o mês anterior", () => {
+    // Fechamento no dia 1: sempre que 1º cai em fim de semana ou feriado, o
+    // fechamento efetivo cai no mês anterior.
+    const fecha1: CycleConfig = { closingDay: 1, dueDay: 10, dueAdjustment: "next" };
+
+    it("não joga a compra numa fatura já fechada", () => {
+      // closingDateFor(2026-01) = 31/12/2025 (1º de janeiro é feriado).
+      // closingDateFor(2026-02) = 30/01/2026 (1º de fevereiro é domingo).
+      // Uma compra em 31/01 está depois dos dois: só cabe em março.
+      assert.equal(closingDateFor(fecha1, competence("2026-01")), "2025-12-31");
+      assert.equal(closingDateFor(fecha1, competence("2026-02")), "2026-01-30");
+      assert.equal(competenceForPurchase(fecha1, localDate("2026-01-31")), "2026-03");
+    });
+
+    it("a competência escolhida sempre tem fechamento no futuro da compra", () => {
+      for (const dia of ["2026-01-29", "2026-01-30", "2026-01-31", "2026-02-01", "2026-02-02"]) {
+        const compra = localDate(dia);
+        const escolhida = competenceForPurchase(fecha1, compra);
+        assert.ok(
+          compra <= closingDateFor(fecha1, escolhida),
+          `${dia} caiu em ${escolhida}, que fecha em ${closingDateFor(fecha1, escolhida)}`,
+        );
+      }
+    });
+
+    it("a janela do ciclo ativo contém a data de hoje", () => {
+      const fecha2: CycleConfig = { closingDay: 2, dueDay: 10, dueAdjustment: "next" };
+      for (const dia of ["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"]) {
+        const hoje = localDate(dia);
+        const janela = cycleWindowFor(fecha2, activeCompetence(fecha2, hoje));
+        assert.ok(
+          isWithinCycle(janela, hoje),
+          `${dia} ficou fora da janela ${janela.start}..${janela.end}`,
+        );
+      }
+    });
   });
 
   it("monta a agenda das próximas faturas", () => {
