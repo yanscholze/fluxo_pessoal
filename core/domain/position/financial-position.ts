@@ -300,8 +300,12 @@ function foldBeforeWindow(
  *
  * Só entram faturas com saldo devedor: o que já foi pago saiu do saldo, e
  * projetá-lo de novo cobraria a mesma fatura duas vezes.
+ *
+ * Exportado porque o planejamento precisa da mesma resposta: uma assinatura
+ * cobrada no cartão é compromisso do mês em que a fatura vence, e calculá-la
+ * de novo lá daria dois números para a mesma pergunta.
  */
-function projectedInvoicePayments(input: PositionInput): Map<Competence, number> {
+export function projectedInvoicePayments(input: PositionInput): Map<Competence, number> {
   const outflows = new Map<Competence, number>();
 
   for (const card of input.cards) {
