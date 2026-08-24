@@ -76,6 +76,35 @@ export const recurrences = sqliteTable(
 );
 
 /**
+ * Regras de categorização por estabelecimento.
+ *
+ * Aprendidas do uso: quando o usuário categoriza uma linha importada, o texto
+ * do estabelecimento vira regra e as próximas importações já chegam
+ * categorizadas. É o que faz a revisão ficar mais rápida a cada arquivo.
+ */
+export const categorizationRules = sqliteTable(
+  "categorization_rules",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Texto normalizado do estabelecimento, sem acento e em minúscula. */
+    matchText: text("match_text").notNull(),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    /** Quantas vezes a regra já acertou. Serve para ordenar e para limpar. */
+    hitCount: integer("hit_count").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("categorization_rules_user_match_unq").on(table.userId, table.matchText),
+    index("categorization_rules_user_idx").on(table.userId),
+  ],
+);
+
+/**
  * Histórico de execução.
  *
  * Uma linha por competência processada, com o lançamento que ela gerou. É o

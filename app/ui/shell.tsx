@@ -23,6 +23,7 @@ export const NAV: readonly NavItem[] = [
   { href: "/cartoes", label: "Cartões" },
   { href: "/parcelamentos", label: "Parcelamentos" },
   { href: "/planejamento", label: "Planejamento" },
+  { href: "/importar", label: "Importar" },
 ];
 
 export function Shell({ userName, children }: { userName: string; children: ReactNode }) {

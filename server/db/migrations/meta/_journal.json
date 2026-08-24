@@ -22,6 +22,13 @@
       "when": 1787585551914,
       "tag": "0002_ledger-kind",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787603145353,
+      "tag": "0003_import-pipeline",
+      "breakpoints": true
     }
   ]
 }
