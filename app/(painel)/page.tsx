@@ -1,23 +1,23 @@
 import { redirect } from "next/navigation";
 
-import { buildDashboard } from "../server/services/dashboard.ts";
-import { currentUser } from "./auth-context.ts";
-import { AccountsPanel } from "./ui/dashboard/accounts-panel.tsx";
-import { CardsPanel } from "./ui/dashboard/cards-panel.tsx";
-import { CashflowPanel } from "./ui/dashboard/cashflow-panel.tsx";
-import { CategoryPanel } from "./ui/dashboard/category-panel.tsx";
-import { FreeToSpend } from "./ui/dashboard/free-to-spend.tsx";
-import { PositionStrip } from "./ui/dashboard/position-strip.tsx";
-import { RecentPanel } from "./ui/dashboard/recent-panel.tsx";
-import { UpcomingPanel } from "./ui/dashboard/upcoming-panel.tsx";
-import { competenceLong } from "./ui/format.ts";
+import { buildDashboard } from "../../server/services/dashboard.ts";
+import { currentUser } from "../auth-context.ts";
+import { AccountsPanel } from "../ui/dashboard/accounts-panel.tsx";
+import { CardsPanel } from "../ui/dashboard/cards-panel.tsx";
+import { CashflowPanel } from "../ui/dashboard/cashflow-panel.tsx";
+import { CategoryPanel } from "../ui/dashboard/category-panel.tsx";
+import { FreeToSpend } from "../ui/dashboard/free-to-spend.tsx";
+import { PositionStrip } from "../ui/dashboard/position-strip.tsx";
+import { RecentPanel } from "../ui/dashboard/recent-panel.tsx";
+import { UpcomingPanel } from "../ui/dashboard/upcoming-panel.tsx";
+import { competenceLong } from "../ui/format.ts";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
 
-function greeting(hour: number): string {
-  if (hour < 12) return "Bom dia";
-  if (hour < 18) return "Boa tarde";
+function saudacao(hora: number): string {
+  if (hora < 12) return "Bom dia";
+  if (hora < 18) return "Boa tarde";
   return "Boa noite";
 }
 
@@ -26,8 +26,8 @@ export default async function VisaoGeral() {
   if (!user) redirect("/entrar");
 
   const dashboard = await buildDashboard(user.id);
-  const firstName = user.displayName.trim().split(/\s+/)[0];
-  const hour = Number(
+  const primeiroNome = user.displayName.trim().split(/\s+/)[0];
+  const hora = Number(
     new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(
       new Date(),
     ),
@@ -38,7 +38,7 @@ export default async function VisaoGeral() {
       <header className="mb-8">
         <p className="text-label uppercase text-ink-subtle">{competenceLong(dashboard.competence)}</p>
         <h1 className="mt-1 text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">
-          {greeting(hour)}, {firstName}
+          {saudacao(hora)}, {primeiroNome}
         </h1>
       </header>
 

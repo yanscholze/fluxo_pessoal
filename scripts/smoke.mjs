@@ -201,6 +201,89 @@ async function main() {
   }
   conferir("recusa lançamento sem conta nem cartão", recusouAdivinhar, true);
 
+  // --- Formato que o formulário da web envia -------------------------------
+  // O campo de valor é texto digitado em pt-BR, não centavos.
+  const digitado = await api("/api/v1/transactions", {
+    method: "POST",
+    body: {
+      kind: "expense",
+      description: "Cadeira de escritório",
+      amount: "1.899,90",
+      occurredOn: "2026-08-12",
+      cardId: cartaoId,
+      categoryId: alimentacao.id,
+      installmentCount: 6,
+    },
+  });
+  conferir("aceita valor digitado em pt-BR e parcela", digitado.ids.length, 6);
+
+  const extrato = await api("/api/v1/transactions?from=2026-08-01&to=2026-08-31&limit=100");
+  const cadeira = extrato.find((item) => item.description === "Cadeira de escritório");
+  // 189990 / 6 = 31665, exato.
+  conferir("parcela com valor exato", cadeira.amountCents, 31665);
+  conferir("número da parcela é inteiro", cadeira.installmentNumber, 1);
+
+  const parcelasCadeira = (await api("/api/v1/transactions?from=2026-08-01&to=2027-02-28&limit=200")).filter(
+    (item) => item.description === "Cadeira de escritório",
+  );
+  conferir(
+    "as 6 parcelas somam exatamente a compra",
+    parcelasCadeira.reduce((soma, item) => soma + item.amountCents, 0),
+    189990,
+  );
+
+  // --- Transferência -------------------------------------------------------
+  const { id: poupancaId } = await api("/api/v1/accounts", {
+    method: "POST",
+    body: { name: "Reserva", kind: "investment", openingBalance: 0, openedOn: "2026-01-01" },
+  });
+
+  // Patrimônio antes: uma transferência move dinheiro de lugar, não cria nem
+  // destrói — comparar antes e depois é o único jeito honesto de provar isso.
+  const antes = await api("/api/v1/dashboard");
+  const saldoAntes = antes.position.currentBalanceCents;
+  const patrimonioAntes = antes.position.netWorthCents;
+
+  await api("/api/v1/transactions", {
+    method: "POST",
+    body: {
+      kind: "transfer",
+      description: "Guardar para a reserva",
+      amount: 100000,
+      occurredOn: "2026-08-21",
+      accountId: contaId,
+      destinationAccountId: poupancaId,
+    },
+  });
+
+  painel = await api("/api/v1/dashboard");
+  conferir("transferência saiu da origem", painel.position.currentBalanceCents, saldoAntes - 100000);
+  conferir("transferência entrou no destino como investimento", painel.position.investmentsCents, 100000);
+  conferir("transferência não muda o patrimônio", painel.position.netWorthCents, patrimonioAntes);
+  conferir(
+    "transferência não vira despesa do mês",
+    painel.categorySpend.some((item) => item.name === "Sem categoria"),
+    false,
+  );
+
+  let recusouMesmaConta = false;
+  try {
+    await api("/api/v1/transactions", {
+      method: "POST",
+      body: {
+        kind: "transfer",
+        description: "Para si mesma",
+        amount: 1000,
+        occurredOn: "2026-08-21",
+        accountId: contaId,
+        destinationAccountId: contaId,
+      },
+    });
+  } catch {
+    recusouMesmaConta = true;
+  }
+  conferir("recusa transferência para a mesma conta", recusouMesmaConta, true);
+
   console.log("\n5. Livre para gastar:");
   const livre = painel.freeToSpend;
   console.log(`     saldo hoje          ${real(livre.liquidBalanceCents)}`);
