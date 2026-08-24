@@ -43,3 +43,10 @@ next-env.d.ts
 /.sites-runtime/
 /outputs/
 /work/
+
+# chaves e segredos — nunca versionar
+*.keystore
+*.jks
+*.p12
+*.pfx
+google-services.json
