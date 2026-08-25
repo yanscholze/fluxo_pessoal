@@ -26,7 +26,9 @@
     "test:installments": "node --experimental-strip-types --test tests/installments.test.ts",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
