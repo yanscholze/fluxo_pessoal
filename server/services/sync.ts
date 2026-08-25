@@ -19,10 +19,10 @@ import {
   assertValidRequest,
   decide,
 } from "../../core/domain/sync/protocol.ts";
-import { isDomainError } from "../../core/kernel/errors.ts";
+import { isDomainError, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
 import { cents, parseMoney } from "../../core/kernel/money.ts";
-import { competenceOf } from "../../core/time/competence.ts";
+import { competenceOf, parseCompetence } from "../../core/time/competence.ts";
 import { parseLocalDate, todayIn } from "../../core/time/local-date.ts";
 import { and, asc, eq, gt, gte, or, sql } from "drizzle-orm";
 
@@ -203,7 +203,24 @@ async function writeTransaction(
   const origem = await resolveParty(userId, dados);
 
   const card = origem.kind === "card" ? await findCard(userId, origem.cardId) : null;
-  const competence = card ? competenceForPurchase(card, occurredOn) : competenceOf(occurredOn);
+  const destino = resolveDestination(kind, dados);
+
+  // Pagamento de fatura precisa dizer **qual** fatura: a competência do
+  // pagamento é a da fatura quitada, que costuma ser anterior ao mês em que o
+  // dinheiro sai. Derivá-la da data creditaria a fatura errada em silêncio.
+  const competenciaDeclarada = parseCompetence(dados.competence);
+  if (kind === "invoice_payment" && !competenciaDeclarada) {
+    throw validationError("O pagamento de fatura precisa informar a competência", [
+      { path: "competence", message: "Informe a fatura que está sendo paga" },
+    ]);
+  }
+
+  const competence =
+    competenciaDeclarada && kind === "invoice_payment"
+      ? competenciaDeclarada
+      : card
+        ? competenceForPurchase(card, occurredOn)
+        : competenceOf(occurredOn);
 
   if (card) {
     await ensureInvoices({ userId, cardId: card.id, cycle: card, competences: [competence] });
@@ -221,10 +238,7 @@ async function writeTransaction(
     currency: "BRL",
     occurredOn,
     origin: origem,
-    destination:
-      kind === "transfer" && typeof dados.destinationAccountId === "string"
-        ? accountParty(dados.destinationAccountId)
-        : null,
+    destination: destino,
     competence,
     tripId: typeof dados.tripId === "string" ? dados.tripId : null,
     installmentPlanId: null,
@@ -238,6 +252,23 @@ async function writeTransaction(
   await saveTransactionBatch([
     { transaction, options: { deviceId, mutationId: mutation.mutationId, version, reward } },
   ]);
+}
+
+/**
+ * Destino do lançamento, quando o tipo tem um.
+ *
+ * Transferência vai para conta; pagamento de fatura vai para cartão. Tratar os
+ * dois como "conta de destino" faria o pagamento perder o cartão quitado e o
+ * lançamento deixaria de ser postável.
+ */
+function resolveDestination(kind: Transaction["kind"], dados: Record<string, unknown>): Party | null {
+  if (kind === "transfer" && typeof dados.destinationAccountId === "string") {
+    return accountParty(dados.destinationAccountId);
+  }
+  if (kind === "invoice_payment" && typeof dados.destinationCardId === "string") {
+    return cardParty(dados.destinationCardId);
+  }
+  return null;
 }
 
 function pickKind(value: unknown): Transaction["kind"] {
@@ -354,6 +385,10 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       name: conta.name,
       kind: conta.kind,
       currency: conta.currency,
+      // Sem o saldo inicial o aparelho não tem como derivar saldo offline: o
+      // razão é "início + movimentações", e mandar só as movimentações daria
+      // um número diferente do que o site mostra.
+      openingBalanceCents: conta.openingBalanceCents,
       color: conta.color,
       archivedAt: conta.archivedAt,
     })),
@@ -371,6 +406,9 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       closingDay: cartao.closingDay,
       dueDay: cartao.dueDay,
       dueAdjustment: cartao.dueAdjustment,
+      // Limite disponível é uma das telas principais do aplicativo, e sem o
+      // teto cadastrado não há como calculá-lo offline.
+      limitCents: cartao.limitCents,
       color: cartao.color,
       archivedAt: cartao.archivedAt,
     })),
@@ -391,6 +429,9 @@ function serialize(linha: typeof transactions.$inferSelect): Record<string, unkn
     accountId: linha.originAccountId,
     cardId: linha.originCardId,
     destinationAccountId: linha.destinationAccountId,
+    // Sem isto, um pagamento de fatura chega ao aparelho sem destino e não
+    // pode ser postado no razão: `postTransaction` exige o cartão quitado.
+    destinationCardId: linha.destinationCardId,
     tripId: linha.tripId,
     installmentNumber: linha.installmentNumber,
     notes: linha.notes,

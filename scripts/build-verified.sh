@@ -25,7 +25,7 @@ if [[ ! -x "${tsc}" ]]; then
 fi
 
 echo "Running TypeScript validation..."
-"${tsc}" --project "${SITES_PROJECT_ROOT}/tsconfig.ui.json"
+"${tsc}" --project "${SITES_PROJECT_ROOT}/tsconfig.json"
 
 echo "Running bounded vinext build..."
 timeout \

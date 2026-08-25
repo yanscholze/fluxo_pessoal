@@ -35,14 +35,19 @@ async function api(caminho, { method = "GET", body } = {}) {
   return corpo?.data;
 }
 
-function conferir(rotulo, obtido, esperado) {
+function conferir(rotulo, obtido, esperado, detalhe) {
   verificacoes += 1;
   if (obtido === esperado) {
     console.log(`  ok  ${rotulo}: ${obtido}`);
     return;
   }
   falhas += 1;
-  console.error(`  FALHA  ${rotulo}: esperado ${esperado}, obtido ${obtido}`);
+  // O detalhe sai só na falha: "obtido rejected" sem o motivo obriga quem lê a
+  // reproduzir a chamada à mão para descobrir o que o servidor recusou.
+  console.error(
+    `  FALHA  ${rotulo}: esperado ${esperado}, obtido ${obtido}` +
+      (detalhe === undefined ? "" : ` — ${typeof detalhe === "string" ? detalhe : JSON.stringify(detalhe)}`),
+  );
 }
 
 function real(centavos) {
@@ -559,12 +564,18 @@ async function main() {
   conferir("primeira sincronização traz o catálogo", primeira.catalog?.accounts?.length > 0, true);
   conferir("primeira sincronização traz os lançamentos", primeira.changes.length > 0, true);
 
-  const idDeTeste = "01M0VSMOKE0000000000000002";
+  // Identificadores próprios desta execução. Fixos, eles pertenceriam ao
+  // usuário da execução anterior no mesmo banco — e o servidor recusaria a
+  // gravação, corretamente, por identificador de outro dono.
+  const marca = Date.now().toString(36).toUpperCase().padStart(9, "0");
+  const idDeSincronizacao = (sufixo) => `01M0V${marca}SMOKE${sufixo.padStart(6, "0")}`;
+
+  const idDeTeste = idDeSincronizacao("2");
   const criacao = await sincronizar({
     cursor: primeira.cursor,
     mutations: [
       {
-        mutationId: "01M0VSMOKE0000000000000001",
+        mutationId: idDeSincronizacao("1"),
         entity: "transaction",
         entityId: idDeTeste,
         operation: "upsert",
@@ -580,14 +591,14 @@ async function main() {
       },
     ],
   });
-  conferir("aparelho cria lançamento offline", criacao.results[0].status, "applied");
+  conferir("aparelho cria lançamento offline", criacao.results[0].status, "applied", criacao.results[0].message);
 
   // Resposta perdida no caminho: o aparelho reenvia e não pode gravar duas vezes.
   const reenvioSync = await sincronizar({
     cursor: primeira.cursor,
     mutations: [
       {
-        mutationId: "01M0VSMOKE0000000000000001",
+        mutationId: idDeSincronizacao("1"),
         entity: "transaction",
         entityId: idDeTeste,
         operation: "upsert",
@@ -603,7 +614,7 @@ async function main() {
     cursor: primeira.cursor,
     mutations: [
       {
-        mutationId: "01M0VSMOKE0000000000000003",
+        mutationId: idDeSincronizacao("3"),
         entity: "transaction",
         entityId: idDeTeste,
         operation: "upsert",
@@ -619,9 +630,9 @@ async function main() {
     cursor: primeira.cursor,
     mutations: [
       {
-        mutationId: "01M0VSMOKE0000000000000004",
+        mutationId: idDeSincronizacao("4"),
         entity: "transaction",
-        entityId: "01M0VSMOKE0000000000000099",
+        entityId: idDeSincronizacao("99"),
         operation: "delete",
         baseVersion: 0,
       },
