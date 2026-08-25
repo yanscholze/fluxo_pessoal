@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Button } from "../../ui/controls.tsx";
+import { Plus } from "../../ui/icons.tsx";
+
 const CLASSES = [
   ["fixed_income", "Renda fixa"],
   ["variable_income", "Renda variável"],
@@ -18,7 +21,14 @@ const LIQUIDEZ = [
   ["maturity", "No vencimento"],
 ] as const;
 
-export function InvestmentForm({ accounts }: { accounts: readonly { id: string; name: string }[] }) {
+export function InvestmentForm({
+  accounts,
+  label = "Novo aporte",
+}: {
+  accounts: readonly { id: string; name: string }[];
+  /** O texto muda conforme o contexto: no vazio, ele convida a começar. */
+  label?: string;
+}) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -64,13 +74,9 @@ export function InvestmentForm({ accounts }: { accounts: readonly { id: string; 
 
   if (!aberto) {
     return (
-      <button
-        type="button"
-        onClick={() => setAberto(true)}
-        className="h-10 rounded-[--radius-control] bg-accent px-4 text-[0.875rem] font-semibold text-accent-ink"
-      >
-        Novo investimento
-      </button>
+      <Button variant="primary" icon={Plus} onClick={() => setAberto(true)}>
+        {label}
+      </Button>
     );
   }
 
@@ -80,14 +86,14 @@ export function InvestmentForm({ accounts }: { accounts: readonly { id: string; 
         role="dialog"
         aria-modal="true"
         aria-label="Novo investimento"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-[--shadow-raised] sm:rounded-[--radius-card]"
+        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-float sm:rounded-lg"
       >
         <header className="mb-4 flex items-center justify-between">
-          <h2 className="text-[1.0625rem] font-semibold text-ink">Novo investimento</h2>
+          <h2 className="text-title font-semibold text-ink">Novo investimento</h2>
           <button
             type="button"
             onClick={() => setAberto(false)}
-            className="rounded-[--radius-control] px-2 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+            className="rounded-md px-2 py-1 text-body-sm text-ink-muted hover:bg-surface-sunken"
           >
             Fechar
           </button>
@@ -154,7 +160,7 @@ export function InvestmentForm({ accounts }: { accounts: readonly { id: string; 
           </Campo>
 
           {erro ? (
-            <p role="alert" className="rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+            <p role="alert" className="rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
               {erro}
             </p>
           ) : null}
@@ -162,7 +168,7 @@ export function InvestmentForm({ accounts }: { accounts: readonly { id: string; 
           <button
             type="submit"
             disabled={enviando}
-            className="h-11 w-full rounded-[--radius-control] bg-accent text-[0.875rem] font-semibold text-accent-ink disabled:opacity-60"
+            className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45 w-full"
           >
             {enviando ? "Cadastrando…" : "Cadastrar"}
           </button>
@@ -173,7 +179,7 @@ export function InvestmentForm({ accounts }: { accounts: readonly { id: string; 
 }
 
 function entrada(erro?: string): string {
-  return `h-10 w-full rounded-[--radius-control] border bg-surface px-3 text-[0.875rem] text-ink outline-none ${
+  return `h-10 w-full rounded-md border bg-surface px-3 text-body text-ink outline-none ${
     erro ? "border-negative" : "border-line focus:border-accent"
   }`;
 }
@@ -191,10 +197,10 @@ function Campo({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">{rotulo}</span>
+      <span className="mb-1.5 block text-body-sm font-medium text-ink">{rotulo}</span>
       {children}
-      {erro ? <span className="mt-1 block text-[0.75rem] text-negative">{erro}</span> : null}
-      {!erro && dica ? <span className="mt-1 block text-[0.75rem] text-ink-subtle">{dica}</span> : null}
+      {erro ? <span className="mt-1 block text-caption text-negative">{erro}</span> : null}
+      {!erro && dica ? <span className="mt-1 block text-caption text-ink-subtle">{dica}</span> : null}
     </label>
   );
 }

@@ -34,7 +34,7 @@ export function BudgetForm({ categories }: { categories: readonly { id: string; 
   }
 
   if (!categories.length) {
-    return <p className="text-[0.8125rem] text-ink-subtle">Cadastre uma categoria de saída primeiro.</p>;
+    return <p className="text-body-sm text-ink-subtle">Cadastre uma categoria de saída primeiro.</p>;
   }
 
   if (!aberto) {
@@ -42,7 +42,7 @@ export function BudgetForm({ categories }: { categories: readonly { id: string; 
       <button
         type="button"
         onClick={() => setAberto(true)}
-        className="h-10 rounded-[--radius-control] bg-accent px-4 text-[0.875rem] font-semibold text-accent-ink"
+        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
       >
         Definir orçamento
       </button>
@@ -52,10 +52,10 @@ export function BudgetForm({ categories }: { categories: readonly { id: string; 
   return (
     <form
       onSubmit={enviar}
-      className="flex w-full flex-wrap items-end gap-2 rounded-[--radius-card] border border-line bg-surface p-4 sm:w-auto"
+      className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-line bg-surface p-4 sm:w-auto"
     >
       <label className="block">
-        <span className="mb-1.5 block text-[0.75rem] font-medium text-ink">Categoria</span>
+        <span className="mb-1.5 block text-caption font-medium text-ink">Categoria</span>
         <select name="categoryId" required className={entrada}>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
@@ -66,29 +66,29 @@ export function BudgetForm({ categories }: { categories: readonly { id: string; 
       </label>
 
       <label className="block">
-        <span className="mb-1.5 block text-[0.75rem] font-medium text-ink">Teto mensal</span>
+        <span className="mb-1.5 block text-caption font-medium text-ink">Teto mensal</span>
         <input name="amount" required inputMode="decimal" placeholder="0,00" className={`${entrada} tabular w-32`} />
       </label>
 
       <button
         type="submit"
         disabled={enviando}
-        className="h-9 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-60"
+        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
       >
         {enviando ? "Salvando…" : "Salvar"}
       </button>
       <button
         type="button"
         onClick={() => setAberto(false)}
-        className="h-9 rounded-[--radius-control] border border-line px-3 text-[0.8125rem] text-ink-muted"
+        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-line-strong bg-surface px-3.5 text-body-sm font-medium text-ink transition-colors hover:bg-surface-inset disabled:pointer-events-none disabled:opacity-45"
       >
         Cancelar
       </button>
 
-      {erro ? <p className="w-full text-[0.75rem] text-negative">{erro}</p> : null}
+      {erro ? <p className="w-full text-caption text-negative">{erro}</p> : null}
     </form>
   );
 }
 
 const entrada =
-  "h-9 rounded-[--radius-control] border border-line bg-surface px-3 text-[0.8125rem] text-ink outline-none focus:border-accent";
+  "h-9 rounded-md border border-line bg-surface px-3 text-body-sm text-ink outline-none focus:border-accent";

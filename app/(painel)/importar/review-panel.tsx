@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import type { BatchSummary, ReviewItemView } from "../../../server/services/imports.ts";
-import { Badge, Card, SectionHeading } from "../../ui/primitives.tsx";
+import { Badge, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { dateShort, money } from "../../ui/format.ts";
 
 type Categoria = { id: string; name: string; kind: "expense" | "income" };
@@ -78,13 +78,13 @@ export function ReviewPanel({
   }
 
   return (
-    <Card>
-      <SectionHeading
+    <Panel>
+      <PanelHeader
         title={`Revisando ${batch.filename}`}
         hint={`${batch.targetName}${batch.competence ? ` · fatura ${batch.competence}` : ""}`}
       />
 
-      <dl className="mb-4 flex flex-wrap gap-x-5 gap-y-1 text-[0.8125rem]">
+      <dl className="mb-4 flex flex-wrap gap-x-5 gap-y-1 text-body-sm">
         <Contagem rotulo="encontradas" valor={batch.counts.found} />
         <Contagem rotulo="novas" valor={batch.counts.fresh} tom="text-positive" />
         <Contagem rotulo="duplicadas" valor={batch.counts.duplicates} tom="text-negative" />
@@ -100,7 +100,7 @@ export function ReviewPanel({
             type="button"
             onClick={() => setFiltro(valor)}
             aria-pressed={filtro === valor}
-            className={`rounded-full border px-3 py-1 text-[0.75rem] ${
+            className={`rounded-full border px-3 py-1 text-caption ${
               filtro === valor ? "border-accent bg-accent-wash text-accent" : "border-line text-ink-muted"
             }`}
           >
@@ -113,7 +113,7 @@ export function ReviewPanel({
             type="button"
             onClick={() => chamar({ acceptAll: true })}
             disabled={pendente || pendentes === 0}
-            className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
+            className="rounded-md border border-line px-3 py-1.5 text-body-sm text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
           >
             Aceitar {pendentes} pendentes
           </button>
@@ -121,7 +121,7 @@ export function ReviewPanel({
             type="button"
             onClick={descartar}
             disabled={pendente}
-            className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+            className="rounded-md border border-line px-3 py-1.5 text-body-sm text-ink-muted hover:bg-surface-sunken"
           >
             Descartar lote
           </button>
@@ -129,7 +129,7 @@ export function ReviewPanel({
       </div>
 
       {erro ? (
-        <p role="alert" className="mb-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mb-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
@@ -145,7 +145,7 @@ export function ReviewPanel({
             <li key={item.id} className="border-b border-line py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-[0.875rem] text-ink">
+                  <p className="flex flex-wrap items-center gap-2 text-body text-ink">
                     {item.description}
                     <Badge tone={rotulo.tom}>{rotulo.texto}</Badge>
                     {item.installment ? (
@@ -154,13 +154,13 @@ export function ReviewPanel({
                       </Badge>
                     ) : null}
                   </p>
-                  <p className="truncate text-[0.75rem] text-ink-subtle" title={item.rawText}>
+                  <p className="truncate text-caption text-ink-subtle" title={item.rawText}>
                     {dateShort(item.occurredOn)} · {item.rawText}
                   </p>
                 </div>
 
                 <p
-                  className={`tabular shrink-0 text-[0.875rem] font-medium ${
+                  className={`tabular shrink-0 text-body font-medium ${
                     item.kind === "income" ? "text-positive" : "text-ink"
                   }`}
                 >
@@ -178,7 +178,7 @@ export function ReviewPanel({
                         : { itemId: item.id, clearCategory: true },
                     )
                   }
-                  className="h-8 rounded-[--radius-control] border border-line bg-surface px-2 text-[0.75rem] text-ink"
+                  className="h-8 rounded-md border border-line bg-surface px-2 text-caption text-ink"
                 >
                   <option value="">Sem categoria</option>
                   {opcoes.map((category) => (
@@ -194,7 +194,7 @@ export function ReviewPanel({
                     type="button"
                     onClick={() => chamar({ itemId: item.id, decision: decisao })}
                     aria-pressed={item.decision === decisao}
-                    className={`rounded-[--radius-control] border px-3 py-1 text-[0.75rem] ${
+                    className={`rounded-md border px-3 py-1 text-caption ${
                       item.decision === decisao
                         ? decisao === "aceitar"
                           ? "border-positive bg-positive-wash text-positive"
@@ -212,7 +212,7 @@ export function ReviewPanel({
       </ul>
 
       <footer className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[0.8125rem] text-ink-muted">
+        <p className="text-body-sm text-ink-muted">
           {aceitas} linha{aceitas === 1 ? "" : "s"} será{aceitas === 1 ? "" : "ão"} gravada
           {aceitas === 1 ? "" : "s"}
           {pendentes > 0 ? ` · ${pendentes} ainda sem decisão` : ""}
@@ -221,12 +221,12 @@ export function ReviewPanel({
           type="button"
           onClick={confirmar}
           disabled={pendente || aceitas === 0}
-          className="h-11 rounded-[--radius-control] bg-accent px-5 text-[0.875rem] font-semibold text-accent-ink disabled:opacity-60"
+          className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
         >
           Confirmar {aceitas} lançamento{aceitas === 1 ? "" : "s"}
         </button>
       </footer>
-    </Card>
+    </Panel>
   );
 }
 

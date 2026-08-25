@@ -72,19 +72,19 @@ export function PayInvoice({
         role="dialog"
         aria-modal="true"
         aria-label="Pagar fatura"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-[--shadow-raised] sm:rounded-[--radius-card]"
+        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-float sm:rounded-lg"
       >
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[1.0625rem] font-semibold text-ink">Pagar fatura</h2>
-            <p className="mt-0.5 text-[0.8125rem] text-ink-muted">
+            <h2 className="text-title font-semibold text-ink">Pagar fatura</h2>
+            <p className="mt-0.5 text-body-sm text-ink-muted">
               {cardName} · {competenceShort(invoice.competence)} · vence {date(invoice.dueDate)}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[--radius-control] px-2 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+            className="rounded-md px-2 py-1 text-body-sm text-ink-muted hover:bg-surface-sunken"
           >
             Fechar
           </button>
@@ -92,11 +92,11 @@ export function PayInvoice({
 
         <form onSubmit={enviar} className="space-y-4" noValidate>
           <label className="block">
-            <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">Sai da conta</span>
+            <span className="mb-1.5 block text-body-sm font-medium text-ink">Sai da conta</span>
             <select
               value={contaId}
               onChange={(evento) => setContaId(evento.target.value)}
-              className="h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+              className="h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
             >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
@@ -105,32 +105,32 @@ export function PayInvoice({
               ))}
             </select>
             {saldoInsuficiente ? (
-              <span className="mt-1 block text-[0.75rem] text-caution">
+              <span className="mt-1 block text-caption text-caution">
                 O saldo desta conta não cobre o total em aberto.
               </span>
             ) : null}
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">Valor</span>
+            <span className="mb-1.5 block text-body-sm font-medium text-ink">Valor</span>
             <input
               value={valor}
               onChange={(evento) => setValor(evento.target.value)}
               inputMode="decimal"
-              className="tabular h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+              className="tabular h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
             />
-            <span className="mt-1 block text-[0.75rem] text-ink-subtle">
+            <span className="mt-1 block text-caption text-ink-subtle">
               Em aberto: {money(invoice.outstandingCents)}. Pagamento parcial é aceito.
             </span>
           </label>
 
-          <p className="rounded-[--radius-control] bg-surface-sunken px-3 py-2 text-[0.75rem] text-ink-muted">
+          <p className="rounded-md bg-surface-sunken px-3 py-2 text-caption text-ink-muted">
             O valor é abatido da conta e da dívida do cartão. Não vira uma nova despesa — as compras
             já foram contadas quando aconteceram.
           </p>
 
           {erro ? (
-            <p role="alert" className="rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+            <p role="alert" className="rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
               {erro}
             </p>
           ) : null}
@@ -138,7 +138,7 @@ export function PayInvoice({
           <button
             type="submit"
             disabled={enviando}
-            className="h-11 w-full rounded-[--radius-control] bg-accent text-[0.875rem] font-semibold text-accent-ink disabled:opacity-60"
+            className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45 w-full"
           >
             {enviando ? "Registrando…" : "Confirmar pagamento"}
           </button>

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { buildDashboard } from "../../server/services/dashboard.ts";
 import { currentUser } from "../auth-context.ts";
+import { LinkButton } from "../ui/controls.tsx";
 import { AccountsPanel } from "../ui/dashboard/accounts-panel.tsx";
 import { CardsPanel } from "../ui/dashboard/cards-panel.tsx";
 import { CashflowPanel } from "../ui/dashboard/cashflow-panel.tsx";
@@ -11,6 +12,8 @@ import { PositionStrip } from "../ui/dashboard/position-strip.tsx";
 import { RecentPanel } from "../ui/dashboard/recent-panel.tsx";
 import { UpcomingPanel } from "../ui/dashboard/upcoming-panel.tsx";
 import { competenceLong } from "../ui/format.ts";
+import { Plus } from "../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../ui/page-frame.tsx";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
@@ -21,6 +24,13 @@ function saudacao(hora: number): string {
   return "Boa noite";
 }
 
+/**
+ * Painel.
+ *
+ * A ordem das seções é a ordem das perguntas: quanto sobra, qual a posição,
+ * para onde o dinheiro vai, o que vence, o que já saiu. Cada faixa responde
+ * uma coisa e recua para a próxima — é o que impede a tela de virar mural.
+ */
 export default async function VisaoGeral() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -34,32 +44,42 @@ export default async function VisaoGeral() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-[76rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-8">
-        <p className="text-label uppercase text-ink-subtle">{competenceLong(dashboard.competence)}</p>
-        <h1 className="mt-1 text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">
-          {saudacao(hora)}, {primeiroNome}
-        </h1>
-      </header>
+    <Page>
+      <PageHeader
+        eyebrow={competenceLong(dashboard.competence)}
+        title={`${saudacao(hora)}, ${primeiroNome}`}
+        actions={
+          <LinkButton href="/lancamentos" variant="primary" icon={Plus}>
+            Novo lançamento
+          </LinkButton>
+        }
+      />
 
-      {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
-      <FreeToSpend data={dashboard.freeToSpend} today={dashboard.today} />
+      <Stack gap="lg">
+        {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
+        <FreeToSpend data={dashboard.freeToSpend} today={dashboard.today} />
 
-      <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
+        <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
-          <CashflowPanel points={dashboard.cashflow} />
-          <RecentPanel transactions={dashboard.recentTransactions} />
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <CashflowPanel points={dashboard.cashflow} />
+          </div>
+          <CategoryPanel categories={dashboard.categorySpend} />
         </div>
 
-        <div className="space-y-5">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
           <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
-          <CategoryPanel categories={dashboard.categorySpend} />
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <RecentPanel transactions={dashboard.recentTransactions} />
+          </div>
           <AccountsPanel accounts={dashboard.accounts} />
         </div>
-      </div>
-    </main>
+      </Stack>
+    </Page>
   );
 }

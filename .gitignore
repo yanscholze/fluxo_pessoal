@@ -40,6 +40,8 @@ next-env.d.ts
 *.tsbuildinfo
 /dist/
 /.wrangler/
+# Cache de build do vinext, incluindo as fontes baixadas do Google.
+/.vinext/
 /.sites-runtime/
 /outputs/
 /work/

@@ -6,7 +6,7 @@ import { competenceShort } from "../../ui/format.ts";
 /** Navegação entre competências. Links de verdade — funcionam sem JavaScript. */
 export function CompetenceNav({ anterior, proxima }: { anterior: Competence; proxima: Competence }) {
   const classe =
-    "rounded-[--radius-control] border border-line px-3 py-2 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken";
+    "rounded-md border border-line px-3 py-2 text-body-sm text-ink-muted hover:bg-surface-sunken";
 
   return (
     <div className="flex items-center gap-1.5">

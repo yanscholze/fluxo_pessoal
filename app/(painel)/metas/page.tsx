@@ -2,12 +2,24 @@ import { redirect } from "next/navigation";
 
 import { buildGoalsView } from "../../../server/services/goals.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Badge, Card, Empty, Figure, Label, Meter } from "../../ui/primitives.tsx";
+import { ProgressRing } from "../../ui/charts.tsx";
+import { KeyValue, MetricStrip } from "../../ui/data-display.tsx";
 import { competenceLong, date, money, percent } from "../../ui/format.ts";
+import { CircleCheck, PiggyBank, Target, TrendingUp } from "../../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Badge, Empty, Notice, Panel } from "../../ui/primitives.tsx";
 import { GoalForm } from "./goal-form.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Metas.
+ *
+ * O anel responde "quanto já andei" de longe; a ficha ao lado responde "o que
+ * falta e quando fecha" de perto. Deliberadamente sem comemoração gráfica: o
+ * usuário está olhando dinheiro que ainda não juntou, e confete não ajuda a
+ * juntar.
+ */
 export default async function Metas() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -15,114 +27,125 @@ export default async function Metas() {
   const view = await buildGoalsView(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-[76rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Metas</h1>
-          <p className="mt-1 text-[0.875rem] text-ink-muted">Quanto falta e quando fica pronto.</p>
-        </div>
-        <GoalForm accounts={view.accounts} />
-      </header>
+    <Page>
+      <PageHeader
+        title="Metas"
+        description="Quanto falta, em quanto tempo fecha no seu ritmo, e o que precisaria mudar para fechar antes."
+        actions={<GoalForm accounts={view.accounts} />}
+      />
 
       {view.goals.length ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card as="article">
-              <Label>Guardado</Label>
-              <Figure value={money(view.totals.currentCents)} size="sm" tone="positive" className="mt-1.5" />
-              <p className="mt-2 text-[0.75rem] text-ink-subtle">de {money(view.totals.targetCents)} somados</p>
-            </Card>
-            <Card as="article">
-              <Label>Ainda falta</Label>
-              <Figure value={money(view.totals.remainingCents)} size="sm" className="mt-1.5" />
-            </Card>
-            <Card as="article">
-              <Label>Compromisso mensal</Label>
-              <Figure value={money(view.totals.monthlyCommitmentCents)} size="sm" className="mt-1.5" />
-              <p className="mt-2 text-[0.75rem] text-ink-subtle">
-                {view.totals.activeCount} em aberto · {view.totals.achievedCount} alcançada
-                {view.totals.achievedCount === 1 ? "" : "s"}
-              </p>
-            </Card>
-          </div>
+        <Stack gap="lg">
+          <MetricStrip
+            metrics={[
+              {
+                label: "Guardado",
+                value: money(view.totals.currentCents),
+                tone: "positive",
+                icon: PiggyBank,
+                hint: `de ${money(view.totals.targetCents)} somados entre as metas`,
+              },
+              {
+                label: "Ainda falta",
+                value: money(view.totals.remainingCents),
+                icon: Target,
+                hint: "Distância até o objetivo de todas as metas",
+              },
+              {
+                label: "Compromisso mensal",
+                value: money(view.totals.monthlyCommitmentCents),
+                icon: TrendingUp,
+                hint: "Soma dos aportes que você definiu",
+              },
+              {
+                label: "Situação",
+                value: `${view.totals.activeCount} em aberto`,
+                tone: view.totals.achievedCount > 0 ? "positive" : "neutral",
+                icon: CircleCheck,
+                hint: `${view.totals.achievedCount} alcançada${view.totals.achievedCount === 1 ? "" : "s"}`,
+              },
+            ]}
+          />
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             {view.goals.map((meta) => (
-              <Card key={meta.goalId} as="article">
-                <header className="flex items-start justify-between gap-3">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: meta.color }} aria-hidden />
-                    <h2 className="text-[0.9375rem] font-semibold text-ink">{meta.name}</h2>
-                    {meta.isAchieved ? <Badge tone="positive">alcançada</Badge> : null}
-                    {meta.behindSchedule ? <Badge tone="caution">atrás do prazo</Badge> : null}
-                  </span>
-                  <span className="tabular shrink-0 text-[1.125rem] font-semibold text-ink">
-                    {percent(meta.percent)}
-                  </span>
-                </header>
+              <Panel key={meta.goalId} as="article">
+                <header className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-heading text-ink">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: meta.color }}
+                        aria-hidden
+                      />
+                      <span className="truncate">{meta.name}</span>
+                      {meta.isAchieved ? <Badge tone="positive">alcançada</Badge> : null}
+                      {meta.behindSchedule ? <Badge tone="caution">atrás do prazo</Badge> : null}
+                    </h2>
+                    <p className="tabular mt-1.5 text-figure-sm text-ink">
+                      {money(meta.current)}
+                      <span className="text-body-sm font-normal text-ink-subtle"> de {money(meta.target)}</span>
+                    </p>
+                  </div>
 
-                <p className="tabular mt-2 text-[0.875rem] text-ink">
-                  {money(meta.current)}{" "}
-                  <span className="text-ink-subtle">/ {money(meta.target)}</span>
-                </p>
-
-                <div className="mt-2">
-                  <Meter
-                    value={meta.current}
-                    total={meta.target}
+                  <ProgressRing
+                    percent={meta.percent}
+                    size={76}
+                    thickness={7}
                     tone={meta.isAchieved ? "positive" : meta.behindSchedule ? "caution" : "accent"}
                     label={meta.name}
                   />
-                </div>
+                </header>
 
-                <dl className="mt-3 space-y-1 text-[0.75rem]">
-                  {!meta.isAchieved ? (
-                    <Linha rotulo="Falta" valor={money(meta.remaining)} />
-                  ) : null}
-                  {meta.monthlyContribution > 0 ? (
-                    <Linha rotulo="Aporte mensal" valor={money(meta.monthlyContribution)} />
-                  ) : null}
-                  {meta.forecast && !meta.isAchieved ? (
-                    <Linha rotulo="Conclusão prevista" valor={competenceLong(meta.forecast)} />
-                  ) : null}
-                  {meta.targetDate ? <Linha rotulo="Prazo desejado" valor={date(meta.targetDate)} /> : null}
-                  {meta.behindSchedule && meta.requiredMonthly ? (
-                    <Linha
-                      rotulo="Precisaria por mês"
-                      valor={money(meta.requiredMonthly)}
-                      tom="text-caution"
-                    />
-                  ) : null}
-                  {meta.accountName ? <Linha rotulo="Lastreada por" valor={meta.accountName} /> : null}
-                </dl>
+                <KeyValue
+                  className="mt-4"
+                  entries={[
+                    ...(meta.isAchieved
+                      ? []
+                      : [{ label: "Falta", value: <span className="tabular">{money(meta.remaining)}</span> }]),
+                    ...(meta.monthlyContribution > 0
+                      ? [
+                          {
+                            label: "Aporte mensal",
+                            value: <span className="tabular">{money(meta.monthlyContribution)}</span>,
+                          },
+                        ]
+                      : []),
+                    ...(meta.forecast && !meta.isAchieved
+                      ? [{ label: "Conclusão prevista", value: competenceLong(meta.forecast) }]
+                      : []),
+                    ...(meta.targetDate ? [{ label: "Prazo desejado", value: date(meta.targetDate) }] : []),
+                    ...(meta.accountName ? [{ label: "Lastreada por", value: meta.accountName }] : []),
+                  ]}
+                />
 
                 {meta.behindSchedule && meta.requiredMonthly ? (
-                  <p className="mt-3 rounded-[--radius-control] bg-caution-wash px-3 py-2 text-[0.75rem] text-caution">
-                    No aporte atual a meta fecha em {meta.forecast ? competenceLong(meta.forecast) : "prazo indefinido"},
-                    depois do prazo. Aportar {money(meta.requiredMonthly)} por mês alcança a data.
-                  </p>
+                  <div className="mt-4">
+                    <Notice tone="caution">
+                      No aporte atual a meta fecha em{" "}
+                      {meta.forecast ? competenceLong(meta.forecast) : "prazo indefinido"}, depois do prazo.
+                      Aportar <span className="tabular font-medium">{money(meta.requiredMonthly)}</span> por mês
+                      alcança a data.
+                    </Notice>
+                  </div>
                 ) : null}
-              </Card>
+
+                <p className="mt-3 text-caption text-ink-subtle">
+                  {percent(meta.percent)} do objetivo concluído
+                </p>
+              </Panel>
             ))}
           </div>
-        </>
+        </Stack>
       ) : (
-        <Card>
+        <Panel>
           <Empty
+            icon={Target}
             title="Nenhuma meta cadastrada"
             hint="Defina um objetivo e o Fluxo calcula quando ele fecha no seu ritmo de aporte."
           />
-        </Card>
+        </Panel>
       )}
-    </main>
-  );
-}
-
-function Linha({ rotulo, valor, tom }: { rotulo: string; valor: string; tom?: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-ink-subtle">{rotulo}</dt>
-      <dd className={`tabular ${tom ?? "text-ink"}`}>{valor}</dd>
-    </div>
+    </Page>
   );
 }

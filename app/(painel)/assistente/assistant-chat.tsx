@@ -79,12 +79,12 @@ export function AssistantChat({ remaining }: { remaining: number }) {
           maxLength={500}
           disabled={semCota}
           placeholder="O que você quer saber?"
-          className="h-11 flex-1 rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent disabled:opacity-60"
+          className="h-9 flex-1 rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={enviando || semCota || pergunta.trim().length < 3}
-          className="h-11 rounded-[--radius-control] bg-accent px-5 text-[0.875rem] font-semibold text-accent-ink disabled:opacity-60"
+          className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
         >
           {enviando ? "Pensando…" : "Perguntar"}
         </button>
@@ -101,7 +101,7 @@ export function AssistantChat({ remaining }: { remaining: number }) {
                   setPergunta(sugestao);
                   perguntar(sugestao);
                 }}
-                className="rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
+                className="rounded-full border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
               >
                 {sugestao}
               </button>
@@ -111,28 +111,28 @@ export function AssistantChat({ remaining }: { remaining: number }) {
       ) : null}
 
       {erro ? (
-        <p role="alert" className="mt-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mt-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
 
       {resposta ? (
-        <article className="mt-4 rounded-[--radius-control] border border-line bg-surface-sunken p-4">
-          <p className="text-[0.8125rem] font-medium text-ink-muted">{resposta.summary}</p>
-          <p className="mt-2 whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">
+        <article className="mt-4 rounded-md border border-line bg-surface-sunken p-4">
+          <p className="text-body-sm font-medium text-ink-muted">{resposta.summary}</p>
+          <p className="mt-2 whitespace-pre-line text-heading leading-relaxed text-ink">
             {resposta.answer}
           </p>
 
           {resposta.actions.length ? (
             <>
-              <h3 className="mt-4 mb-2 text-[0.8125rem] font-semibold text-ink">O que fazer</h3>
+              <h3 className="mt-4 mb-2 text-body-sm font-semibold text-ink">O que fazer</h3>
               <ul className="space-y-2">
                 {resposta.actions.map((acao) => (
                   <li key={acao.label} className="flex items-start gap-2">
                     <Badge tone={TOM_PRIORIDADE[acao.priority]}>{acao.priority}</Badge>
                     <span className="min-w-0">
-                      <span className="block text-[0.875rem] text-ink">{acao.label}</span>
-                      <span className="block text-[0.75rem] text-ink-subtle">{acao.reason}</span>
+                      <span className="block text-body text-ink">{acao.label}</span>
+                      <span className="block text-caption text-ink-subtle">{acao.reason}</span>
                     </span>
                   </li>
                 ))}
@@ -143,14 +143,14 @@ export function AssistantChat({ remaining }: { remaining: number }) {
           {resposta.warnings.length ? (
             <ul className="mt-4 space-y-1">
               {resposta.warnings.map((aviso) => (
-                <li key={aviso} className="text-[0.75rem] text-caution">
+                <li key={aviso} className="text-caption text-caution">
                   {aviso}
                 </li>
               ))}
             </ul>
           ) : null}
 
-          <p className="mt-4 border-t border-line pt-3 text-[0.6875rem] text-ink-subtle">
+          <p className="mt-4 border-t border-line pt-3 text-caption text-ink-subtle">
             Respostas do assistente saem dos seus próprios dados e podem conter erro. Ele não
             recomenda investimento — para isso, procure um profissional registrado.
           </p>
@@ -158,7 +158,7 @@ export function AssistantChat({ remaining }: { remaining: number }) {
       ) : null}
 
       {semCota ? (
-        <p className="mt-3 text-[0.8125rem] text-caution">
+        <p className="mt-3 text-body-sm text-caution">
           Você usou todas as consultas de hoje. A cota volta amanhã.
         </p>
       ) : null}

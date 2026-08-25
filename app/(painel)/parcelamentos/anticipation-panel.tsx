@@ -35,11 +35,11 @@ export function AnticipationPanel({ planId }: { planId: string }) {
   }, [planId]);
 
   if (erro) {
-    return <p className="mt-3 text-[0.8125rem] text-negative">{erro}</p>;
+    return <p className="mt-3 text-body-sm text-negative">{erro}</p>;
   }
 
   if (!cenarios) {
-    return <p className="mt-3 text-[0.8125rem] text-ink-subtle">Calculando cenários…</p>;
+    return <p className="mt-3 text-body-sm text-ink-subtle">Calculando cenários…</p>;
   }
 
   if (!cenarios.length) {
@@ -53,8 +53,8 @@ export function AnticipationPanel({ planId }: { planId: string }) {
   const temJuros = cenarios.some((cenario) => cenario.savingsCents > 0);
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-[--radius-control] border border-line">
-      <table className="w-full min-w-[34rem] text-[0.8125rem]">
+    <div className="mt-4 overflow-x-auto rounded-md border border-line">
+      <table className="w-full min-w-[34rem] text-body-sm">
         <thead>
           <tr className="border-b border-line text-left text-ink-subtle">
             <th className="px-3 py-2 font-medium">Antecipar</th>
@@ -89,7 +89,7 @@ export function AnticipationPanel({ planId }: { planId: string }) {
       </table>
 
       {!temJuros ? (
-        <p className="border-t border-line px-3 py-2 text-[0.75rem] text-ink-subtle">
+        <p className="border-t border-line px-3 py-2 text-caption text-ink-subtle">
           Compra sem juros: antecipar não gera desconto. O ganho é encurtar o compromisso e liberar limite.
         </p>
       ) : null}

@@ -82,7 +82,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
             type="button"
             onClick={() => setFluxo(valor)}
             aria-pressed={fluxo === valor}
-            className={`rounded-full border px-3 py-1 text-[0.75rem] ${
+            className={`rounded-full border px-3 py-1 text-caption ${
               fluxo === valor ? "border-accent bg-accent-wash text-accent" : "border-line text-ink-muted"
             }`}
           >
@@ -93,7 +93,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
         <button
           type="button"
           onClick={() => setCriando((valor) => !valor)}
-          className="ml-auto rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+          className="ml-auto rounded-md border border-line px-3 py-1.5 text-body-sm text-ink-muted hover:bg-surface-sunken"
         >
           {criando ? "Cancelar" : "Nova categoria"}
         </button>
@@ -106,11 +106,11 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
             required
             maxLength={60}
             placeholder={fluxo === "expense" ? "Ex.: Educação" : "Ex.: Freelance"}
-            className="h-9 flex-1 rounded-[--radius-control] border border-line bg-surface px-3 text-[0.8125rem] text-ink outline-none focus:border-accent"
+            className="h-9 flex-1 rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
           />
           <button
             type="submit"
-            className="h-9 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink"
+            className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
           >
             Criar
           </button>
@@ -118,7 +118,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
       ) : null}
 
       {erro ? (
-        <p role="alert" className="mb-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mb-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
@@ -142,15 +142,15 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
                       defaultValue={category.name}
                       autoFocus
                       maxLength={60}
-                      className="h-8 flex-1 rounded-[--radius-control] border border-accent bg-surface px-2 text-[0.8125rem] text-ink outline-none"
+                      className="h-8 flex-1 rounded-md border border-accent bg-surface px-2 text-body-sm text-ink outline-none"
                     />
-                    <button type="submit" className="text-[0.75rem] font-semibold text-accent">
+                    <button type="submit" className="text-caption font-semibold text-accent">
                       Salvar
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditando(null)}
-                      className="text-[0.75rem] text-ink-muted"
+                      className="text-caption text-ink-muted"
                     >
                       Cancelar
                     </button>
@@ -159,7 +159,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
                   <button
                     type="button"
                     onClick={() => setEditando(category.id)}
-                    className="flex items-center gap-2 text-left text-[0.875rem] text-ink hover:underline"
+                    className="flex items-center gap-2 text-left text-body text-ink hover:underline"
                   >
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -176,7 +176,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
               {editando !== category.id ? (
                 <div className="mt-1.5 flex flex-wrap gap-4 pl-[1.125rem]">
                   {category.kind === "expense" ? (
-                    <label className="flex items-center gap-1.5 text-[0.75rem] text-ink-muted">
+                    <label className="flex items-center gap-1.5 text-caption text-ink-muted">
                       <input
                         type="checkbox"
                         checked={category.isEssential}
@@ -187,7 +187,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
                       Gasto essencial
                     </label>
                   ) : null}
-                  <label className="flex items-center gap-1.5 text-[0.75rem] text-ink-muted">
+                  <label className="flex items-center gap-1.5 text-caption text-ink-muted">
                     <input
                       type="checkbox"
                       checked={category.excludeFromFreeToSpend}
@@ -206,7 +206,7 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
         <Empty title={`Nenhuma categoria de ${fluxo === "expense" ? "saída" : "entrada"}`} />
       )}
 
-      <p className="mt-3 text-[0.75rem] text-ink-subtle">
+      <p className="mt-3 text-caption text-ink-subtle">
         <strong className="font-medium text-ink-muted">Gasto essencial</strong> entra na média que define o
         alvo da reserva de emergência.{" "}
         <strong className="font-medium text-ink-muted">Não pesar no livre</strong> é para movimentação de

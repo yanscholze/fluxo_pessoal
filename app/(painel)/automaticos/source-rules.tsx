@@ -48,7 +48,7 @@ export function SourceRules({
   return (
     <div>
       {erro ? (
-        <p role="alert" className="mb-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mb-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
@@ -61,13 +61,13 @@ export function SourceRules({
               className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-2.5 last:border-0"
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-[0.875rem] text-ink">
+                <p className="flex items-center gap-2 truncate text-body text-ink">
                   {fonte.label ?? fonte.sourceApp}
                   <Badge tone={fonte.action === "allow" ? "positive" : "neutral"}>
                     {fonte.action === "allow" ? "lendo" : "ignorando"}
                   </Badge>
                 </p>
-                <p className="truncate text-[0.75rem] text-ink-subtle">{fonte.sourceApp}</p>
+                <p className="truncate text-caption text-ink-subtle">{fonte.sourceApp}</p>
               </div>
 
               <button
@@ -82,7 +82,7 @@ export function SourceRules({
                     defaultCategoryId: fonte.defaultCategoryId,
                   })
                 }
-                className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken"
+                className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken"
               >
                 {fonte.action === "allow" ? "Parar de ler" : "Passar a ler"}
               </button>
@@ -112,7 +112,7 @@ export function SourceRules({
               ...(cardId ? { defaultCardId: cardId } : { defaultAccountId: dados.get("defaultAccountId") || null }),
             });
           }}
-          className="space-y-3 rounded-[--radius-control] border border-line p-4"
+          className="space-y-3 rounded-md border border-line p-4"
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo rotulo="Pacote do app" dica="Ex.: com.banco.app — o aplicativo mostra o pacote">
@@ -158,14 +158,14 @@ export function SourceRules({
           <div className="flex gap-2">
             <button
               type="submit"
-              className="h-9 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink"
+              className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
             >
               Salvar
             </button>
             <button
               type="button"
               onClick={() => setCriando(false)}
-              className="h-9 rounded-[--radius-control] border border-line px-3 text-[0.8125rem] text-ink-muted"
+              className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-line-strong bg-surface px-3.5 text-body-sm font-medium text-ink transition-colors hover:bg-surface-inset disabled:pointer-events-none disabled:opacity-45"
             >
               Cancelar
             </button>
@@ -175,7 +175,7 @@ export function SourceRules({
         <button
           type="button"
           onClick={() => setCriando(true)}
-          className="rounded-[--radius-control] border border-line px-4 py-2 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+          className="rounded-md border border-line px-4 py-2 text-body-sm text-ink-muted hover:bg-surface-sunken"
         >
           Permitir outro app
         </button>
@@ -185,7 +185,7 @@ export function SourceRules({
 }
 
 const entrada =
-  "h-9 w-full rounded-[--radius-control] border border-line bg-surface px-2.5 text-[0.8125rem] text-ink outline-none focus:border-accent";
+  "h-9 w-full rounded-md border border-line bg-surface px-2.5 text-body-sm text-ink outline-none focus:border-accent";
 
 function Campo({
   rotulo,
@@ -198,9 +198,9 @@ function Campo({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[0.75rem] font-medium text-ink">{rotulo}</span>
+      <span className="mb-1 block text-caption font-medium text-ink">{rotulo}</span>
       {children}
-      {dica ? <span className="mt-1 block text-[0.6875rem] text-ink-subtle">{dica}</span> : null}
+      {dica ? <span className="mt-1 block text-caption text-ink-subtle">{dica}</span> : null}
     </label>
   );
 }

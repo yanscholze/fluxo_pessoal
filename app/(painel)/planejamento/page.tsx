@@ -1,12 +1,36 @@
 import { redirect } from "next/navigation";
 
-import { buildPlanningView } from "../../../server/services/planning.ts";
+import { buildPlanningView, type RecurrenceView } from "../../../server/services/planning.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Badge, Card, Empty, Figure, Label, SectionHeading } from "../../ui/primitives.tsx";
-import { competenceShort, date, money, relativeDay } from "../../ui/format.ts";
+import { BarChart, ChartFrame } from "../../ui/charts.tsx";
+import {
+  Amount,
+  DataTable,
+  ListRow,
+  MetricStrip,
+  type MetricProps,
+  Td,
+  Timeline,
+  type TimelineItem,
+  Tr,
+} from "../../ui/data-display.tsx";
+import { competenceLong, competenceShort, date, dateShort, money, relativeDay } from "../../ui/format.ts";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Calendar,
+  Clock,
+  Layers,
+  Repeat,
+  TrendingUp,
+  Wallet,
+} from "../../ui/icons.tsx";
+import { Page, PageHeader, SectionTitle, Stack } from "../../ui/page-frame.tsx";
+import { Badge, Divider, Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { ConfirmOccurrence } from "./confirm-occurrence.tsx";
 import { NewRecurrence } from "./new-recurrence.tsx";
 
+/** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
 
 const ROTULO_PAPEL: Record<string, string> = {
@@ -16,180 +40,363 @@ const ROTULO_PAPEL: Record<string, string> = {
   standard: "Recorrente",
 };
 
+/** Regra com próxima ocorrência conhecida — o que entra na régua do tempo. */
+type ComProxima = RecurrenceView & { next: NonNullable<RecurrenceView["next"]> };
+
+/** Regra com ocorrência da competência corrente ainda não confirmada. */
+type ComPendente = RecurrenceView & { pending: NonNullable<RecurrenceView["pending"]> };
+
+/**
+ * Recorrências.
+ *
+ * A tela responde, nesta ordem: o que exige uma decisão agora (confirmar),
+ * como o mês fica, o que vem pela frente e como os próximos meses ficam. As
+ * regras não aparecem como um cadastro — aparecem como uma sequência no tempo,
+ * porque "quando cai" é a pergunta que se faz sobre uma recorrência; "que
+ * regras existem" é consequência.
+ *
+ * Nada aqui é fato consumado: a projeção é derivada das regras a cada consulta
+ * e só vira lançamento quando o usuário confirma. Por isso o valor previsto
+ * nunca recebe o mesmo tratamento de um lançamento confirmado.
+ */
 export default async function Planejamento() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
 
   const view = await buildPlanningView(user.id);
-  const pendentes = view.recurrences.filter((item) => item.pending && item.isActive);
+
+  const pendentes = view.recurrences.filter(
+    (item): item is ComPendente => item.isActive && item.pending !== null,
+  );
+
+  // Uma ocorrência por regra — a próxima. Repetir a mesma assinatura em quatro
+  // meses encheria a régua sem responder nada que a frequência já não diga.
+  const agenda = view.recurrences
+    .filter((item): item is ComProxima => item.isActive && item.next !== null)
+    .sort((esquerda, direita) => esquerda.next.date.localeCompare(direita.next.date));
+
+  // Pausada ou encerrada não entra na projeção; some da régua e vira nota de
+  // rodapé, para o usuário saber que a regra existe sem confundi-la com ativa.
+  const paradas = view.recurrences.filter((item) => !item.isActive || item.next === null);
+
+  const mesAtual = view.projection[0];
+  const assinaturas = view.subscriptions;
+
+  // Entrada e saída somadas separadamente: um líquido esconde os dois números
+  // que interessam, e salário pendente com conta pendente não é a mesma coisa.
+  const pendenteEntrada = pendentes
+    .filter((item) => item.kind === "income")
+    .reduce((soma, item) => soma + item.pending.amountCents, 0);
+  const pendenteSaida = pendentes
+    .filter((item) => item.kind !== "income")
+    .reduce((soma, item) => soma + item.pending.amountCents, 0);
+
+  const metricas: MetricProps[] = [
+    {
+      label: "Renda prevista",
+      value: money(mesAtual.incomeCents),
+      tone: "positive",
+      hint: `${mesAtual.businessDays} dias úteis em ${competenceShort(mesAtual.competence)}`,
+      icon: TrendingUp,
+    },
+    {
+      label: "Comprometido",
+      value: money(mesAtual.committedCents),
+      hint: "Contas fixas, assinaturas e as faturas que vencem no mês",
+      icon: Layers,
+    },
+    {
+      label: "Sobra prevista",
+      value: money(mesAtual.freeCents, { signed: true }),
+      tone: mesAtual.freeCents < 0 ? "negative" : "neutral",
+      hint:
+        mesAtual.freeCents < 0
+          ? "Os compromissos do mês passam da renda prevista"
+          : "Renda prevista menos tudo que já está assumido",
+      icon: Wallet,
+    },
+    {
+      label: "Assinaturas",
+      value: money(assinaturas.monthlyCents),
+      hint: `por mês · ${money(assinaturas.yearlyCents)} por ano`,
+      icon: Repeat,
+    },
+  ];
+
+  const eventos: TimelineItem[] = agenda.map((item) => {
+    const entrada = item.kind === "income";
+    return {
+      id: item.id,
+      when: `${dateShort(item.next.date)} · ${relativeDay(item.next.date, view.today)}`,
+      title: item.description,
+      detail: <DetalheDaRegra item={item} />,
+      value: money(item.next.amountCents),
+      // Receita ganha o verde no valor; despesa fica em tinta comum — vermelho
+      // aqui é alarme, e uma conta que vai vencer no prazo não é alarme.
+      valueTone: entrada ? "positive" : "neutral",
+      tone: entrada ? "positive" : "neutral",
+      icon: entrada ? ArrowUpRight : ArrowDownRight,
+    };
+  });
 
   return (
-    <main className="mx-auto w-full max-w-[76rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Planejamento</h1>
-          <p className="mt-1 text-[0.875rem] text-ink-muted">
-            O que se repete todo mês e como os próximos meses ficam por causa disso.
-          </p>
-        </div>
-        <NewRecurrence options={view.options} />
-      </header>
+    <Page>
+      <PageHeader
+        eyebrow={competenceLong(view.competence)}
+        title="Recorrências"
+        description="Salário, contas fixas e assinaturas: o que se repete todo mês e como os próximos meses ficam por causa disso."
+        actions={<NewRecurrence options={view.options} />}
+      />
 
-      {pendentes.length ? (
-        <Card className="mb-5 border-caution/30 bg-caution-wash">
-          <SectionHeading
-            title="Aguardando confirmação"
-            hint="Estas ocorrências já deveriam ter acontecido nesta competência"
-          />
-          <ul className="space-y-2">
-            {pendentes.map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[0.875rem] text-ink">
-                  {item.description}
-                  <span className="ml-2 text-[0.75rem] text-ink-subtle">
-                    {date(item.pending!.date)} · {money(item.pending!.amountCents)}
-                  </span>
-                </span>
-                <ConfirmOccurrence
-                  recurrenceId={item.id}
-                  competence={item.pending!.competence}
-                  amountCents={item.pending!.amountCents}
-                />
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
+      <Stack gap="lg">
+        {pendentes.length ? (
+          <section className="rounded-lg border border-caution/30 bg-caution-wash p-4 sm:p-5">
+            <header className="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 text-heading text-ink">
+                  <Clock size={15} strokeWidth={1.75} className="shrink-0 text-caution" aria-hidden />
+                  Aguardando confirmação
+                </h2>
+                <p className="mt-1 max-w-[54ch] text-caption text-ink-muted">
+                  Ocorrências de {competenceLong(view.competence)} que ainda não viraram lançamento.
+                  Confirmar transforma a projeção em fato — e só então o saldo muda.
+                </p>
+              </div>
+              <p className="shrink-0 text-caption text-ink-muted">
+                {pendenteEntrada > 0 ? (
+                  <span className="tabular font-medium text-positive">{money(pendenteEntrada)} a entrar</span>
+                ) : null}
+                {pendenteEntrada > 0 && pendenteSaida > 0 ? (
+                  <span className="mx-1.5 text-line-strong">·</span>
+                ) : null}
+                {pendenteSaida > 0 ? (
+                  <span className="tabular font-medium text-ink">{money(pendenteSaida)} a sair</span>
+                ) : null}
+              </p>
+            </header>
 
-      <Card>
-        <SectionHeading
-          title="Projeção"
-          hint="Renda prevista, o que já está comprometido e o que sobra em cada mês"
-        />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-[0.8125rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-ink-subtle">
-                <th className="py-2 pr-3 font-medium">Mês</th>
-                <th className="px-3 py-2 text-right font-medium">Renda prevista</th>
-                <th className="px-3 py-2 text-right font-medium">Comprometido</th>
-                <th className="px-3 py-2 text-right font-medium">Sobra</th>
-                <th className="py-2 pl-3 text-right font-medium">Dias úteis</th>
-              </tr>
-            </thead>
-            <tbody>
-              {view.projection.map((mes) => (
-                <tr key={mes.competence} className="border-b border-line last:border-0">
-                  <td className="py-2 pr-3 text-ink">{competenceShort(mes.competence)}</td>
-                  <td className="tabular px-3 py-2 text-right text-positive">{money(mes.incomeCents)}</td>
-                  <td className="tabular px-3 py-2 text-right text-ink">{money(mes.committedCents)}</td>
-                  <td
-                    className={`tabular px-3 py-2 text-right font-medium ${
-                      mes.freeCents < 0 ? "text-negative" : "text-ink"
-                    }`}
-                  >
-                    {money(mes.freeCents, { signed: true })}
-                  </td>
-                  <td className="tabular py-2 pl-3 text-right text-ink-subtle">{mes.businessDays}</td>
-                </tr>
+            <ul className="space-y-1.5">
+              {pendentes.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md bg-surface px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-body text-ink">{item.description}</p>
+                    <p className="mt-0.5 truncate text-caption text-ink-subtle">
+                      {date(item.pending.date)} · {relativeDay(item.pending.date, view.today)} ·{" "}
+                      {item.originName}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <Amount
+                      cents={item.pending.amountCents}
+                      tone={item.kind === "income" ? "positive" : "neutral"}
+                    />
+                    <ConfirmOccurrence
+                      recurrenceId={item.id}
+                      competence={item.pending.competence}
+                      amountCents={item.pending.amountCents}
+                    />
+                  </div>
+                </li>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+            </ul>
+          </section>
+        ) : null}
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card>
-            <SectionHeading title="Recorrências" hint="Regras que projetam os lançamentos futuros" />
-            {view.recurrences.length ? (
-              <ul>
-                {view.recurrences.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-4 border-b border-line py-3 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2 text-[0.875rem] text-ink">
-                        {item.description}
-                        <Badge tone={item.kind === "income" ? "positive" : "neutral"}>
-                          {ROTULO_PAPEL[item.role] ?? item.role}
-                        </Badge>
-                        {!item.isActive ? <Badge tone="caution">pausada</Badge> : null}
-                        {item.interval === "yearly" ? <Badge>anual</Badge> : null}
-                      </p>
-                      <p className="mt-0.5 text-[0.75rem] text-ink-subtle">
-                        {item.scheduleLabel} · {item.originName}
-                        {item.categoryName ? ` · ${item.categoryName}` : ""}
-                        {item.amountMode === "per_business_day" ? " · por dia útil" : ""}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="tabular text-[0.875rem] text-ink">
-                        {money(item.next?.amountCents ?? item.amountCents)}
-                      </p>
-                      {item.next ? (
-                        <p className="text-[0.75rem] text-ink-subtle">
-                          {date(item.next.date)} · {relativeDay(item.next.date, view.today)}
-                        </p>
-                      ) : (
-                        <p className="text-[0.75rem] text-ink-subtle">encerrada</p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+        <MetricStrip metrics={metricas} />
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Panel>
+              <PanelHeader
+                title="Próximas ocorrências"
+                icon={Calendar}
+                hint="A próxima data de cada regra ativa, na ordem em que acontecem"
+                action={<Badge variant="outline">previsto</Badge>}
+              />
+              {eventos.length ? (
+                <Timeline items={eventos} />
+              ) : (
+                <Empty
+                  icon={Calendar}
+                  title="Nenhuma recorrência ativa"
+                  hint="Cadastre salário, contas fixas e assinaturas para o Fluxo projetar os próximos meses."
+                />
+              )}
+            </Panel>
+          </div>
+
+          <Panel>
+            <PanelHeader
+              title="Assinaturas"
+              icon={Repeat}
+              hint={
+                assinaturas.activeCount
+                  ? `${assinaturas.activeCount} ativa${assinaturas.activeCount > 1 ? "s" : ""} · ${money(assinaturas.monthlyCents)} por mês`
+                  : undefined
+              }
+            />
+
+            {assinaturas.activeCount ? (
+              <>
+                {assinaturas.next7DaysCents > 0 ? (
+                  <Notice tone="caution" icon={Clock}>
+                    <span className="tabular font-medium">{money(assinaturas.next7DaysCents)}</span> em
+                    cobranças nos próximos 7 dias.
+                  </Notice>
+                ) : null}
+
+                {assinaturas.upcoming.length ? (
+                  <ul className={assinaturas.next7DaysCents > 0 ? "mt-3" : undefined}>
+                    {assinaturas.upcoming.slice(0, 6).map((cobranca) => (
+                      <ListRow
+                        key={`${cobranca.recurrenceId}-${cobranca.date}`}
+                        title={cobranca.description}
+                        subtitle={relativeDay(cobranca.date, view.today)}
+                        value={money(cobranca.amountCents)}
+                        meta={dateShort(cobranca.date)}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <Empty
+                    icon={Calendar}
+                    title="Nenhuma cobrança nos próximos 30 dias"
+                    hint="As assinaturas cadastradas só voltam a cobrar depois desse prazo."
+                    compact
+                  />
+                )}
+              </>
             ) : (
               <Empty
-                title="Nenhuma recorrência cadastrada"
-                hint="Cadastre salário, contas fixas e assinaturas para o Fluxo projetar os próximos meses."
+                icon={Repeat}
+                title="Nenhuma assinatura"
+                hint="Cadastre uma recorrência com o papel Assinatura para ver o custo total aqui."
+                compact
               />
             )}
-          </Card>
+          </Panel>
         </div>
 
-        <Card>
-          <SectionHeading title="Assinaturas" />
-          {view.subscriptions.activeCount ? (
-            <>
-              <Label>Custo mensal</Label>
-              <Figure value={money(view.subscriptions.monthlyCents)} size="sm" className="mt-1.5" />
-              <p className="mt-2 text-[0.75rem] text-ink-subtle">
-                {money(view.subscriptions.yearlyCents)} por ano · {view.subscriptions.activeCount} ativa
-                {view.subscriptions.activeCount > 1 ? "s" : ""}
-              </p>
-
-              {view.subscriptions.next7DaysCents > 0 ? (
-                <p className="mt-3 rounded-[--radius-control] bg-surface-sunken px-3 py-2 text-[0.8125rem] text-ink">
-                  Próximos 7 dias: {money(view.subscriptions.next7DaysCents)}
-                </p>
-              ) : null}
-
-              {view.subscriptions.upcoming.length ? (
-                <ul className="mt-3">
-                  {view.subscriptions.upcoming.slice(0, 6).map((cobranca) => (
-                    <li
-                      key={`${cobranca.recurrenceId}-${cobranca.date}`}
-                      className="flex items-center justify-between gap-3 border-b border-line py-2 text-[0.8125rem] last:border-0"
-                    >
-                      <span className="truncate text-ink">{cobranca.description}</span>
-                      <span className="shrink-0 text-right">
-                        <span className="tabular block text-ink">{money(cobranca.amountCents)}</span>
-                        <span className="block text-[0.6875rem] text-ink-subtle">{date(cobranca.date)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : (
-            <Empty
-              title="Nenhuma assinatura"
-              hint="Cadastre uma recorrência com o papel Assinatura para ver o custo total aqui."
+        <Panel>
+          <ChartFrame
+            title="Projeção dos próximos meses"
+            hint="O que sobra em cada mês depois de honrar tudo que já está assumido"
+            legend={[
+              { label: "sobra", color: "var(--color-positive)" },
+              { label: "estouro", color: "var(--color-negative)" },
+            ]}
+          >
+            <BarChart
+              bars={view.projection.map((mes) => ({
+                label: competenceShort(mes.competence),
+                value: mes.freeCents,
+                tone: mes.freeCents < 0 ? "negative" : "positive",
+              }))}
+              height={160}
+              format={(valor) => money(valor)}
             />
-          )}
-        </Card>
-      </div>
-    </main>
+          </ChartFrame>
+
+          <Divider soft className="my-5" />
+
+          {/* A tabela existe para conferir a barra: sem a conta que produziu o
+              número, o gráfico pede confiança cega. */}
+          <DataTable
+            caption="Renda prevista, comprometido e sobra por competência"
+            columns={[
+              { key: "mes", header: "Mês" },
+              { key: "uteis", header: "Dias úteis", align: "right", hideBelow: "md" },
+              { key: "renda", header: "Renda prevista", align: "right" },
+              { key: "comprometido", header: "Comprometido", align: "right" },
+              { key: "sobra", header: "Sobra", align: "right" },
+            ]}
+          >
+            {view.projection.map((mes) => (
+              <Tr key={mes.competence}>
+                <Td>
+                  <span className="flex items-center gap-2">
+                    <span className="whitespace-nowrap">{competenceShort(mes.competence)}</span>
+                    {mes.competence === view.competence ? (
+                      <Badge tone="accent" variant="outline">
+                        atual
+                      </Badge>
+                    ) : null}
+                  </span>
+                </Td>
+                <Td align="right" hideBelow="md" className="tabular text-ink-subtle">
+                  {mes.businessDays}
+                </Td>
+                <Td align="right">
+                  <Amount cents={mes.incomeCents} tone="positive" size="body-sm" />
+                </Td>
+                <Td align="right">
+                  <Amount cents={mes.committedCents} size="body-sm" />
+                </Td>
+                <Td align="right">
+                  <Amount
+                    cents={mes.freeCents}
+                    signed
+                    tone={mes.freeCents < 0 ? "negative" : "neutral"}
+                    size="body-sm"
+                  />
+                </Td>
+              </Tr>
+            ))}
+          </DataTable>
+        </Panel>
+
+        {paradas.length ? (
+          <section>
+            <SectionTitle
+              title="Fora da projeção"
+              hint="Regras pausadas ou já encerradas — não entram no cálculo dos próximos meses"
+            />
+            <ul>
+              {paradas.map((item) => (
+                <ListRow
+                  key={item.id}
+                  title={item.description}
+                  subtitle={`${ROTULO_PAPEL[item.role] ?? item.role} · ${item.scheduleLabel} · ${item.originName}`}
+                  value={money(item.amountCents)}
+                  meta={item.interval === "yearly" ? "anual" : "mensal"}
+                  badge={
+                    <Badge tone={item.isActive ? "neutral" : "caution"}>
+                      {item.isActive ? "encerrada" : "pausada"}
+                    </Badge>
+                  }
+                />
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </Stack>
+    </Page>
+  );
+}
+
+/**
+ * A linha de contexto de uma regra na régua do tempo.
+ *
+ * Papel, origem e agendamento numa linha só: é o que distingue duas regras de
+ * mesmo nome — "Internet" no cartão e "Internet" no débito.
+ */
+function DetalheDaRegra({ item }: { item: ComProxima }) {
+  const partes = [item.originName, item.scheduleLabel];
+  if (item.categoryName) partes.push(item.categoryName);
+  if (item.amountMode === "per_business_day") partes.push("por dia útil");
+  if (item.interval === "yearly") partes.push("anual");
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+      {item.role !== "standard" ? (
+        <Badge tone={item.kind === "income" ? "positive" : "neutral"} variant="outline">
+          {ROTULO_PAPEL[item.role] ?? item.role}
+        </Badge>
+      ) : null}
+      <span>{partes.join(" · ")}</span>
+    </span>
   );
 }

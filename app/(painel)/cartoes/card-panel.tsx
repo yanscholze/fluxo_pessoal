@@ -3,11 +3,14 @@
 import { useState } from "react";
 
 import type { CardsView, CardView, InvoiceView } from "../../../server/services/cards.ts";
-import { Badge, Card, Meter } from "../../ui/primitives.tsx";
+import { Button } from "../../ui/controls.tsx";
+import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, money, percent, relativeDay } from "../../ui/format.ts";
+import { CircleAlert, CreditCard } from "../../ui/icons.tsx";
+import { Badge, Divider, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
 import { PayInvoice } from "./pay-invoice.tsx";
 
-const ROTULO: Record<InvoiceView["status"], { texto: string; tom: "positive" | "negative" | "caution" | "neutral" }> = {
+const SITUACAO: Record<InvoiceView["status"], { texto: string; tom: Tone }> = {
   paga: { texto: "Paga", tom: "positive" },
   em_aberto: { texto: "Em aberto", tom: "caution" },
   atrasada: { texto: "Atrasada", tom: "negative" },
@@ -24,23 +27,37 @@ export function CardPanel({
   today: CardsView["today"];
 }) {
   const [pagando, setPagando] = useState<InvoiceView | null>(null);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   const ativa = card.invoices.find((invoice) => invoice.isActive);
   const atrasadas = card.invoices.filter((invoice) => invoice.status === "atrasada");
   const usoDoLimite = card.limitCents > 0 ? card.usedLimitCents / card.limitCents : 0;
 
+  // As competências ao redor da ativa. É esta sequência que torna visível a
+  // regra que mais gera surpresa no crédito: uma compra feita depois do
+  // fechamento não cai na fatura atual, cai na seguinte.
+  const indiceAtivo = card.invoices.findIndex((invoice) => invoice.isActive);
+  const sequencia =
+    indiceAtivo >= 0 ? card.invoices.slice(indiceAtivo, indiceAtivo + 4) : card.invoices.slice(0, 4);
+
   return (
-    <Card as="article">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="h-9 w-9 rounded-lg" style={{ backgroundColor: card.color }} aria-hidden />
-          <div>
-            <h2 className="flex items-center gap-2 text-[1rem] font-semibold text-ink">
+    <Panel as="article">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ring-black/10"
+            style={{ backgroundColor: card.color }}
+            aria-hidden
+          >
+            <CreditCard size={18} strokeWidth={1.6} className="text-white/80" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="flex flex-wrap items-center gap-2 text-heading text-ink">
               {card.name}
               {card.isPrimary ? <Badge tone="accent">principal</Badge> : null}
               {card.kind === "debit" ? <Badge>débito</Badge> : null}
             </h2>
-            <p className="text-[0.75rem] text-ink-subtle">
+            <p className="mt-0.5 truncate text-caption text-ink-subtle">
               {card.brand ? `${card.brand} · ` : ""}
               {card.last4 ? `•••• ${card.last4} · ` : ""}
               paga por {card.paymentAccountName}
@@ -51,44 +68,32 @@ export function CardPanel({
         {card.kind === "credit" ? (
           <div className="text-right">
             <p className="text-label uppercase text-ink-subtle">Dívida total</p>
-            <p className="tabular text-[1.25rem] font-semibold text-ink">{money(card.debtCents)}</p>
+            <p className="tabular mt-0.5 text-figure-sm text-ink">{money(card.debtCents)}</p>
           </div>
         ) : null}
       </header>
 
-      {card.kind === "credit" ? (
+      {card.kind !== "credit" ? (
+        <p className="mt-4 text-body-sm text-ink-muted">
+          Cartão de débito: cada compra sai direto do saldo de {card.paymentAccountName}, sem fatura.
+        </p>
+      ) : (
         <>
-          {card.limitCents > 0 ? (
-            <div className="mt-4">
-              <Meter
-                value={card.usedLimitCents}
-                total={card.limitCents}
-                tone={usoDoLimite > 0.8 ? "negative" : "accent"}
-                label={`Limite usado do ${card.name}`}
-              />
-              <p className="mt-1.5 text-[0.75rem] text-ink-subtle">
-                {money(card.availableLimitCents)} livres de {money(card.limitCents)} ·{" "}
-                {percent(usoDoLimite * 100)} comprometido, incluindo parcelas futuras
-              </p>
-            </div>
-          ) : null}
-
           {atrasadas.length ? (
-            <ul className="mt-4 space-y-1.5 rounded-[--radius-control] bg-negative-wash p-3">
+            <ul className="mt-4 space-y-1.5 rounded-md bg-negative-wash p-3">
               {atrasadas.map((invoice) => (
-                <li key={invoice.competence} className="flex items-center justify-between gap-3 text-[0.8125rem]">
-                  <span className="text-negative">
+                <li key={invoice.competence} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-body-sm text-negative">
+                    <CircleAlert size={14} strokeWidth={1.9} aria-hidden />
                     Fatura de {competenceShort(invoice.competence)} venceu em {date(invoice.dueDate)}
                   </span>
-                  <span className="flex items-center gap-2">
-                    <span className="tabular font-semibold text-negative">{money(invoice.outstandingCents)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setPagando(invoice)}
-                      className="rounded-[--radius-control] bg-negative px-2 py-1 text-[0.75rem] font-semibold text-white"
-                    >
+                  <span className="flex items-center gap-2.5">
+                    <span className="tabular text-body-sm font-semibold text-negative">
+                      {money(invoice.outstandingCents)}
+                    </span>
+                    <Button variant="danger" size="sm" onClick={() => setPagando(invoice)}>
                       Pagar
-                    </button>
+                    </Button>
                   </span>
                 </li>
               ))}
@@ -96,67 +101,151 @@ export function CardPanel({
           ) : null}
 
           {ativa ? (
-            <div className="mt-4 flex flex-wrap items-end justify-between gap-4 rounded-[--radius-control] border border-line bg-surface-sunken p-4">
-              <div>
-                <p className="text-label uppercase text-ink-subtle">
-                  Fatura de {competenceShort(ativa.competence)}
-                </p>
-                <p className="tabular mt-1 text-figure-sm text-ink">{money(ativa.outstandingCents)}</p>
-                <p className="mt-1 text-[0.75rem] text-ink-subtle">
-                  {ativa.paymentsCents > 0
-                    ? `${money(ativa.paymentsCents)} pagos de ${money(ativa.chargesCents)} · `
-                    : ""}
-                  fecha {date(ativa.closingDate)} ({relativeDay(ativa.closingDate, today)}) · vence{" "}
-                  {date(ativa.dueDate)}
-                </p>
+            <div className="mt-4 rounded-md border border-line bg-surface-sunken p-4">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-label uppercase text-ink-subtle">
+                    Fatura de {competenceShort(ativa.competence)}
+                  </p>
+                  <p className="tabular mt-1 text-figure text-ink">{money(ativa.outstandingCents)}</p>
+                  {ativa.paymentsCents > 0 ? (
+                    <p className="mt-1 text-caption text-ink-subtle">
+                      {money(ativa.paymentsCents)} pagos de {money(ativa.chargesCents)}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-end gap-5">
+                  <dl className="grid grid-cols-2 gap-x-5 gap-y-1 text-caption">
+                    <dt className="text-ink-subtle">Fecha</dt>
+                    <dd className="text-right text-ink">
+                      {date(ativa.closingDate)}
+                      <span className="ml-1 text-ink-subtle">({relativeDay(ativa.closingDate, today)})</span>
+                    </dd>
+                    <dt className="text-ink-subtle">Vence</dt>
+                    <dd className="text-right text-ink">
+                      {date(ativa.dueDate)}
+                      <span className="ml-1 text-ink-subtle">({relativeDay(ativa.dueDate, today)})</span>
+                    </dd>
+                  </dl>
+
+                  {ativa.outstandingCents > 0 ? (
+                    <Button variant="primary" onClick={() => setPagando(ativa)}>
+                      Pagar fatura
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              {ativa.outstandingCents > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setPagando(ativa)}
-                  className="h-10 rounded-[--radius-control] bg-accent px-4 text-[0.875rem] font-semibold text-accent-ink"
-                >
-                  Pagar fatura
-                </button>
-              ) : null}
             </div>
           ) : null}
 
-          <details className="mt-4">
-            <summary className="cursor-pointer text-[0.8125rem] text-ink-muted">Histórico de faturas</summary>
-            <ul className="mt-2 border-t border-line">
-              {card.invoices.map((invoice) => {
-                const rotulo = ROTULO[invoice.status];
-                return (
-                  <li
-                    key={invoice.competence}
-                    className="flex items-center justify-between gap-4 border-b border-line py-2 last:border-0"
-                  >
-                    <span className="flex items-center gap-2 text-[0.8125rem] text-ink">
-                      {competenceShort(invoice.competence)}
-                      <Badge tone={rotulo.tom}>{rotulo.texto}</Badge>
-                    </span>
-                    <span className="text-right">
-                      <span className="tabular block text-[0.8125rem] text-ink">
+          {sequencia.length > 1 ? (
+            <div className="mt-4">
+              <p className="mb-2 text-label uppercase text-ink-subtle">Próximas competências</p>
+              <ol className="grid gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
+                {sequencia.map((invoice) => {
+                  const situacao = SITUACAO[invoice.status];
+                  return (
+                    <li key={invoice.competence} className="bg-surface p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-caption text-ink-muted">
+                          {competenceShort(invoice.competence)}
+                        </span>
+                        {invoice.isActive ? <Badge tone="accent">atual</Badge> : null}
+                      </div>
+                      <p className="tabular mt-1 text-body font-medium text-ink">
                         {money(invoice.chargesCents)}
-                      </span>
-                      <span className="block text-[0.6875rem] text-ink-subtle">
-                        vence {date(invoice.dueDate)}
-                        {invoice.outstandingCents > 0 && invoice.status !== "futura"
-                          ? ` · ${money(invoice.outstandingCents)} em aberto`
-                          : ""}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </details>
+                      </p>
+                      <p className="mt-0.5 text-caption text-ink-subtle">
+                        {situacao.texto.toLowerCase()} · vence {date(invoice.dueDate)}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="mt-2 text-caption text-ink-subtle">
+                Compra feita depois do fechamento entra na competência seguinte, não na atual.
+              </p>
+            </div>
+          ) : null}
+
+          {card.limitCents > 0 ? (
+            <div className="mt-4">
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2 text-caption">
+                <span className="text-ink-subtle">Limite comprometido, incluindo parcelas futuras</span>
+                <span className="tabular text-ink">
+                  {money(card.usedLimitCents)}{" "}
+                  <span className="text-ink-subtle">de {money(card.limitCents)}</span>
+                </span>
+              </div>
+              <Meter
+                value={card.usedLimitCents}
+                total={card.limitCents}
+                tone={usoDoLimite > 0.85 ? "negative" : usoDoLimite > 0.6 ? "caution" : "accent"}
+                label={`Limite usado do ${card.name}`}
+              />
+              <p className="mt-1.5 text-caption text-ink-subtle">
+                {money(card.availableLimitCents)} livres · {percent(usoDoLimite * 100)} comprometido
+              </p>
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            <Divider soft />
+            <button
+              type="button"
+              onClick={() => setHistoricoAberto((aberto) => !aberto)}
+              aria-expanded={historicoAberto}
+              className="mt-3 text-body-sm font-medium text-accent transition-colors hover:underline"
+            >
+              {historicoAberto ? "Ocultar histórico de faturas" : "Ver histórico de faturas"}
+            </button>
+
+            {historicoAberto ? (
+              <div className="mt-3">
+                <DataTable
+                  caption={`Histórico de faturas do ${card.name}`}
+                  columns={[
+                    { key: "competencia", header: "Competência" },
+                    { key: "situacao", header: "Situação", hideBelow: "sm" },
+                    { key: "vencimento", header: "Vence", align: "right", hideBelow: "sm" },
+                    { key: "total", header: "Total", align: "right" },
+                    { key: "aberto", header: "Em aberto", align: "right" },
+                  ]}
+                >
+                  {card.invoices.map((invoice) => {
+                    const situacao = SITUACAO[invoice.status];
+                    return (
+                      <Tr key={invoice.competence}>
+                        <Td className="text-body-sm">{competenceShort(invoice.competence)}</Td>
+                        <Td hideBelow="sm">
+                          <Badge tone={situacao.tom}>{situacao.texto}</Badge>
+                        </Td>
+                        <Td align="right" hideBelow="sm" className="tabular text-caption text-ink-subtle">
+                          {date(invoice.dueDate)}
+                        </Td>
+                        <Td align="right" className="tabular text-body-sm text-ink">
+                          {money(invoice.chargesCents)}
+                        </Td>
+                        <Td align="right">
+                          <span
+                            className={`tabular text-body-sm ${
+                              invoice.outstandingCents > 0 && invoice.status !== "futura"
+                                ? "font-medium text-caution"
+                                : "text-ink-subtle"
+                            }`}
+                          >
+                            {invoice.outstandingCents > 0 ? money(invoice.outstandingCents) : "—"}
+                          </span>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </DataTable>
+              </div>
+            ) : null}
+          </div>
         </>
-      ) : (
-        <p className="mt-4 text-[0.8125rem] text-ink-muted">
-          Cartão de débito: cada compra sai direto do saldo de {card.paymentAccountName}, sem fatura.
-        </p>
       )}
 
       {pagando ? (
@@ -169,6 +258,6 @@ export function CardPanel({
           onClose={() => setPagando(null)}
         />
       ) : null}
-    </Card>
+    </Panel>
   );
 }

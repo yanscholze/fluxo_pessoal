@@ -48,12 +48,12 @@ export function ConfirmOccurrence({
 
   return (
     <span className="flex items-center gap-2">
-      {erro ? <span className="text-[0.75rem] text-negative">{erro}</span> : null}
+      {erro ? <span className="text-caption text-negative">{erro}</span> : null}
       <button
         type="button"
         onClick={confirmar}
         disabled={enviando}
-        className="h-8 rounded-[--radius-control] bg-accent px-3 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-60"
+        className="inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 rounded-md border border-transparent bg-accent px-2.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
       >
         {enviando ? "Confirmando…" : `Confirmar ${money(amountCents)}`}
       </button>

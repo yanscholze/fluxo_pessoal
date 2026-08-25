@@ -3,12 +3,20 @@ import { redirect } from "next/navigation";
 import { isConfigured } from "../../../server/services/ai/client.ts";
 import { quotaStatus } from "../../../server/services/ai/quota.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Card, Empty, SectionHeading } from "../../ui/primitives.tsx";
+import { Bot, Camera, Sparkles } from "../../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Empty, Meter, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { AssistantChat } from "./assistant-chat.tsx";
 import { ReceiptReader } from "./receipt-reader.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Assistente.
+ *
+ * A cota aparece como barra e não só como número: "3 de 10" obriga a fazer a
+ * conta; a barra mostra de relance se ainda dá para perguntar hoje.
+ */
 export default async function Assistente() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -19,40 +27,60 @@ export default async function Assistente() {
     : [null, null];
 
   return (
-    <main className="mx-auto w-full max-w-[64rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Assistente</h1>
-        <p className="mt-1 text-[0.875rem] text-ink-muted">
-          Pergunte sobre a sua situação e leia cupons pela foto.
-        </p>
-      </header>
+    <Page width="narrow">
+      <PageHeader
+        title="Assistente"
+        description="Pergunte sobre a sua situação e leia cupons pela foto. As respostas usam os seus números, não regra genérica."
+      />
 
       {configurado ? (
-        <div className="space-y-5">
-          <Card>
-            <SectionHeading
+        <Stack gap="md">
+          <Panel>
+            <PanelHeader
               title="Perguntar"
-              hint={`${conselho!.remaining} de ${conselho!.limit} consultas restantes hoje`}
+              icon={Bot}
+              action={<Cota usados={conselho!.limit - conselho!.remaining} limite={conselho!.limit} />}
             />
             <AssistantChat remaining={conselho!.remaining} />
-          </Card>
+          </Panel>
 
-          <Card>
-            <SectionHeading
+          <Panel>
+            <PanelHeader
               title="Ler cupom"
-              hint={`${cupom!.remaining} de ${cupom!.limit} leituras restantes hoje`}
+              icon={Camera}
+              action={<Cota usados={cupom!.limit - cupom!.remaining} limite={cupom!.limit} />}
             />
             <ReceiptReader remaining={cupom!.remaining} />
-          </Card>
-        </div>
+          </Panel>
+        </Stack>
       ) : (
-        <Card>
+        <Panel>
           <Empty
+            icon={Sparkles}
             title="O assistente não está configurado nesta instalação"
             hint="Defina OPENAI_API_KEY no ambiente para habilitar as consultas e a leitura de cupom. O resto do Fluxo funciona normalmente sem isso."
           />
-        </Card>
+        </Panel>
       )}
-    </main>
+    </Page>
+  );
+}
+
+function Cota({ usados, limite }: { usados: number; limite: number }) {
+  const restantes = limite - usados;
+  return (
+    <div className="w-32 text-right">
+      <p className="tabular text-caption text-ink-subtle">
+        {restantes} de {limite} hoje
+      </p>
+      <Meter
+        className="mt-1"
+        size="sm"
+        value={usados}
+        total={limite}
+        tone={restantes === 0 ? "negative" : restantes <= limite * 0.25 ? "caution" : "accent"}
+        label="Cota diária"
+      />
+    </div>
   );
 }

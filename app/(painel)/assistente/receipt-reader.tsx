@@ -87,40 +87,40 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
             const arquivo = evento.target.files?.[0];
             if (arquivo) enviar(arquivo);
           }}
-          className="block w-full text-[0.8125rem] text-ink-muted file:mr-3 file:rounded-[--radius-control] file:border file:border-line file:bg-surface-sunken file:px-4 file:py-2.5 file:text-[0.8125rem] file:text-ink disabled:opacity-60"
+          className="block w-full text-body-sm text-ink-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-sunken file:px-4 file:py-2.5 file:text-body-sm file:text-ink disabled:opacity-60"
         />
       </label>
 
-      {lendo ? <p className="mt-3 text-[0.8125rem] text-ink-muted">Lendo o cupom…</p> : null}
+      {lendo ? <p className="mt-3 text-body-sm text-ink-muted">Lendo o cupom…</p> : null}
 
       {erro ? (
-        <p role="alert" className="mt-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mt-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
 
       {leitura ? (
-        <article className="mt-4 rounded-[--radius-control] border border-line bg-surface-sunken p-4">
+        <article className="mt-4 rounded-md border border-line bg-surface-sunken p-4">
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
+              <h3 className="flex items-center gap-2 text-heading font-semibold text-ink">
                 {leitura.merchant || leitura.description}
                 <Badge tone={confiancaBaixa ? "caution" : "positive"}>
                   {percent(leitura.confidence * 100)} de confiança
                 </Badge>
               </h3>
-              <p className="mt-0.5 text-[0.75rem] text-ink-subtle">
+              <p className="mt-0.5 text-caption text-ink-subtle">
                 {leitura.occurredOn ? date(leitura.occurredOn as never) : "data ilegível"}
                 {leitura.categoryName ? ` · ${leitura.categoryName}` : " · sem categoria"}
               </p>
             </div>
-            <p className="tabular text-[1.25rem] font-semibold text-ink">{money(leitura.totalCents)}</p>
+            <p className="tabular text-figure-sm font-semibold text-ink">{money(leitura.totalCents)}</p>
           </header>
 
           {leitura.warnings.length ? (
-            <ul className="mt-3 space-y-1 rounded-[--radius-control] bg-caution-wash px-3 py-2">
+            <ul className="mt-3 space-y-1 rounded-md bg-caution-wash px-3 py-2">
               {leitura.warnings.map((aviso) => (
-                <li key={aviso} className="text-[0.75rem] text-caution">
+                <li key={aviso} className="text-caption text-caution">
                   {aviso}
                 </li>
               ))}
@@ -129,14 +129,14 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
 
           {leitura.items.length ? (
             <details className="mt-3">
-              <summary className="cursor-pointer text-[0.8125rem] text-ink-muted">
+              <summary className="cursor-pointer text-body-sm text-ink-muted">
                 {leitura.items.length} {leitura.items.length === 1 ? "item lido" : "itens lidos"}
               </summary>
               <ul className="mt-2 border-t border-line">
                 {leitura.items.map((item, indice) => (
                   <li
                     key={`${item.description}-${indice}`}
-                    className="flex items-center justify-between gap-3 border-b border-line py-1.5 text-[0.8125rem] last:border-0"
+                    className="flex items-center justify-between gap-3 border-b border-line py-1.5 text-body-sm last:border-0"
                   >
                     <span className="truncate text-ink">
                       {item.quantity > 1 ? `${item.quantity}× ` : ""}
@@ -164,14 +164,14 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
                 router.push(`/lancamentos?${parametros.toString()}`);
               }}
               disabled={leitura.totalCents === 0}
-              className="h-10 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-60"
+              className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
             >
               Registrar lançamento
             </button>
             <button
               type="button"
               onClick={() => setLeitura(null)}
-              className="h-10 rounded-[--radius-control] border border-line px-4 text-[0.8125rem] text-ink-muted"
+              className="h-10 rounded-md border border-line px-4 text-body-sm text-ink-muted"
             >
               Descartar
             </button>
@@ -180,7 +180,7 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
       ) : null}
 
       {semCota ? (
-        <p className="mt-3 text-[0.8125rem] text-caution">
+        <p className="mt-3 text-body-sm text-caution">
           Você usou todas as leituras de hoje. A cota volta amanhã.
         </p>
       ) : null}

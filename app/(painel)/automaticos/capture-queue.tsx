@@ -61,7 +61,7 @@ export function CaptureQueue({
   return (
     <div>
       {erro ? (
-        <p role="alert" className="mb-3 rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="mb-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
@@ -75,7 +75,7 @@ export function CaptureQueue({
             <li key={item.id} className="border-b border-line py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-[0.875rem] text-ink">
+                  <p className="flex flex-wrap items-center gap-2 text-body text-ink">
                     {item.description}
                     <Badge tone={baixaConfianca ? "caution" : "positive"}>
                       {percent(item.confidencePercent)} de confiança
@@ -86,14 +86,14 @@ export function CaptureQueue({
                       </Badge>
                     ) : null}
                   </p>
-                  <p className="text-[0.75rem] text-ink-subtle">
+                  <p className="text-caption text-ink-subtle">
                     {dateShort(item.occurredOn)} · {item.sourceLabel ?? item.sourceApp} ·{" "}
                     {METODO[item.method]}
                   </p>
                 </div>
 
                 <p
-                  className={`tabular shrink-0 text-[0.9375rem] font-medium ${
+                  className={`tabular shrink-0 text-heading font-medium ${
                     item.kind === "income" ? "text-positive" : "text-ink"
                   }`}
                 >
@@ -101,7 +101,7 @@ export function CaptureQueue({
                 </p>
               </div>
 
-              <p className="mt-1.5 rounded-[--radius-control] bg-surface-sunken px-3 py-1.5 text-[0.75rem] text-ink-subtle">
+              <p className="mt-1.5 rounded-md bg-surface-sunken px-3 py-1.5 text-caption text-ink-subtle">
                 {item.rawText}
               </p>
 
@@ -120,7 +120,7 @@ export function CaptureQueue({
                       ...(cardId ? { cardId } : { accountId: dados.get("accountId") }),
                     });
                   }}
-                  className="mt-3 space-y-3 rounded-[--radius-control] border border-line p-3"
+                  className="mt-3 space-y-3 rounded-md border border-line p-3"
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Campo rotulo="Descrição">
@@ -181,14 +181,14 @@ export function CaptureQueue({
                     <button
                       type="submit"
                       disabled={enviando === item.id}
-                      className="h-9 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-60"
+                      className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
                     >
                       {enviando === item.id ? "Registrando…" : "Registrar"}
                     </button>
                     <button
                       type="button"
                       onClick={() => setAberto(null)}
-                      className="h-9 rounded-[--radius-control] border border-line px-3 text-[0.8125rem] text-ink-muted"
+                      className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-line-strong bg-surface px-3.5 text-body-sm font-medium text-ink transition-colors hover:bg-surface-inset disabled:pointer-events-none disabled:opacity-45"
                     >
                       Cancelar
                     </button>
@@ -199,7 +199,7 @@ export function CaptureQueue({
                   <button
                     type="button"
                     onClick={() => setAberto(item.id)}
-                    className="rounded-[--radius-control] bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-accent-ink"
+                    className="inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 rounded-md border border-transparent bg-accent px-2.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
                   >
                     Conferir e registrar
                   </button>
@@ -207,7 +207,7 @@ export function CaptureQueue({
                     type="button"
                     disabled={enviando === item.id}
                     onClick={() => decidir(item.id, { decision: "ignorar" })}
-                    className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
+                    className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
                   >
                     Ignorar
                   </button>
@@ -215,7 +215,7 @@ export function CaptureQueue({
                     type="button"
                     disabled={enviando === item.id}
                     onClick={() => decidir(item.id, { decision: "duplicado" })}
-                    className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
+                    className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken disabled:opacity-50"
                   >
                     É duplicada
                   </button>
@@ -230,12 +230,12 @@ export function CaptureQueue({
 }
 
 const entrada =
-  "h-9 w-full rounded-[--radius-control] border border-line bg-surface px-2.5 text-[0.8125rem] text-ink outline-none focus:border-accent";
+  "h-9 w-full rounded-md border border-line bg-surface px-2.5 text-body-sm text-ink outline-none focus:border-accent";
 
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[0.75rem] font-medium text-ink">{rotulo}</span>
+      <span className="mb-1 block text-caption font-medium text-ink">{rotulo}</span>
       {children}
     </label>
   );

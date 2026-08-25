@@ -5,116 +5,308 @@
  *
  * Só o que é interativo mora aqui. Os dados de cada tela vêm de componente de
  * servidor — a casca não busca nada e não sabe nada sobre dinheiro.
+ *
+ * A navegação é **agrupada**. A versão anterior tinha dezessete itens numa
+ * lista plana, e uma lista plana de dezessete não é navegação: é um índice que
+ * obriga a ler tudo para achar um. Os grupos respondem "que tipo de coisa eu
+ * quero fazer" antes de "qual tela".
  */
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import {
+  BarChart3,
+  Calendar,
+  CreditCard,
+  Gauge,
+  Gift,
+  Landmark,
+  LayoutDashboard,
+  LogOut,
+  type LucideIcon,
+  Menu,
+  Moon,
+  PanelLeft,
+  PanelLeftClose,
+  Plane,
+  Receipt,
+  Repeat,
+  Settings,
+  Smartphone,
+  Sparkles,
+  Sun,
+  Target,
+  TrendingUp,
+  Upload,
+  Wallet,
+  X,
+  Zap,
+} from "./icons.tsx";
+import { join } from "./primitives.tsx";
+
 export type NavItem = {
   readonly href: string;
   readonly label: string;
+  readonly icon: LucideIcon;
 };
 
-export const NAV: readonly NavItem[] = [
-  { href: "/", label: "Visão geral" },
-  { href: "/lancamentos", label: "Lançamentos" },
-  { href: "/contas", label: "Contas" },
-  { href: "/cartoes", label: "Cartões" },
-  { href: "/parcelamentos", label: "Parcelamentos" },
-  { href: "/recompensas", label: "Recompensas" },
-  { href: "/planejamento", label: "Planejamento" },
-  { href: "/orcamentos", label: "Orçamentos" },
-  { href: "/metas", label: "Metas" },
-  { href: "/investimentos", label: "Investimentos" },
-  { href: "/viagens", label: "Viagens" },
-  { href: "/saude", label: "Saúde" },
-  { href: "/relatorios", label: "Relatórios" },
-  { href: "/importar", label: "Importar" },
-  { href: "/automaticos", label: "Automáticos" },
-  { href: "/conectar", label: "Conectar celular" },
-  { href: "/assistente", label: "Assistente" },
+export type NavGroup = {
+  readonly title: string;
+  readonly items: readonly NavItem[];
+};
+
+export const NAV: readonly NavGroup[] = [
+  {
+    title: "Visão geral",
+    items: [
+      { href: "/", label: "Painel", icon: LayoutDashboard },
+      { href: "/saude", label: "Saúde financeira", icon: Gauge },
+    ],
+  },
+  {
+    title: "Movimentação",
+    items: [
+      { href: "/lancamentos", label: "Lançamentos", icon: Receipt },
+      { href: "/contas", label: "Contas", icon: Landmark },
+      { href: "/cartoes", label: "Cartões e faturas", icon: CreditCard },
+      { href: "/parcelamentos", label: "Parcelamentos", icon: Repeat },
+    ],
+  },
+  {
+    title: "Planejamento",
+    items: [
+      { href: "/planejamento", label: "Recorrências", icon: Calendar },
+      { href: "/orcamentos", label: "Orçamentos", icon: Wallet },
+      { href: "/metas", label: "Metas", icon: Target },
+    ],
+  },
+  {
+    title: "Patrimônio",
+    items: [
+      { href: "/investimentos", label: "Investimentos", icon: TrendingUp },
+      { href: "/recompensas", label: "Recompensas", icon: Gift },
+      { href: "/viagens", label: "Viagens", icon: Plane },
+    ],
+  },
+  {
+    title: "Análise",
+    items: [{ href: "/relatorios", label: "Relatórios", icon: BarChart3 }],
+  },
+  {
+    title: "Sistema",
+    items: [
+      { href: "/automaticos", label: "Automações", icon: Zap },
+      { href: "/importar", label: "Importações", icon: Upload },
+      { href: "/assistente", label: "Assistente", icon: Sparkles },
+      { href: "/conectar", label: "Aparelhos", icon: Smartphone },
+      { href: "/configuracoes", label: "Configurações", icon: Settings },
+    ],
+  },
 ];
+
+const CHAVE_RECOLHIDA = "fluxo:menu-recolhido";
 
 export function Shell({ userName, children }: { userName: string; children: ReactNode }) {
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
+  const [recolhida, setRecolhida] = useState(false);
 
-  // Navegar fecha o menu: no celular ele cobre a tela inteira, e ficar aberto
-  // depois do clique esconde justamente a página que o usuário pediu.
+  // Navegar fecha a gaveta: no celular ela cobre a tela inteira, e ficar
+  // aberta depois do clique esconde justamente a página que o usuário pediu.
   useEffect(() => setMenuAberto(false), [pathname]);
 
+  useEffect(() => {
+    setRecolhida(localStorage.getItem(CHAVE_RECOLHIDA) === "1");
+  }, []);
+
+  function alternarLargura() {
+    setRecolhida((atual) => {
+      localStorage.setItem(CHAVE_RECOLHIDA, atual ? "0" : "1");
+      return !atual;
+    });
+  }
+
   return (
-    <div className="flex min-h-dvh flex-col lg:flex-row">
-      <header className="flex items-center justify-between border-b border-line bg-surface px-5 py-3 lg:hidden">
-        <Link href="/" className="text-[1.0625rem] font-semibold tracking-[-0.01em] text-ink">
-          Fluxo
-        </Link>
+    <div className="flex min-h-dvh bg-canvas">
+      {/* Véu da gaveta no celular. */}
+      {menuAberto ? (
         <button
           type="button"
-          onClick={() => setMenuAberto((aberto) => !aberto)}
-          aria-expanded={menuAberto}
-          aria-controls="navegacao"
-          className="rounded-[--radius-control] border border-line px-3 py-1.5 text-[0.8125rem] text-ink"
-        >
-          {menuAberto ? "Fechar" : "Menu"}
-        </button>
-      </header>
+          aria-label="Fechar menu"
+          onClick={() => setMenuAberto(false)}
+          className="fixed inset-0 z-30 bg-canvas/70 backdrop-blur-sm lg:hidden"
+        />
+      ) : null}
 
       <nav
         id="navegacao"
-        className={`${menuAberto ? "block" : "hidden"} border-b border-line bg-surface px-3 py-3 lg:sticky lg:top-0 lg:block lg:h-dvh lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-3 lg:py-5`}
+        aria-label="Navegação principal"
+        className={join(
+          "fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-line bg-surface",
+          "transition-[transform,width] duration-200 ease-out-soft",
+          "lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0",
+          menuAberto ? "translate-x-0" : "-translate-x-full",
+          recolhida ? "w-[15rem] lg:w-[4.25rem]" : "w-[15rem]",
+        )}
       >
-        <Link
-          href="/"
-          className="mb-6 hidden px-2 text-[1.0625rem] font-semibold tracking-[-0.01em] text-ink lg:block"
-        >
-          Fluxo
-        </Link>
+        <div className={join("flex h-14 shrink-0 items-center gap-2", recolhida ? "lg:justify-center lg:px-0 px-4" : "px-4")}>
+          <Link
+            href="/"
+            className="flex min-w-0 items-center gap-2 text-title text-ink"
+            aria-label="Fluxo — página inicial"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-ink">
+              <svg viewBox="0 0 16 16" className="size-4" aria-hidden fill="none">
+                <path
+                  d="M3 11.5c2.2 0 2.6-7 5-7s2.8 7 5 7"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <span className={join("truncate", recolhida ? "lg:hidden" : "")}>Fluxo</span>
+          </Link>
 
-        <ul className="space-y-0.5">
-          {NAV.map((item) => {
-            const ativo = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={ativo ? "page" : undefined}
-                  className={`block rounded-[--radius-control] px-3 py-2 text-[0.875rem] transition-colors ${
-                    ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-sunken"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+          <button
+            type="button"
+            onClick={() => setMenuAberto(false)}
+            aria-label="Fechar menu"
+            className="ml-auto rounded-md p-1.5 text-ink-muted hover:bg-surface-inset lg:hidden"
+          >
+            <X size={17} strokeWidth={1.9} aria-hidden />
+          </button>
+        </div>
 
-        <div className="mt-6 border-t border-line pt-4 lg:absolute lg:bottom-5 lg:w-[12.5rem]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
+          {NAV.map((grupo) => (
+            <div key={grupo.title} className="mb-4 last:mb-0">
+              <p
+                className={join(
+                  "px-2 pb-1.5 pt-2 text-label uppercase text-ink-subtle",
+                  recolhida ? "lg:sr-only" : "",
+                )}
+              >
+                {grupo.title}
+              </p>
+              <ul className="space-y-0.5">
+                {grupo.items.map((item) => (
+                  <li key={item.href}>
+                    <ItemDeNavegacao item={item} pathname={pathname} recolhida={recolhida} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="shrink-0 border-t border-line p-2.5">
           <Link
             href="/configuracoes"
-            className={`block truncate rounded-[--radius-control] px-3 py-2 text-[0.8125rem] transition-colors ${
-              pathname.startsWith("/configuracoes")
-                ? "bg-accent-wash font-medium text-accent"
-                : "text-ink hover:bg-surface-sunken"
-            }`}
+            className={join(
+              "flex items-center gap-2.5 rounded-md p-1.5 transition-colors hover:bg-surface-inset",
+              recolhida ? "lg:justify-center" : "",
+            )}
           >
-            {userName}
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-wash text-label uppercase text-accent">
+              {iniciais(userName)}
+            </span>
+            <span className={join("min-w-0 flex-1", recolhida ? "lg:hidden" : "")}>
+              <span className="block truncate text-body-sm text-ink">{userName}</span>
+              <span className="block text-caption text-ink-subtle">Ver conta</span>
+            </span>
           </Link>
-          <div className="mt-2 flex gap-1.5 px-1">
-            <ThemeToggle />
-            <SignOutButton />
+
+          <div className={join("mt-1.5 flex gap-1", recolhida ? "lg:flex-col" : "")}>
+            <BotaoDeTema recolhida={recolhida} />
+            <BotaoDeSaida recolhida={recolhida} />
+            <button
+              type="button"
+              onClick={alternarLargura}
+              aria-label={recolhida ? "Expandir menu" : "Recolher menu"}
+              title={recolhida ? "Expandir menu" : "Recolher menu"}
+              className="hidden size-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink lg:inline-flex"
+            >
+              {recolhida ? (
+                <PanelLeft size={16} strokeWidth={1.8} aria-hidden />
+              ) : (
+                <PanelLeftClose size={16} strokeWidth={1.8} aria-hidden />
+              )}
+            </button>
           </div>
         </div>
       </nav>
 
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior: existe para o celular ter como abrir a gaveta e para
+            a marca ter lugar quando a barra lateral está fora da tela. */}
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md sm:px-6 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMenuAberto(true)}
+            aria-expanded={menuAberto}
+            aria-controls="navegacao"
+            aria-label="Abrir menu"
+            className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
+          >
+            <Menu size={19} strokeWidth={1.9} aria-hidden />
+          </button>
+          <Link href="/" className="text-title text-ink">
+            Fluxo
+          </Link>
+        </header>
+
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
     </div>
   );
 }
 
-function ThemeToggle() {
+function ItemDeNavegacao({
+  item,
+  pathname,
+  recolhida,
+}: {
+  item: NavItem;
+  pathname: string;
+  recolhida: boolean;
+}) {
+  const ativo = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+  const Icone = item.icon;
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={ativo ? "page" : undefined}
+      title={recolhida ? item.label : undefined}
+      className={join(
+        "relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-body-sm transition-colors",
+        recolhida ? "lg:justify-center lg:px-0" : "",
+        ativo
+          ? "bg-accent-wash font-medium text-accent"
+          : "text-ink-muted hover:bg-surface-inset hover:text-ink",
+      )}
+    >
+      {/* Marca o item ativo mesmo quando a barra está recolhida e o rótulo some. */}
+      {ativo ? (
+        <span className="absolute -left-2.5 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-accent" aria-hidden />
+      ) : null}
+      <Icone size={16} strokeWidth={1.8} className="shrink-0" aria-hidden />
+      <span className={join("truncate", recolhida ? "lg:hidden" : "")}>{item.label}</span>
+    </Link>
+  );
+}
+
+function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+function BotaoDeTema({ recolhida }: { recolhida: boolean }) {
   const [escuro, setEscuro] = useState<boolean | null>(null);
 
   useEffect(() => setEscuro(document.documentElement.dataset.theme === "dark"), []);
@@ -126,18 +318,25 @@ function ThemeToggle() {
     localStorage.setItem("fluxo:tema", proximo ? "escuro" : "claro");
   }
 
+  const rotulo = escuro === null ? "Alternar tema" : escuro ? "Usar tema claro" : "Usar tema escuro";
+
   return (
     <button
       type="button"
       onClick={alternar}
-      className="flex-1 rounded-[--radius-control] border border-line px-2 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken"
+      aria-label={rotulo}
+      title={rotulo}
+      className={join(
+        "inline-flex size-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink",
+        recolhida ? "" : "flex-1",
+      )}
     >
-      {escuro === null ? "Tema" : escuro ? "Tema claro" : "Tema escuro"}
+      {escuro === false ? <Moon size={16} strokeWidth={1.8} aria-hidden /> : <Sun size={16} strokeWidth={1.8} aria-hidden />}
     </button>
   );
 }
 
-function SignOutButton() {
+function BotaoDeSaida({ recolhida }: { recolhida: boolean }) {
   const router = useRouter();
 
   async function sair() {
@@ -150,9 +349,14 @@ function SignOutButton() {
     <button
       type="button"
       onClick={sair}
-      className="flex-1 rounded-[--radius-control] border border-line px-2 py-1.5 text-[0.75rem] text-ink-muted hover:bg-surface-sunken"
+      aria-label="Sair"
+      title="Sair"
+      className={join(
+        "inline-flex size-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-negative-wash hover:text-negative",
+        recolhida ? "" : "flex-1",
+      )}
     >
-      Sair
+      <LogOut size={16} strokeWidth={1.8} aria-hidden />
     </button>
   );
 }

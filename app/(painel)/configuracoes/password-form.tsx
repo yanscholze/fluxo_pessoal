@@ -61,13 +61,13 @@ export function PasswordForm() {
       <Campo rotulo="Confirme a nova senha" nome="confirmPassword" autoComplete="new-password" />
 
       {erro ? (
-        <p role="alert" className="rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+        <p role="alert" className="rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
           {erro}
         </p>
       ) : null}
 
       {sucesso ? (
-        <p className="rounded-[--radius-control] bg-positive-wash px-3 py-2 text-[0.8125rem] text-positive">
+        <p className="rounded-md bg-positive-wash px-3 py-2 text-body-sm text-positive">
           Senha trocada. Todos os aparelhos foram desconectados — entrando de novo…
         </p>
       ) : null}
@@ -75,7 +75,7 @@ export function PasswordForm() {
       <button
         type="submit"
         disabled={enviando || sucesso}
-        className="h-10 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-60"
+        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
       >
         {enviando ? "Trocando…" : "Trocar senha"}
       </button>
@@ -96,15 +96,15 @@ function Campo({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">{rotulo}</span>
+      <span className="mb-1.5 block text-body-sm font-medium text-ink">{rotulo}</span>
       <input
         name={nome}
         type="password"
         required
         autoComplete={autoComplete}
-        className="h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+        className="h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
       />
-      {dica ? <span className="mt-1 block text-[0.75rem] text-ink-subtle">{dica}</span> : null}
+      {dica ? <span className="mt-1 block text-caption text-ink-subtle">{dica}</span> : null}
     </label>
   );
 }

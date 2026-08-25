@@ -2,19 +2,31 @@ import { redirect } from "next/navigation";
 
 import { buildCapturesView } from "../../../server/services/captures.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Badge, Card, Empty, SectionHeading } from "../../ui/primitives.tsx";
+import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { dateShort, money } from "../../ui/format.ts";
+import { Layers, ShieldCheck, Zap } from "../../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Badge, Empty, Notice, Panel, PanelHeader, type Tone } from "../../ui/primitives.tsx";
 import { CaptureQueue } from "./capture-queue.tsx";
 import { SourceRules } from "./source-rules.tsx";
 
 export const dynamic = "force-dynamic";
 
-const STATUS: Record<string, { texto: string; tom: "positive" | "neutral" | "negative" }> = {
+const SITUACAO: Record<string, { texto: string; tom: Tone }> = {
   confirmado: { texto: "Confirmado", tom: "positive" },
   ignorado: { texto: "Ignorado", tom: "neutral" },
-  duplicado: { texto: "Duplicado", tom: "negative" },
+  duplicado: { texto: "Duplicado", tom: "caution" },
 };
 
+/**
+ * Automáticos.
+ *
+ * A garantia que a tela precisa transmitir é a de que nada entra sozinho. Por
+ * isso a fila de revisão vem primeiro e ocupa o espaço nobre, e o aviso sobre
+ * confirmação fica no topo em vez de virar nota de rodapé: uma automação
+ * financeira sem consentimento explícito é o começo de uma planilha em que
+ * ninguém confia.
+ */
 export default async function Automaticos() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -22,75 +34,91 @@ export default async function Automaticos() {
   const view = await buildCapturesView(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-[76rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Automáticos</h1>
-        <p className="mt-1 text-[0.875rem] text-ink-muted">
-          O aplicativo lê as notificações do banco e sugere lançamentos. Nada entra na sua conta sem você
-          confirmar.
-        </p>
-      </header>
+    <Page>
+      <PageHeader
+        title="Automações"
+        description="O aplicativo lê as notificações do banco e sugere lançamentos."
+      />
 
-      <Card>
-        <SectionHeading
-          title="Aguardando revisão"
-          hint={
-            view.pending.length
-              ? `${view.pending.length} ${view.pending.length === 1 ? "sugestão" : "sugestões"}`
-              : undefined
-          }
-        />
-        {view.pending.length ? (
-          <CaptureQueue items={view.pending} options={view.options} />
-        ) : (
-          <Empty
-            title="Nenhuma sugestão pendente"
-            hint="Conecte o aplicativo Android e permita a leitura de notificações para as compras aparecerem aqui."
+      <Stack gap="lg">
+        <Notice tone="info" icon={ShieldCheck}>
+          Nada entra na sua conta sem você confirmar. As sugestões ficam paradas aqui até serem revisadas.
+        </Notice>
+
+        <Panel>
+          <PanelHeader
+            title="Aguardando revisão"
+            icon={Zap}
+            hint={
+              view.pending.length
+                ? `${view.pending.length} ${view.pending.length === 1 ? "sugestão" : "sugestões"} para decidir`
+                : undefined
+            }
           />
-        )}
-      </Card>
+          {view.pending.length ? (
+            <CaptureQueue items={view.pending} options={view.options} />
+          ) : (
+            <Empty
+              icon={Zap}
+              title="Nenhuma sugestão pendente"
+              hint="Conecte o aplicativo Android e permita a leitura de notificações para as compras aparecerem aqui."
+            />
+          )}
+        </Panel>
 
-      <Card className="mt-5">
-        <SectionHeading
-          title="Apps"
-          hint="Bancos conhecidos já são lidos; qualquer outro só entra se você permitir"
-        />
-        <SourceRules sources={view.sources} options={view.options} />
-      </Card>
+        <Panel>
+          <PanelHeader
+            title="Aplicativos"
+            icon={Layers}
+            hint="Bancos conhecidos já são lidos; qualquer outro só entra se você permitir"
+          />
+          <SourceRules sources={view.sources} options={view.options} />
+        </Panel>
 
-      {view.recent.length ? (
-        <Card className="mt-5">
-          <SectionHeading title="Já resolvidas" />
-          <ul>
-            {view.recent.map((item) => {
-              const rotulo = STATUS[item.status];
-              return (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate text-[0.875rem] text-ink">
-                      {item.description}
-                      <Badge tone={rotulo.tom}>{rotulo.texto}</Badge>
-                    </p>
-                    <p className="truncate text-[0.75rem] text-ink-subtle">
-                      {dateShort(item.occurredOn)} · {item.sourceLabel ?? item.sourceApp}
-                    </p>
-                  </div>
-                  <p
-                    className={`tabular shrink-0 text-[0.875rem] ${
-                      item.kind === "income" ? "text-positive" : "text-ink"
-                    }`}
-                  >
-                    {item.kind === "income" ? "+" : "−"} {money(item.amountCents)}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      ) : null}
-    </main>
+        {view.recent.length ? (
+          <Panel>
+            <PanelHeader title="Já resolvidas" hint="O que você decidiu recentemente" />
+            <DataTable
+              caption="Capturas já resolvidas"
+              columns={[
+                { key: "descricao", header: "Sugestão" },
+                { key: "app", header: "Aplicativo", hideBelow: "sm" },
+                { key: "situacao", header: "Decisão", hideBelow: "sm" },
+                { key: "data", header: "Data", align: "right", width: "5.5rem" },
+                { key: "valor", header: "Valor", align: "right", width: "7.5rem" },
+              ]}
+            >
+              {view.recent.map((item) => {
+                const situacao = SITUACAO[item.status] ?? SITUACAO.ignorado;
+                return (
+                  <Tr key={item.id}>
+                    <Td className="truncate text-body">{item.description}</Td>
+                    <Td hideBelow="sm" className="truncate text-body-sm text-ink-muted">
+                      {item.sourceLabel ?? item.sourceApp}
+                    </Td>
+                    <Td hideBelow="sm">
+                      <Badge tone={situacao.tom}>{situacao.texto}</Badge>
+                    </Td>
+                    <Td align="right" className="tabular text-caption text-ink-subtle">
+                      {dateShort(item.occurredOn)}
+                    </Td>
+                    <Td align="right">
+                      <span
+                        className={`tabular text-body font-medium ${
+                          item.kind === "income" ? "text-positive" : "text-ink"
+                        }`}
+                      >
+                        {item.kind === "income" ? "+ " : "− "}
+                        {money(item.amountCents)}
+                      </span>
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </DataTable>
+          </Panel>
+        ) : null}
+      </Stack>
+    </Page>
   );
 }

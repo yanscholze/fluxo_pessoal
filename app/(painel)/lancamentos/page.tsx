@@ -3,14 +3,24 @@ import { redirect } from "next/navigation";
 import { parseCompetence, shift } from "../../../core/time/competence.ts";
 import { buildStatement } from "../../../server/services/statement.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Card, Figure, Label } from "../../ui/primitives.tsx";
+import { MetricStrip } from "../../ui/data-display.tsx";
 import { competenceLong, money } from "../../ui/format.ts";
+import { ArrowDownRight, ArrowUpRight, Receipt, Scale } from "../../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Composer } from "./composer.tsx";
 import { CompetenceNav } from "./competence-nav.tsx";
 import { StatementList } from "./statement-list.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Extrato da competência.
+ *
+ * A pergunta é "o que entrou e saiu neste mês, e no que deu". Os três números
+ * do topo respondem o "no que deu"; a tabela responde o "o quê". Navegar entre
+ * competências fica junto do título porque o mês é o recorte de tudo o que
+ * está abaixo — não é um filtro secundário.
+ */
 export default async function Lancamentos({
   searchParams,
 }: {
@@ -27,43 +37,56 @@ export default async function Lancamentos({
   const saldo = statement.incomeCents - statement.expenseCents;
 
   return (
-    <main className="mx-auto w-full max-w-[76rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-label uppercase text-ink-subtle">{competenceLong(statement.competence)}</p>
-          <h1 className="mt-1 text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Lançamentos</h1>
-        </div>
+    <Page>
+      <PageHeader
+        eyebrow={competenceLong(statement.competence)}
+        title="Lançamentos"
+        description="Tudo que entrou e saiu na competência, incluindo o que está previsto."
+        actions={
+          <>
+            <CompetenceNav
+              anterior={shift(statement.competence, -1)}
+              proxima={shift(statement.competence, 1)}
+            />
+            <Composer options={statement.options} competence={statement.competence} />
+          </>
+        }
+      />
 
-        <div className="flex items-center gap-3">
-          <CompetenceNav
-            anterior={shift(statement.competence, -1)}
-            proxima={shift(statement.competence, 1)}
-          />
-          <Composer options={statement.options} competence={statement.competence} />
-        </div>
-      </header>
+      <Stack gap="lg">
+        <MetricStrip
+          metrics={[
+            {
+              label: "Entradas",
+              value: money(statement.incomeCents),
+              tone: "positive",
+              icon: ArrowUpRight,
+              hint: "Receitas confirmadas e previstas do mês",
+            },
+            {
+              label: "Saídas",
+              value: money(statement.expenseCents),
+              icon: ArrowDownRight,
+              hint: "Despesas do mês, sem contar transferências",
+            },
+            {
+              label: "Resultado",
+              value: money(saldo, { signed: true }),
+              tone: saldo < 0 ? "negative" : "positive",
+              icon: Scale,
+              hint: saldo < 0 ? "Saiu mais do que entrou nesta competência" : "Sobrou depois de tudo",
+            },
+            {
+              label: "Lançamentos",
+              value: String(statement.rows.length),
+              icon: Receipt,
+              hint: "Registros na competência",
+            },
+          ]}
+        />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <Card as="article">
-          <Label>Entradas</Label>
-          <Figure value={money(statement.incomeCents)} size="sm" tone="positive" className="mt-1.5" />
-        </Card>
-        <Card as="article">
-          <Label>Saídas</Label>
-          <Figure value={money(statement.expenseCents)} size="sm" className="mt-1.5" />
-        </Card>
-        <Card as="article">
-          <Label>Resultado</Label>
-          <Figure
-            value={money(saldo, { signed: true })}
-            size="sm"
-            tone={saldo < 0 ? "negative" : "positive"}
-            className="mt-1.5"
-          />
-        </Card>
-      </div>
-
-      <StatementList rows={statement.rows} />
-    </main>
+        <StatementList rows={statement.rows} />
+      </Stack>
+    </Page>
   );
 }

@@ -11,6 +11,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button, Field, Input } from "../ui/controls.tsx";
+import { Notice } from "../ui/primitives.tsx";
+
 type Modo = "signin" | "signup";
 
 type IssueResponse = {
@@ -67,10 +70,10 @@ export function AccessForm() {
 
   return (
     <div className="w-full max-w-sm">
-      <h2 className="text-[1.375rem] font-semibold tracking-[-0.02em] text-ink">
+      <h2 className="text-title text-ink">
         {cadastrando ? "Criar sua conta" : "Entrar no Fluxo"}
       </h2>
-      <p className="mt-1.5 text-[0.875rem] text-ink-muted">
+      <p className="mt-1.5 text-body text-ink-muted">
         {cadastrando ? "Leva menos de um minuto." : "Bem-vindo de volta."}
       </p>
 
@@ -106,21 +109,17 @@ export function AccessForm() {
         />
 
         {erro ? (
-          <p role="alert" className="rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
-            {erro}
-          </p>
+          <div role="alert">
+            <Notice tone="negative">{erro}</Notice>
+          </div>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={pendente}
-          className="h-11 w-full rounded-[--radius-control] bg-accent text-[0.875rem] font-semibold text-accent-ink transition-opacity disabled:opacity-60"
-        >
-          {pendente ? "Entrando…" : cadastrando ? "Criar conta" : "Entrar"}
-        </button>
+        <Button type="submit" variant="primary" busy={pendente} className="h-10 w-full">
+          {cadastrando ? "Criar conta" : "Entrar"}
+        </Button>
       </form>
 
-      <p className="mt-6 text-center text-[0.8125rem] text-ink-muted">
+      <p className="mt-6 text-center text-body-sm text-ink-muted">
         {cadastrando ? "Já tem conta?" : "Ainda não tem conta?"}{" "}
         <button
           type="button"
@@ -155,32 +154,17 @@ function Campo({
   dica?: string;
   required?: boolean;
 }) {
-  const idErro = erro ? `${nome}-erro` : undefined;
-
   return (
-    <div>
-      <label htmlFor={nome} className="block text-[0.8125rem] font-medium text-ink">
-        {rotulo}
-      </label>
-      <input
+    <Field label={rotulo} htmlFor={nome} hint={erro ? undefined : dica} error={erro}>
+      <Input
         id={nome}
         name={nome}
         type={tipo}
         autoComplete={autoComplete}
         required={required}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={idErro}
-        className={`mt-1.5 h-11 w-full rounded-[--radius-control] border bg-surface px-3 text-[0.875rem] text-ink outline-none ${
-          erro ? "border-negative" : "border-line focus:border-accent"
-        }`}
+        invalid={Boolean(erro)}
+        className="h-10"
       />
-      {erro ? (
-        <p id={idErro} className="mt-1 text-[0.75rem] text-negative">
-          {erro}
-        </p>
-      ) : dica ? (
-        <p className="mt-1 text-[0.75rem] text-ink-subtle">{dica}</p>
-      ) : null}
-    </div>
+    </Field>
   );
 }

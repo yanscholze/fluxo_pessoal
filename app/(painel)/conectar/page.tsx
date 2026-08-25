@@ -2,12 +2,28 @@ import { redirect } from "next/navigation";
 
 import { listDeviceSessions } from "../../../server/auth/session.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Card, Empty, SectionHeading } from "../../ui/primitives.tsx";
+import { ListRow } from "../../ui/data-display.tsx";
 import { date } from "../../ui/format.ts";
+import { ShieldCheck, Smartphone } from "../../ui/icons.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { PairingForm } from "./pairing-form.tsx";
 
 export const dynamic = "force-dynamic";
 
+const PASSOS = [
+  "O aplicativo gera um código de seis caracteres, válido por dez minutos.",
+  "Você digita esse código aqui, já autenticado no navegador — é a sua sessão web que prova quem você é.",
+  "O aplicativo troca o código por um token próprio, válido por 180 dias e revogável a qualquer momento.",
+];
+
+/**
+ * Conectar aparelho.
+ *
+ * O código é o objeto central da tela, e os passos ficam ao lado dele — não
+ * embaixo, numa seção separada. Quem está com o celular na mão precisa ver o
+ * campo e a instrução ao mesmo tempo.
+ */
 export default async function Conectar() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -15,72 +31,72 @@ export default async function Conectar() {
   const aparelhos = await listDeviceSessions(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-[48rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Conectar aparelho</h1>
-        <p className="mt-1 text-[0.875rem] text-ink-muted">
-          Autorize o aplicativo Android a acessar sua conta. Sua senha não passa pelo celular.
-        </p>
-      </header>
+    <Page width="narrow">
+      <PageHeader
+        title="Conectar aparelho"
+        description="Autorize o aplicativo Android a acessar sua conta. Sua senha não passa pelo celular."
+      />
 
-      <Card>
-        <SectionHeading
-          title="Código do aplicativo"
-          hint="Abra o Fluxo no celular, toque em conectar e digite o código aqui"
-        />
-        <PairingForm />
-      </Card>
-
-      <Card className="mt-5">
-        <SectionHeading title="Aparelhos conectados" />
-        {aparelhos.length ? (
-          <ul>
-            {aparelhos.map((aparelho) => (
-              <li
-                key={aparelho.id}
-                className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-0"
-              >
-                <div>
-                  <p className="text-[0.875rem] text-ink">{aparelho.deviceName ?? "Aparelho sem nome"}</p>
-                  <p className="text-[0.75rem] text-ink-subtle">
-                    {aparelho.platform ?? "desconhecido"} · último acesso{" "}
-                    {date(aparelho.lastSeenAt.slice(0, 10) as never)}
-                  </p>
-                </div>
-                <p className="text-[0.75rem] text-ink-subtle">
-                  expira {date(aparelho.expiresAt.slice(0, 10) as never)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Empty
-            title="Nenhum aparelho conectado"
-            hint="O celular aparece aqui depois de autorizado."
+      <Stack gap="md">
+        <Panel>
+          <PanelHeader
+            title="Código do aplicativo"
+            icon={Smartphone}
+            hint="Abra o Fluxo no celular, toque em conectar e digite o código aqui"
           />
-        )}
-      </Card>
 
-      <Card className="mt-5">
-        <SectionHeading title="Como funciona" />
-        <ol className="space-y-2 text-[0.875rem] text-ink-muted">
-          <li>
-            <strong className="font-medium text-ink">1.</strong> O aplicativo gera um código de seis
-            caracteres, válido por dez minutos.
-          </li>
-          <li>
-            <strong className="font-medium text-ink">2.</strong> Você digita esse código aqui, já
-            autenticado no navegador — é a sua sessão web que prova quem você é.
-          </li>
-          <li>
-            <strong className="font-medium text-ink">3.</strong> O aplicativo troca o código por um token
-            próprio, válido por 180 dias e revogável a qualquer momento.
-          </li>
-        </ol>
-        <p className="mt-3 text-[0.75rem] text-ink-subtle">
-          A senha nunca sai do navegador. Trocar a senha desconecta todos os aparelhos.
-        </p>
-      </Card>
-    </main>
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-start">
+            <PairingForm />
+
+            <ol className="space-y-2.5 border-t border-line pt-4 sm:w-64 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+              {PASSOS.map((passo, indice) => (
+                <li key={passo} className="flex gap-2.5">
+                  <span className="tabular flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-inset text-caption font-medium text-ink-muted">
+                    {indice + 1}
+                  </span>
+                  <span className="text-caption leading-relaxed text-ink-muted">{passo}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="mt-5">
+            <Notice tone="info" icon={ShieldCheck}>
+              A senha nunca sai do navegador. Trocar a senha desconecta todos os aparelhos.
+            </Notice>
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelHeader
+            title="Aparelhos conectados"
+            icon={Smartphone}
+            hint={aparelhos.length ? `${aparelhos.length} com acesso ativo` : undefined}
+          />
+          {aparelhos.length ? (
+            <ul>
+              {aparelhos.map((aparelho) => (
+                <ListRow
+                  key={aparelho.id}
+                  icon={Smartphone}
+                  title={aparelho.deviceName ?? "Aparelho sem nome"}
+                  subtitle={`${aparelho.platform ?? "desconhecido"} · último acesso ${date(
+                    aparelho.lastSeenAt.slice(0, 10) as never,
+                  )}`}
+                  meta={`expira ${date(aparelho.expiresAt.slice(0, 10) as never)}`}
+                />
+              ))}
+            </ul>
+          ) : (
+            <Empty
+              icon={Smartphone}
+              title="Nenhum aparelho conectado"
+              hint="O celular aparece aqui depois de autorizado."
+              compact
+            />
+          )}
+        </Panel>
+      </Stack>
+    </Page>
   );
 }

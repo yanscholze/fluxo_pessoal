@@ -306,6 +306,49 @@ site e aplicativo.
 
 Reconstruída, não copiada. Rotas de verdade (uma por módulo), componentes
 pequenos, estado de servidor separado de estado de tela. Hierarquia visual:
-resposta primeiro, detalhe sob demanda. Tema claro e escuro. A linguagem visual
-da versão anterior — superfícies escuras, acento configurável, números
-tabulares, densidade alta — é referência, não gabarito.
+resposta primeiro, detalhe sob demanda.
+
+### Sistema de design
+
+`app/globals.css` é a única fonte de cor, tipografia, espaço, raio, sombra e
+movimento. Uma tela que precisa de um valor que não existe lá está errada: ou o
+valor falta no sistema, e entra lá, ou a tela está inventando. É uma regra
+verificável — `text-[0.8125rem]`, `bg-slate-800` e `rounded-[--radius-card]` não
+aparecem em nenhum arquivo, e essa contagem é parte da revisão.
+
+Três decisões estruturais:
+
+1. **Escuro é o tema nativo.** Os valores escuros foram escolhidos primeiro,
+   para leitura longa de tabela financeira; o claro foi derivado depois. O
+   contrário produz tema escuro que é só o claro com as cores trocadas.
+
+2. **Cor tem função, nunca decoração.** O acento veste cromo interativo —
+   navegação ativa, ação primária, foco. Positivo e negativo vestem **valor**.
+   Como vivem em contextos disjuntos, um verde de marca e um verde de receita
+   nunca disputam o mesmo significado. Trocar a paleta de acento não mexe em
+   positivo nem negativo: eles não são estilo, são o sinal do dinheiro.
+
+3. **Superfície separa, borda não.** Hierarquia vem de elevação, espaço e peso
+   tipográfico. Caixa dentro de caixa dentro de caixa é o que fazia o painel
+   anterior parecer template — oito `Card` idênticos, nenhum com destaque.
+
+### Componentes
+
+| Módulo | O que mora lá |
+| --- | --- |
+| `app/ui/primitives.tsx` | superfície, texto, sinal, medidor, estados |
+| `app/ui/data-display.tsx` | indicador, faixa de KPIs, tabela, linha de lista, decomposição, linha do tempo |
+| `app/ui/controls.tsx` | botão, campo, seleção, alternador, abas |
+| `app/ui/charts.tsx` | linha, barra, rosca, anel, sparkline — SVG no servidor |
+| `app/ui/page-frame.tsx` | moldura, cabeçalho, barra de filtros, seção |
+| `app/ui/icons.tsx` | um ícone por conceito, escolhido uma vez |
+
+Os gráficos são SVG escrito à mão e renderizado no servidor. Nenhuma biblioteca:
+as quatro formas de que este produto precisa custam menos código do que a
+configuração de qualquer biblioteca, e em troca herdam os tokens em vez de
+trazer um tema próprio. A interação — destaque no ponto sob o cursor, tooltip —
+é CSS e `<title>`, sem JavaScript no cliente.
+
+Tipografia é Inter, carregada por `next/font` (CDN em desenvolvimento,
+auto-hospedada no build). Escolhida pelos algarismos: `tnum` de verdade, sem o
+qual uma coluna de valores "dança" a cada atualização.

@@ -78,7 +78,7 @@ export function RedeemForm({
         onClick={() => setAberto(true)}
         disabled={semSaldo}
         title={semSaldo ? "Nenhum saldo resgatável ainda" : undefined}
-        className="h-9 rounded-[--radius-control] bg-accent px-4 text-[0.8125rem] font-semibold text-accent-ink disabled:opacity-50"
+        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
       >
         Resgatar
       </button>
@@ -91,14 +91,14 @@ export function RedeemForm({
         role="dialog"
         aria-modal="true"
         aria-label={`Resgatar recompensa do ${cardName}`}
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-[--shadow-raised] sm:rounded-[--radius-card]"
+        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-float sm:rounded-lg"
       >
         <header className="mb-4 flex items-center justify-between">
-          <h2 className="text-[1.0625rem] font-semibold text-ink">Resgatar · {cardName}</h2>
+          <h2 className="text-title font-semibold text-ink">Resgatar · {cardName}</h2>
           <button
             type="button"
             onClick={() => setAberto(false)}
-            className="rounded-[--radius-control] px-2 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
+            className="rounded-md px-2 py-1 text-body-sm text-ink-muted hover:bg-surface-sunken"
           >
             Fechar
           </button>
@@ -107,7 +107,7 @@ export function RedeemForm({
         <form onSubmit={enviar} className="space-y-4" noValidate>
           {hasPoints && hasCashback ? (
             <fieldset>
-              <legend className="mb-1.5 text-[0.8125rem] font-medium text-ink">O que resgatar</legend>
+              <legend className="mb-1.5 text-body-sm font-medium text-ink">O que resgatar</legend>
               <div className="grid grid-cols-2 gap-1.5">
                 {(
                   [
@@ -120,7 +120,7 @@ export function RedeemForm({
                     type="button"
                     onClick={() => setTipo(valor)}
                     aria-pressed={tipo === valor}
-                    className={`h-9 rounded-[--radius-control] border text-[0.8125rem] ${
+                    className={`h-9 rounded-md border text-body-sm ${
                       tipo === valor
                         ? "border-accent bg-accent-wash font-medium text-accent"
                         : "border-line text-ink-muted"
@@ -134,7 +134,7 @@ export function RedeemForm({
           ) : null}
 
           <label className="block">
-            <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">
+            <span className="mb-1.5 block text-body-sm font-medium text-ink">
               {tipo === "points" ? "Quantos pontos" : "Quanto"}
             </span>
             <input
@@ -142,20 +142,20 @@ export function RedeemForm({
               required
               inputMode={tipo === "points" ? "numeric" : "decimal"}
               placeholder={tipo === "points" ? "0" : "0,00"}
-              className="tabular h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+              className="tabular h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
             />
-            <span className="mt-1 block text-[0.75rem] text-ink-subtle">
+            <span className="mt-1 block text-caption text-ink-subtle">
               Disponível: {tipo === "points" ? `${decimal(disponivel / 1000, 0)} pontos` : money(disponivel)}
             </span>
           </label>
 
           {tipo === "cashback" ? (
             <label className="block">
-              <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">Conta que recebe</span>
+              <span className="mb-1.5 block text-body-sm font-medium text-ink">Conta que recebe</span>
               <select
                 name="accountId"
                 required
-                className="h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+                className="h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
               >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -163,24 +163,24 @@ export function RedeemForm({
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block text-[0.75rem] text-ink-subtle">
+              <span className="mt-1 block text-caption text-ink-subtle">
                 O cashback entra como receita nesta conta.
               </span>
             </label>
           ) : null}
 
           <label className="block">
-            <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink">Observação</span>
+            <span className="mb-1.5 block text-body-sm font-medium text-ink">Observação</span>
             <input
               name="note"
               maxLength={180}
               placeholder="Passagem, milhas transferidas…"
-              className="h-10 w-full rounded-[--radius-control] border border-line bg-surface px-3 text-[0.875rem] text-ink outline-none focus:border-accent"
+              className="h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
             />
           </label>
 
           {erro ? (
-            <p role="alert" className="rounded-[--radius-control] bg-negative-wash px-3 py-2 text-[0.8125rem] text-negative">
+            <p role="alert" className="rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
               {erro}
             </p>
           ) : null}
@@ -188,7 +188,7 @@ export function RedeemForm({
           <button
             type="submit"
             disabled={enviando}
-            className="h-11 w-full rounded-[--radius-control] bg-accent text-[0.875rem] font-semibold text-accent-ink disabled:opacity-60"
+            className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45 w-full"
           >
             {enviando ? "Registrando…" : "Registrar resgate"}
           </button>

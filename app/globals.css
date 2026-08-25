@@ -3,129 +3,362 @@
 /**
  * Sistema visual do Fluxo.
  *
- * Reconstruído, não copiado. O que veio da versão anterior é a intenção —
- * superfícies escuras, acento configurável, números tabulares — não a escala.
- * A antiga era muito densa (9 a 13 px na maior parte da tela), o que deixava
- * tudo com o mesmo peso: o saldo, o rótulo e a nota de rodapé competiam pela
- * mesma atenção. Aqui existe hierarquia explícita: o número que responde a
- * pergunta é grande, o resto recua.
+ * Um único lugar decide cor, tipografia, espaço, raio, sombra e movimento. Uma
+ * tela que precisa de um valor que não existe aqui está errada — ou o valor
+ * falta no sistema, e entra aqui, ou a tela está inventando. Foi a ausência
+ * dessa regra que produziu a versão anterior: dezenas de `text-[0.8125rem]`
+ * espalhados, cinco cinzas diferentes e nenhuma hierarquia.
+ *
+ * Três decisões estruturais:
+ *
+ * 1. **Escuro é o tema nativo.** Os valores escuros foram escolhidos primeiro,
+ *    para leitura longa de tabela financeira; o claro foi derivado depois. O
+ *    contrário produz tema escuro que é só o claro com as cores trocadas.
+ *
+ * 2. **Cor tem função, nunca decoração.** O acento veste o cromo interativo —
+ *    navegação ativa, ação primária, foco, seleção. Positivo e negativo vestem
+ *    **valor**, nunca cromo. Como vivem em contextos disjuntos, um verde de
+ *    marca e um verde de receita nunca aparecem disputando o mesmo significado.
+ *
+ * 3. **Superfície separa, borda não.** Hierarquia vem de elevação, espaço e
+ *    peso tipográfico. Borda é hairline e existe só onde a superfície sozinha
+ *    não resolve. Caixa dentro de caixa dentro de caixa é o que faz um painel
+ *    parecer template.
  */
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme {
-  /* Superfícies — tema claro. */
-  --color-canvas: #f7f7f9;
+  /* ---------------------------------------------------------------------- */
+  /* Superfícies — valores do tema claro; o escuro sobrescreve mais abaixo.  */
+  /* ---------------------------------------------------------------------- */
+
+  --color-canvas: #f6f7f9;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #f1f1f4;
-  --color-line: #e3e3e8;
-  --color-line-strong: #d1d1d9;
+  --color-surface-sunken: #f0f2f5;
+  --color-surface-inset: #eaedf1;
 
-  /* Texto. */
-  --color-ink: #17171c;
-  --color-ink-muted: #63636e;
-  --color-ink-subtle: #8f8f9c;
+  --color-line: #e2e6ec;
+  --color-line-strong: #cdd3dc;
 
-  /* Semântica. */
-  --color-accent: #7c5cff;
+  /* Texto, em três degraus. Mais que isso vira ruído; menos, vira monotonia. */
+  --color-ink: #10151c;
+  --color-ink-muted: #5b6572;
+  --color-ink-subtle: #8b95a3;
+
+  /* --- Cromo interativo -------------------------------------------------- */
+  --color-accent: #0d9668;
   --color-accent-ink: #ffffff;
-  --color-positive: #0d9f6e;
-  --color-negative: #dc2b3d;
-  --color-caution: #c77700;
+  --color-accent-hover: #0b855c;
 
-  /* Superfícies tingidas, derivadas do acento. */
-  --color-accent-wash: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  /* --- Semântica de valor ------------------------------------------------ */
+  --color-positive: #16a34a;
+  --color-negative: #dc2626;
+  --color-caution: #b45309;
+  --color-info: #2563eb;
+
+  /* Superfícies tingidas. Derivadas, para que trocar o acento reconfigure tudo. */
+  --color-accent-wash: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  --color-accent-edge: color-mix(in oklab, var(--color-accent) 32%, transparent);
   --color-positive-wash: color-mix(in oklab, var(--color-positive) 12%, transparent);
   --color-negative-wash: color-mix(in oklab, var(--color-negative) 12%, transparent);
   --color-caution-wash: color-mix(in oklab, var(--color-caution) 14%, transparent);
+  --color-info-wash: color-mix(in oklab, var(--color-info) 12%, transparent);
 
-  --radius-card: 0.875rem;
-  --radius-control: 0.625rem;
+  /* Série de apoio para gráficos com muitas séries e para categorias sem cor
+     própria. Ordenada por distinção percebida, não por matiz. */
+  --color-viz-1: #0d9668;
+  --color-viz-2: #2563eb;
+  --color-viz-3: #b45309;
+  --color-viz-4: #9333ea;
+  --color-viz-5: #0891b2;
+  --color-viz-6: #db2777;
+  --color-viz-7: #65a30d;
+  --color-viz-8: #64748b;
 
-  --shadow-card: 0 1px 2px rgb(23 23 28 / 0.04), 0 8px 24px -12px rgb(23 23 28 / 0.12);
-  --shadow-raised: 0 2px 4px rgb(23 23 28 / 0.06), 0 16px 40px -16px rgb(23 23 28 / 0.2);
+  /* ---------------------------------------------------------------------- */
+  /* Tipografia                                                             */
+  /* ---------------------------------------------------------------------- */
 
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* `--font-inter` é injetado por next/font em app/layout.tsx. O fallback vale
+     enquanto a fonte não chegou, e evita o salto de layout. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  --text-figure: 2.75rem;
-  --text-figure--line-height: 1.05;
-  --text-figure--letter-spacing: -0.03em;
-  --text-figure--font-weight: 620;
+  /* Escala fechada. Toda a interface sai daqui — não existe tamanho avulso. */
 
-  --text-figure-sm: 1.5rem;
-  --text-figure-sm--line-height: 1.15;
-  --text-figure-sm--letter-spacing: -0.02em;
-  --text-figure-sm--font-weight: 600;
+  /* O número que é a resposta da tela. Um por tela, no máximo. */
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 660;
 
+  /* Valor de indicador na faixa de KPIs. */
+  --text-figure: 1.6875rem;
+  --text-figure--line-height: 1.12;
+  --text-figure--letter-spacing: -0.025em;
+  --text-figure--font-weight: 640;
+
+  /* Valor secundário dentro de um painel. */
+  --text-figure-sm: 1.1875rem;
+  --text-figure-sm--line-height: 1.2;
+  --text-figure-sm--letter-spacing: -0.018em;
+  --text-figure-sm--font-weight: 620;
+
+  /* Título de página. */
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.35;
+  --text-title--letter-spacing: -0.014em;
+  --text-title--font-weight: 620;
+
+  /* Título de seção dentro de um painel. */
+  --text-heading: 0.875rem;
+  --text-heading--line-height: 1.4;
+  --text-heading--letter-spacing: -0.006em;
+  --text-heading--font-weight: 600;
+
+  /* Corpo. O tamanho padrão de qualquer texto de conteúdo. */
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+
+  /* Corpo secundário: subtítulo de linha, texto de apoio. */
+  --text-body-sm: 0.8125rem;
+  --text-body-sm--line-height: 1.45;
+
+  /* Nota, metadado, eixo de gráfico. */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+
+  /* Rótulo em versalete. Nomeia um número sem competir com ele. */
   --text-label: 0.6875rem;
   --text-label--line-height: 1.2;
-  --text-label--letter-spacing: 0.07em;
-  --text-label--font-weight: 600;
+  --text-label--letter-spacing: 0.065em;
+  --text-label--font-weight: 620;
+
+  /* ---------------------------------------------------------------------- */
+  /* Forma                                                                  */
+  /* ---------------------------------------------------------------------- */
+
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Duas sombras, e são discretas. Sombra forte em interface densa vira sujeira. */
+  --shadow-panel: 0 1px 1px rgb(16 21 28 / 0.03), 0 1px 3px -1px rgb(16 21 28 / 0.06);
+  --shadow-float: 0 4px 12px -2px rgb(16 21 28 / 0.1), 0 16px 40px -12px rgb(16 21 28 / 0.18);
+
+  /* ---------------------------------------------------------------------- */
+  /* Movimento                                                              */
+  /* ---------------------------------------------------------------------- */
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --animate-rise: rise 0.42s var(--ease-out-soft) both;
+  --animate-fade: fade 0.28s var(--ease-out-soft) both;
+  --animate-sweep: sweep 0.7s var(--ease-out-soft) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Entrada de gráfico: a linha se desenha, as barras crescem. */
+  @keyframes sweep {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: -160% 0;
+    }
+    to {
+      background-position: 160% 0;
+    }
+  }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Tema escuro — o nativo.                                                    */
+/* -------------------------------------------------------------------------- */
 
 [data-theme="dark"] {
-  --color-canvas: #0b0b0f;
-  --color-surface: #141419;
-  --color-surface-raised: #1b1b22;
-  --color-surface-sunken: #101015;
-  --color-line: #26262f;
-  --color-line-strong: #35353f;
+  --color-canvas: #08090b;
+  --color-surface: #0f1114;
+  --color-surface-raised: #171a1f;
+  --color-surface-sunken: #0b0d10;
+  --color-surface-inset: #131619;
 
-  --color-ink: #f2f2f5;
-  --color-ink-muted: #a0a0ae;
-  --color-ink-subtle: #6e6e7d;
+  --color-line: #1d2126;
+  --color-line-strong: #2b3138;
 
-  --color-accent: #9d84ff;
-  --color-accent-ink: #12101f;
-  --color-positive: #3ddc97;
-  --color-negative: #ff6b7a;
-  --color-caution: #f5b544;
+  --color-ink: #e9ecef;
+  --color-ink-muted: #99a2ac;
+  --color-ink-subtle: #6a737e;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.6);
-  --shadow-raised: 0 2px 6px rgb(0 0 0 / 0.5), 0 24px 56px -20px rgb(0 0 0 / 0.8);
+  --color-accent: #21c99a;
+  --color-accent-ink: #04231b;
+  --color-accent-hover: #35d6a9;
+
+  --color-positive: #4ade80;
+  --color-negative: #ff6b6b;
+  --color-caution: #fbbf24;
+  --color-info: #60a5fa;
+
+  --color-viz-1: #21c99a;
+  --color-viz-2: #60a5fa;
+  --color-viz-3: #fbbf24;
+  --color-viz-4: #c084fc;
+  --color-viz-5: #22d3ee;
+  --color-viz-6: #fb7185;
+  --color-viz-7: #a3e635;
+  --color-viz-8: #94a3b8;
+
+  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.02), 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-float: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 24px 56px -16px rgb(0 0 0 / 0.7);
 }
 
-/* Paletas alternativas: trocar o acento reconfigura tudo que dele deriva. */
-[data-accent="verde"] {
-  --color-accent: #10b981;
-  --color-accent-ink: #04241a;
-}
+/* -------------------------------------------------------------------------- */
+/* Paletas de acento.                                                         */
+/*                                                                            */
+/* Só o cromo muda. Positivo e negativo continuam sendo verde e vermelho em    */
+/* qualquer paleta, porque eles não são estilo — são o sinal do dinheiro.      */
+/* -------------------------------------------------------------------------- */
+
 [data-accent="azul"] {
-  --color-accent: #38bdf8;
-  --color-accent-ink: #062032;
+  --color-accent: #2563eb;
+  --color-accent-ink: #ffffff;
+  --color-accent-hover: #1d4ed8;
 }
+[data-theme="dark"][data-accent="azul"] {
+  --color-accent: #5b9bff;
+  --color-accent-ink: #041226;
+  --color-accent-hover: #7bb0ff;
+}
+
+[data-accent="violeta"] {
+  --color-accent: #6d4aff;
+  --color-accent-ink: #ffffff;
+  --color-accent-hover: #5c3ae6;
+}
+[data-theme="dark"][data-accent="violeta"] {
+  --color-accent: #9d84ff;
+  --color-accent-ink: #120e26;
+  --color-accent-hover: #b19bff;
+}
+
 [data-accent="ambar"] {
-  --color-accent: #fb923c;
-  --color-accent-ink: #2a1305;
+  --color-accent: #b45309;
+  --color-accent-ink: #ffffff;
+  --color-accent-hover: #9a4708;
+}
+[data-theme="dark"][data-accent="ambar"] {
+  --color-accent: #f5a524;
+  --color-accent-ink: #2a1705;
+  --color-accent-hover: #ffb84d;
 }
 
 @layer base {
   html {
     color-scheme: light dark;
+    /* A âncora de rolagem impede o salto quando um painel acima muda de
+       altura ao carregar — comum num painel que revela dados por seção. */
+    overflow-anchor: auto;
+    scrollbar-gutter: stable;
   }
 
   body {
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   /**
    * Dinheiro em largura fixa por dígito.
    *
-   * Sem isso, uma coluna de valores "dança" ao atualizar, porque o 1 é mais
+   * Sem isso uma coluna de valores "dança" ao atualizar, porque o 1 é mais
    * estreito que o 8 — e comparar valores empilhados fica mais difícil.
+   * `.tabular` é obrigatório em qualquer número que o usuário compare.
    */
   .tabular {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum";
+    font-feature-settings: "tnum" 1, "cv01" 1;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-wash);
+    color: var(--color-ink);
   }
 
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  /* A barra de rolagem padrão do sistema é clara e estoura o tema escuro. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-subtle);
+  }
+
+  /* Campo de formulário nativo herda a fonte do sistema por padrão. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* O relógio e o calendário nativos vêm claros no tema escuro. */
+  [data-theme="dark"] input::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(0.55);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -133,7 +366,40 @@
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer utilities {
+  /**
+   * Revelação por rolagem.
+   *
+   * O elemento entra quando encosta na viewport, uma vez. `animation-timeline`
+   * é progressivo: onde não existe, o elemento simplesmente já está visível —
+   * por isso o estado padrão é opaco, e a animação só subtrai.
+   */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal {
+        animation: rise linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 42%;
+      }
+    }
+  }
+
+  /* Superfície listrada para estado de carregamento. */
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-surface-sunken) 0%,
+      var(--color-surface-inset) 45%,
+      var(--color-surface-sunken) 90%
+    );
+    background-size: 220% 100%;
+    animation: var(--animate-shimmer);
   }
 }

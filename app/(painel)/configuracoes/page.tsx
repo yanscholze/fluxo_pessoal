@@ -3,14 +3,25 @@ import { redirect } from "next/navigation";
 import { listCategories } from "../../../server/repositories/catalog.ts";
 import { listDeviceSessions } from "../../../server/auth/session.ts";
 import { currentUser } from "../../auth-context.ts";
-import { Card, Empty, SectionHeading } from "../../ui/primitives.tsx";
+import { LinkButton } from "../../ui/controls.tsx";
+import { ListRow } from "../../ui/data-display.tsx";
 import { date } from "../../ui/format.ts";
+import { Download, Smartphone } from "../../ui/icons.tsx";
+import { Page, PageHeader } from "../../ui/page-frame.tsx";
+import { Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { Appearance } from "./appearance.tsx";
 import { CategoryManager } from "./category-manager.tsx";
 import { PasswordForm } from "./password-form.tsx";
+import { SettingsTabs } from "./settings-tabs.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Configurações.
+ *
+ * Em abas, e não numa pilha: as quatro áreas não têm relação entre si, e
+ * empilhá-las obrigava a rolar por categorias para chegar em segurança.
+ */
 export default async function Configuracoes() {
   const user = await currentUser();
   if (!user) redirect("/entrar");
@@ -21,90 +32,115 @@ export default async function Configuracoes() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-[64rem] px-5 py-8 sm:px-8 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-[1.625rem] font-semibold tracking-[-0.02em] text-ink">Configurações</h1>
-        <p className="mt-1 text-[0.875rem] text-ink-muted">
-          {user.displayName} · {user.email}
-        </p>
-      </header>
+    <Page width="narrow">
+      <PageHeader eyebrow={user.email} title="Configurações" description={user.displayName} />
 
-      <div className="space-y-5">
-        <Card>
-          <SectionHeading
-            title="Categorias"
-            hint="Marcar como essencial alimenta o cálculo da reserva de emergência"
-          />
-          <CategoryManager
-            categories={categories.map((category) => ({
-              id: category.id,
-              name: category.name,
-              kind: category.kind,
-              color: category.color,
-              isEssential: category.isEssential,
-              excludeFromFreeToSpend: category.excludeFromFreeToSpend,
-            }))}
-          />
-        </Card>
+      <SettingsTabs
+        sections={[
+          {
+            value: "categorias",
+            label: "Categorias",
+            content: (
+              <Panel>
+                <PanelHeader
+                  title="Categorias"
+                  hint="Marcar como essencial alimenta o cálculo da reserva de emergência"
+                />
+                <CategoryManager
+                  categories={categories.map((category) => ({
+                    id: category.id,
+                    name: category.name,
+                    kind: category.kind,
+                    color: category.color,
+                    isEssential: category.isEssential,
+                    excludeFromFreeToSpend: category.excludeFromFreeToSpend,
+                  }))}
+                />
+              </Panel>
+            ),
+          },
+          {
+            value: "aparencia",
+            label: "Aparência",
+            content: (
+              <Panel>
+                <PanelHeader title="Aparência" hint="Vale só neste navegador" />
+                <Appearance />
+              </Panel>
+            ),
+          },
+          {
+            value: "seguranca",
+            label: "Segurança",
+            content: (
+              <div className="space-y-5">
+                <Panel>
+                  <PanelHeader title="Senha" hint="Trocar a senha desconecta todos os aparelhos" />
+                  <PasswordForm />
+                </Panel>
 
-        <Card>
-          <SectionHeading title="Aparência" />
-          <Appearance />
-        </Card>
-
-        <Card>
-          <SectionHeading title="Segurança" hint="Trocar a senha desconecta todos os aparelhos" />
-          <PasswordForm />
-        </Card>
-
-        <Card>
-          <SectionHeading title="Aparelhos conectados" />
-          {devices.length ? (
-            <ul>
-              {devices.map((device) => (
-                <li
-                  key={device.id}
-                  className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-0"
-                >
-                  <div>
-                    <p className="text-[0.875rem] text-ink">{device.deviceName ?? "Aparelho sem nome"}</p>
-                    <p className="text-[0.75rem] text-ink-subtle">
-                      {device.platform ?? "desconhecido"} · último acesso{" "}
-                      {date(device.lastSeenAt.slice(0, 10) as never)}
-                    </p>
-                  </div>
-                  <p className="text-[0.75rem] text-ink-subtle">
-                    expira {date(device.expiresAt.slice(0, 10) as never)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty
-              title="Nenhum aparelho conectado"
-              hint="O aplicativo Android aparece aqui depois de pareado."
-            />
-          )}
-        </Card>
-
-        <Card>
-          <SectionHeading title="Seus dados" hint="Tudo que o Fluxo guarda sobre você" />
-          <div className="flex flex-wrap gap-2">
-            <a
-              href="/api/v1/reports/export?periodo=todos&fluxo=saidas"
-              className="rounded-[--radius-control] border border-line px-4 py-2 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
-            >
-              Exportar saídas (CSV)
-            </a>
-            <a
-              href="/api/v1/reports/export?periodo=todos&fluxo=entradas"
-              className="rounded-[--radius-control] border border-line px-4 py-2 text-[0.8125rem] text-ink-muted hover:bg-surface-sunken"
-            >
-              Exportar entradas (CSV)
-            </a>
-          </div>
-        </Card>
-      </div>
-    </main>
+                <Panel>
+                  <PanelHeader
+                    title="Aparelhos conectados"
+                    icon={Smartphone}
+                    hint={devices.length ? `${devices.length} com acesso ativo` : undefined}
+                  />
+                  {devices.length ? (
+                    <ul>
+                      {devices.map((device) => (
+                        <ListRow
+                          key={device.id}
+                          icon={Smartphone}
+                          title={device.deviceName ?? "Aparelho sem nome"}
+                          subtitle={`${device.platform ?? "desconhecido"} · último acesso ${date(
+                            device.lastSeenAt.slice(0, 10) as never,
+                          )}`}
+                          meta={`expira ${date(device.expiresAt.slice(0, 10) as never)}`}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    <Empty
+                      icon={Smartphone}
+                      title="Nenhum aparelho conectado"
+                      hint="O aplicativo Android aparece aqui depois de pareado."
+                      compact
+                    />
+                  )}
+                </Panel>
+              </div>
+            ),
+          },
+          {
+            value: "dados",
+            label: "Seus dados",
+            content: (
+              <Panel>
+                <PanelHeader title="Seus dados" hint="Tudo que o Fluxo guarda sobre você" />
+                <Notice tone="info">
+                  A exportação sai em CSV com todo o histórico, pronta para abrir em planilha.
+                </Notice>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <LinkButton
+                    href="/api/v1/reports/export?periodo=todos&fluxo=saidas"
+                    variant="secondary"
+                    icon={Download}
+                  >
+                    Exportar saídas
+                  </LinkButton>
+                  <LinkButton
+                    href="/api/v1/reports/export?periodo=todos&fluxo=entradas"
+                    variant="secondary"
+                    icon={Download}
+                  >
+                    Exportar entradas
+                  </LinkButton>
+                </div>
+              </Panel>
+            ),
+          },
+        ]}
+      />
+    </Page>
   );
 }
