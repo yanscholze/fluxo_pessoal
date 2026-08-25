@@ -449,6 +449,48 @@ async function main() {
   }
   conferir("recusa arquivo que não é imagem", recusouImagemInvalida, true);
 
+  // --- Captura por notificação ----------------------------------------------
+  const agora = Date.now();
+  const notificacoes = [
+    { sourceApp: "com.nu.production", title: "Compra aprovada", text: "Compra de R$ 42,90 em PADARIA CENTRAL no débito", postedAt: agora - 1000, deviceEventId: "s1" },
+    { sourceApp: "com.nu.production", title: "Compra aprovada", text: "Compra de R$ 289,90 em MAGAZINE LUIZA em 3x no crédito", postedAt: agora - 2000, deviceEventId: "s2" },
+    { sourceApp: "com.nu.production", title: "Nubank", text: "Seu saldo é de R$ 1.234,56", postedAt: agora - 3000, deviceEventId: "s3" },
+    { sourceApp: "com.samsung.android.spay", title: "Samsung Pay", text: "Compra de R$ 42,90 em PADARIA CENTRAL", postedAt: agora - 1500, deviceEventId: "s4" },
+    { sourceApp: "com.zap.delivery", title: "Promo", text: "R$ 20,00 de desconto", postedAt: agora - 5000, deviceEventId: "s5" },
+    { sourceApp: "com.nu.production", title: "Compra aprovada", text: "Compra de R$ 42,90 em PADARIA CENTRAL no débito", postedAt: agora - 500, deviceEventId: "s6" },
+  ];
+
+  const captura = await api("/api/v1/captures", { method: "POST", body: { notifications: notificacoes } });
+  conferir("captura só o que é transação de app confiável", captura.captured, 2);
+
+  // "Seu saldo é de R$ 1.234,56" virando despesa é o pior erro possível: o
+  // valor é grande e plausível, e o usuário demora a notar.
+  conferir("aviso de saldo não vira lançamento", captura.reasons.nao_e_transacao, 1);
+  // A carteira espelha a notificação do banco; aceitar as duas duplicaria tudo.
+  conferir("app de carteira é ignorado", captura.reasons.carteira, 1);
+  conferir("app desconhecido é ignorado", captura.reasons.app_nao_confiavel, 1);
+  conferir("mesma compra na janela é duplicada", captura.duplicated, 1);
+
+  const reenvio = await api("/api/v1/captures", { method: "POST", body: { notifications: notificacoes } });
+  conferir("reenvio da fila não recria sugestões", reenvio.captured, 0);
+
+  const fila = await api("/api/v1/captures");
+  const parcelada = fila.pending.find((item) => item.amountCents === 28990);
+  conferir("reconhece parcelamento na notificação", parcelada?.installment?.total, 3);
+  conferir("infere crédito pelo texto", parcelada?.method, "credit");
+
+  const aVista = fila.pending.find((item) => item.amountCents === 4290);
+  conferir("corta a forma de pagamento do estabelecimento", aVista?.description, "PADARIA CENTRAL");
+
+  const confirmada = await api("/api/v1/captures", {
+    method: "PATCH",
+    body: { captureId: aVista.id, decision: "confirmar", accountId: contaId },
+  });
+  conferir("confirmar a sugestão cria lançamento", Boolean(confirmada.transactionId), true);
+
+  const filaDepois = await api("/api/v1/captures");
+  conferir("sugestão confirmada sai da fila", filaDepois.pending.length, fila.pending.length - 1);
+
   // --- Telas ---------------------------------------------------------------
   // As rotas foram exercitadas com token de dispositivo; as páginas precisam do
   // cookie da sessão web, que é outro caminho de autenticação.
@@ -477,6 +519,7 @@ async function main() {
     "/saude",
     "/relatorios",
     "/importar",
+    "/automaticos",
     "/assistente",
     "/configuracoes",
   ];
