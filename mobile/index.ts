@@ -1,7 +1,13 @@
-import { registerRootComponent } from "expo";
-import { registerWidgetTaskHandler } from "react-native-android-widget";
-import App from "./App";
-import { handleWidgetTask } from "./src/android-widgets";
+/**
+ * Ponto de entrada.
+ *
+ * `./src/polyfills.ts` vem primeiro e não é decorativo — ver o comentário lá.
+ */
 
-registerWidgetTaskHandler(handleWidgetTask);
+import "./src/polyfills.ts";
+
+import { registerRootComponent } from "expo";
+
+import App from "./App.tsx";
+
 registerRootComponent(App);

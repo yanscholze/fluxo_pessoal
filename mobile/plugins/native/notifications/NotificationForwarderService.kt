@@ -8,20 +8,25 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Encaminha notificações de apps financeiros confiáveis (Nubank, Caju, Mercado
- * Pago, XP) e de wallets (Samsung/Google Wallet) para o back-end do Fluxo, que
- * decide o que fazer com cada uma (ver lib/auto-transactions.ts no site).
+ * Encaminha notificações de apps financeiros para `POST /api/v1/captures`.
  *
- * Roda como um serviço do sistema, independente do app estar aberto — por
- * isso toda a lógica de negócio (dedup, confiança, categorização) fica no
- * servidor: este serviço só encaminha o texto bruto da notificação.
+ * Este serviço **não** interpreta nada: ele manda o texto bruto e para por aí.
+ * Quem decide se aquilo é uma transação, de quanto, de qual estabelecimento e
+ * se é repetida é `core/domain/capture/notification.ts`, no servidor — a mesma
+ * implementação que o site usa. Interpretar aqui criaria uma segunda regra em
+ * Kotlin, que divergiria da primeira no primeiro banco que mudasse o texto.
  *
- * Exige que o usuário libere manualmente em Ajustes > Apps > Acesso especial
- * > Acesso a notificações (não existe diálogo de permissão em runtime para
- * isso — é por isso que existe NotificationBridgeModule.openSettings()).
+ * Roda como serviço do sistema, com o aplicativo fechado. Por isso escreve
+ * direto na rede em vez de usar a fila SQLite do aplicativo: abrir o mesmo
+ * banco de dois processos pediria coordenação que não vale o ganho.
+ *
+ * Exige liberação manual em Ajustes > Apps > Acesso especial > Acesso a
+ * notificações — não existe diálogo em runtime para isso, e é por isso que
+ * `NotificationBridgeModule.openSettings()` existe.
  */
 class NotificationForwarderService : NotificationListenerService() {
 
@@ -30,14 +35,19 @@ class NotificationForwarderService : NotificationListenerService() {
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_DEVICE_TOKEN = "device_token"
 
-    // Mantém sincronizado com WALLET_PACKAGE_KEYWORDS / TRUSTED_APP_KEYWORDS
-    // em lib/auto-transactions.ts — filtragem aqui é só para poupar rede e
-    // bateria; a decisão de confiança de verdade é sempre do servidor.
+    /**
+     * Filtro grosseiro, só para poupar rede e bateria. A decisão de confiança
+     * de verdade é sempre do servidor: um app novo que o usuário liberar lá
+     * precisa apenas constar aqui para chegar, e a regra de negócio continua
+     * num lugar só.
+     */
     private val RELEVANT_PACKAGE_KEYWORDS = listOf(
       "nu.production", "nubank",
       "caju.mobile", "com.caju",
       "mercadopago",
       "xpi.app", "xp.com",
+      "itau", "bradesco", "santander", "bb.android", "caixa",
+      "inter", "c6bank", "picpay", "willbank", "neon",
       "samsung.android.spay", "samsung.android.spaylite", "samsung.android.rewards",
       "google.android.apps.wallet",
     )
@@ -63,43 +73,57 @@ class NotificationForwarderService : NotificationListenerService() {
     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
-    val rawText = listOf(title, bigText.ifEmpty { text }).filter { it.isNotBlank() }.joinToString(" — ")
-    if (rawText.isBlank()) return
 
-    val postedAtIso = isoTimestamp(sbn.postTime)
-    executor.execute { forward(packageName, rawText, postedAtIso) }
+    // O texto expandido, quando existe, traz o valor e o estabelecimento
+    // completos; o resumido às vezes corta.
+    val body = bigText.ifBlank { text }
+    if (body.isBlank() && title.isBlank()) return
+
+    // Identidade estável do evento: o mesmo aviso reenviado depois de uma
+    // resposta perdida não pode virar duas sugestões. `sbn.key` distingue
+    // notificações simultâneas do mesmo app; `postTime` distingue reedições.
+    val deviceEventId = "${sbn.key ?: packageName}:${sbn.postTime}".take(120)
+
+    executor.execute { forward(packageName, title, body, sbn.postTime, deviceEventId) }
   }
 
-  private fun isoTimestamp(epochMillis: Long): String {
-    val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
-    format.timeZone = java.util.TimeZone.getTimeZone("UTC")
-    return format.format(java.util.Date(epochMillis))
-  }
-
-  private fun forward(packageName: String, rawText: String, postedAtIso: String) {
+  private fun forward(
+    packageName: String,
+    title: String,
+    text: String,
+    postedAt: Long,
+    deviceEventId: String,
+  ) {
     val (baseUrl, token) = credentials(applicationContext) ?: return
     try {
-      val url = URL("${baseUrl.trimEnd('/')}/api/v1/auto-transactions")
+      val url = URL("${baseUrl.trimEnd('/')}/api/v1/captures")
       val connection = (url.openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
         doOutput = true
         connectTimeout = 8000
         readTimeout = 8000
         setRequestProperty("content-type", "application/json")
+        setRequestProperty("accept", "application/json")
         setRequestProperty("authorization", "Bearer $token")
       }
-      val body = JSONObject().apply {
-        put("packageName", packageName)
-        put("rawText", rawText)
-        put("postedAt", postedAtIso)
+
+      val notificacao = JSONObject().apply {
+        put("sourceApp", packageName)
+        put("title", title)
+        put("text", text)
+        put("postedAt", postedAt)
+        put("deviceEventId", deviceEventId)
       }
-      OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+      val body = JSONObject().apply { put("notifications", JSONArray().put(notificacao)) }
+
+      OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
       connection.inputStream.use { it.readBytes() }
       connection.disconnect()
     } catch (error: Exception) {
-      // Melhor esforço: se a rede falhar, a notificação simplesmente não é
-      // encaminhada. Não há fila de retentativa — o usuário sempre pode
-      // lançar manualmente pelo app caso um lançamento não apareça.
+      // Melhor esforço. Se a rede falhar, a notificação não é encaminhada e o
+      // usuário lança manualmente — não existe fila de retentativa aqui de
+      // propósito: guardar dado financeiro num serviço de sistema que roda
+      // fora do controle do aplicativo custa mais do que resolve.
     }
   }
 }

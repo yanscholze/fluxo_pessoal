@@ -41,10 +41,19 @@ Regras invioláveis:
 
 ### Compartilhamento web ↔ mobile
 
-`core/` é TypeScript puro no repositório raiz. A web resolve por `paths` no
-`tsconfig`; o mobile resolve pelo `watchFolders` do Metro apontando para a
-raiz. Uma regra, uma implementação, dois consumidores — sem workspaces npm,
-que quebrariam o instalador travado do build de produção.
+`core/` é TypeScript puro no repositório raiz. A web importa por caminho
+relativo; o aplicativo o consome como pacote — `@fluxo/core`, declarado como
+`file:../core`, que o npm materializa como link dentro de `mobile/node_modules`.
+Uma regra, uma implementação, dois consumidores.
+
+Workspaces npm resolveriam o mesmo problema e foram descartados: eles hoisteam
+as dependências do aplicativo para o `node_modules` da raiz, o que faria o
+`npm ci` do build de produção instalar React Native, Metro e Expo — 417 pacotes
+que o site não usa, contra um instalador que roda com uma conexão só e prazo
+fechado.
+
+O `watchFolders` do Metro continua apontando para `core/`: é o que faz uma
+mudança no domínio recarregar no aparelho em vez de servir o cache.
 
 ---
 
@@ -245,8 +254,9 @@ de depuração do Android sai do repositório.
 
 ## 9. Estado da reconstrução
 
-Construído e verificado (351 testes de domínio, 51 verificações de ponta a
-ponta contra o servidor, 16 telas renderizando):
+Construído e verificado (398 testes de domínio, 13 testes do aplicativo, 75
+verificações de ponta a ponta contra o servidor, 18 telas renderizando, bundle
+Android gerado):
 
 | Módulo | Domínio | Serviço | Rota | Tela |
 | --- | --- | --- | --- | --- |
@@ -263,15 +273,32 @@ ponta contra o servidor, 16 telas renderizando):
 | Relatórios | — | ✓ | ✓ | ✓ |
 | Saúde financeira | — | ✓ | ✓ | ✓ |
 | Assistente e OCR | — | ✓ | ✓ | ✓ |
+| Captura por notificação | ✓ | ✓ | ✓ | ✓ |
+| Sincronização e pareamento | ✓ | ✓ | ✓ | ✓ |
+| Aplicativo Android | ✓ | ✓ | — | ✓ |
 
 Investimentos, viagens, relatórios e saúde financeira não têm módulo próprio em
 `core/` porque não têm regra própria: são leituras sobre o razão e sobre o que
 os outros módulos já calculam. Criar uma camada de domínio só para repassar
 dados seria abstração sem uso.
 
+O aplicativo Android não tem coluna "Rota" porque não expõe nenhuma: ele é
+cliente das rotas do servidor. A coluna "Domínio" está marcada porque ele
+importa `core/` diretamente — mesma competência, mesma postagem no razão, mesmo
+saldo. Para isso `core/` é um pacote — `@fluxo/core`, consumido pelo aplicativo
+como `file:../core`. O site continua importando por caminho relativo, o
+aplicativo por nome, e os dois leem os mesmos arquivos. A alternativa era
+reescrever a regra do lado do celular, que é o que a versão anterior fazia.
+
+O aplicativo é offline-first: escreve no SQLite do aparelho e numa fila de
+saída, e sincroniza depois. Conflito não é resolvido sozinho — a versão do
+servidor entra no banco local e a edição do aparelho fica parada esperando
+decisão, porque sobrescrever apagaria em silêncio uma edição feita no site.
+
 Pendente: migração dos dados da primeira implementação (as tabelas estão
-preservadas como `legacy_*`), aplicativo Android, sincronização offline-first e
-captura automática por notificação.
+preservadas como `legacy_*`), verificação do aplicativo num aparelho real
+(compila e empacota; ainda não foi executado em Android), e a revisão visual de
+site e aplicativo.
 
 ---
 

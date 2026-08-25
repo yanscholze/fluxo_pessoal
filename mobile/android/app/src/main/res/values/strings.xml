@@ -1,6 +1,0 @@
-<resources>
-  <string name="app_name">Fluxo</string>
-  <string name="expo_system_ui_user_interface_style" translatable="false">automatic</string>
-  <string name="widget_fluxosummary_description" translatable="false">Saldo, livre para gastar e fatura atual.</string>
-  <string name="widget_fluxoquickentry_description" translatable="false">Atalho compacto para registrar um lançamento.</string>
-</resources>

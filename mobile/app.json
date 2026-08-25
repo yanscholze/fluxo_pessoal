@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fluxo",
     "slug": "fluxo-pessoal",
-    "version": "0.4.5",
+    "version": "0.5.0",
     "owner": "yan.scholze",
     "scheme": "fluxo",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon.png",
@@ -20,9 +20,7 @@
     },
     "plugins": [
       ["expo-secure-store", { "configureAndroidBackup": true }],
-      "expo-sqlite",
-      ["expo-notifications", { "color": "#35b7aa", "defaultChannel": "fluxo-updates" }],
-      ["expo-image-picker", { "cameraPermission": "Permita que o Fluxo fotografe e anexe seus cupons fiscais.", "photosPermission": false }]
+      "expo-sqlite"
     ],
     "extra": { "eas": { "projectId": "13821e67-9f56-418c-a8bd-fe90eaf83620" } }
   }

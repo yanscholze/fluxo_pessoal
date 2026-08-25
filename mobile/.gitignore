@@ -5,7 +5,9 @@ node_modules/
 .npm-cache/
 dist/
 *.log
-android/.gradle/
-android/app/build/
-android/build/
-android/local.properties
+
+# `android/` é gerado por `expo prebuild` a partir de `app.config.js` e dos
+# plugins — inclusive a injeção do listener de notificações no manifesto e no
+# MainApplication. Versionar o gerado convida a editar ali e perder a edição no
+# próximo prebuild.
+android/
