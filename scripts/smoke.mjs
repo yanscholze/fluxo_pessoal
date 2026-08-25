@@ -491,9 +491,9 @@ async function main() {
   const filaDepois = await api("/api/v1/captures");
   conferir("sugestão confirmada sai da fila", filaDepois.pending.length, fila.pending.length - 1);
 
-  // --- Telas ---------------------------------------------------------------
-  // As rotas foram exercitadas com token de dispositivo; as páginas precisam do
-  // cookie da sessão web, que é outro caminho de autenticação.
+  // --- Sessão web ------------------------------------------------------------
+  // As rotas foram exercitadas com token de dispositivo; o pareamento e as
+  // páginas precisam do cookie, que é outro caminho de autenticação.
   const entrada = await fetch(`${BASE}/api/v1/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -502,6 +502,134 @@ async function main() {
   const sessaoWeb = (entrada.headers.get("set-cookie") ?? "").split(";")[0];
   conferir("sessão web emitida por cookie", sessaoWeb.startsWith("fluxo_session="), true);
 
+  // --- Pareamento e sincronização -------------------------------------------
+  const anonimo = async (metodo, corpo) => {
+    const resposta = await fetch(`${BASE}/api/v1/pairing`, {
+      method: metodo,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(corpo),
+    });
+    return { status: resposta.status, corpo: await resposta.json().catch(() => ({})) };
+  };
+
+  const inicio = await anonimo("POST", {
+    deviceId: "smoke-device-0001",
+    deviceName: "Aparelho de teste",
+    platform: "android",
+  });
+  conferir("aparelho recebe código de pareamento", inicio.corpo.data?.code?.length, 6);
+
+  const { code, pollToken } = inicio.corpo.data;
+
+  const pendente = await anonimo("PUT", { code, pollToken });
+  conferir("pareamento começa pendente", pendente.corpo.data?.status, "pendente");
+
+  // Quem só viu o código na tela não pode resgatar em nome do aparelho.
+  const bisbilhoteiro = await anonimo("PUT", { code, pollToken: "01M0V000000000000000000000" });
+  conferir("recusa resgate sem o segredo do aparelho", bisbilhoteiro.status, 409);
+
+  const aprovacao = await fetch(`${BASE}/api/v1/pairing`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", cookie: sessaoWeb },
+    body: JSON.stringify({ code }),
+  });
+  conferir("usuário autentica o aparelho pelo navegador", aprovacao.status, 200);
+
+  const resgate = await anonimo("PUT", { code, pollToken });
+  conferir("aparelho resgata o token", resgate.corpo.data?.status, "aprovado");
+  const tokenDoAparelho = resgate.corpo.data.token;
+
+  // O código é de uso único: um pedido resgatável para sempre viraria uma
+  // chave permanente escondida no banco.
+  const segundoResgate = await anonimo("PUT", { code, pollToken });
+  conferir("código não pode ser resgatado duas vezes", segundoResgate.status, 404);
+
+  const sincronizar = async (corpo) => {
+    const resposta = await fetch(`${BASE}/api/v1/sync`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${tokenDoAparelho}` },
+      body: JSON.stringify({ protocolVersion: 1, device: { id: "smoke-device-0001" }, ...corpo }),
+    });
+    const json = await resposta.json().catch(() => ({}));
+    if (!resposta.ok) throw new Error(`sync ${resposta.status}: ${JSON.stringify(json?.error)}`);
+    return json.data;
+  };
+
+  const primeira = await sincronizar({ mutations: [], cursor: null });
+  conferir("primeira sincronização traz o catálogo", primeira.catalog?.accounts?.length > 0, true);
+  conferir("primeira sincronização traz os lançamentos", primeira.changes.length > 0, true);
+
+  const idDeTeste = "01M0VSMOKE0000000000000002";
+  const criacao = await sincronizar({
+    cursor: primeira.cursor,
+    mutations: [
+      {
+        mutationId: "01M0VSMOKE0000000000000001",
+        entity: "transaction",
+        entityId: idDeTeste,
+        operation: "upsert",
+        baseVersion: 0,
+        data: {
+          id: idDeTeste,
+          kind: "expense",
+          description: "Café pelo celular",
+          amount: "8,50",
+          occurredOn: "2026-08-25",
+          accountId: contaId,
+        },
+      },
+    ],
+  });
+  conferir("aparelho cria lançamento offline", criacao.results[0].status, "applied");
+
+  // Resposta perdida no caminho: o aparelho reenvia e não pode gravar duas vezes.
+  const reenvioSync = await sincronizar({
+    cursor: primeira.cursor,
+    mutations: [
+      {
+        mutationId: "01M0VSMOKE0000000000000001",
+        entity: "transaction",
+        entityId: idDeTeste,
+        operation: "upsert",
+        baseVersion: 0,
+        data: { id: idDeTeste, kind: "expense", description: "Café pelo celular", amount: "8,50", occurredOn: "2026-08-25", accountId: contaId },
+      },
+    ],
+  });
+  conferir("reenvio da mutação é idempotente", reenvioSync.results[0].status, "duplicate");
+
+  // Editar sobre versão antiga não pode sobrescrever em silêncio.
+  const conflito = await sincronizar({
+    cursor: primeira.cursor,
+    mutations: [
+      {
+        mutationId: "01M0VSMOKE0000000000000003",
+        entity: "transaction",
+        entityId: idDeTeste,
+        operation: "upsert",
+        baseVersion: 99,
+        data: { id: idDeTeste, kind: "expense", description: "Sobrescrita", amount: "99,00", occurredOn: "2026-08-25", accountId: contaId },
+      },
+    ],
+  });
+  conferir("versão base errada vira conflito", conflito.results[0].status, "conflict");
+  conferir("conflito devolve o estado do servidor", conflito.results[0].current?.description, "Café pelo celular");
+
+  const exclusaoFantasma = await sincronizar({
+    cursor: primeira.cursor,
+    mutations: [
+      {
+        mutationId: "01M0VSMOKE0000000000000004",
+        entity: "transaction",
+        entityId: "01M0VSMOKE0000000000000099",
+        operation: "delete",
+        baseVersion: 0,
+      },
+    ],
+  });
+  conferir("apagar o que nunca existiu não é erro", exclusaoFantasma.results[0].status, "noop");
+
+  // --- Telas ---------------------------------------------------------------
   // Um serviço que quebra derruba a página inteira; render é a única prova de
   // que a pilha toda — rota, serviço, domínio, banco — chega até o HTML.
   const paginas = [
@@ -520,6 +648,7 @@ async function main() {
     "/relatorios",
     "/importar",
     "/automaticos",
+    "/conectar",
     "/assistente",
     "/configuracoes",
   ];

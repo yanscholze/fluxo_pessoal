@@ -32,6 +32,7 @@ export const NAV: readonly NavItem[] = [
   { href: "/relatorios", label: "Relatórios" },
   { href: "/importar", label: "Importar" },
   { href: "/automaticos", label: "Automáticos" },
+  { href: "/conectar", label: "Conectar celular" },
   { href: "/assistente", label: "Assistente" },
 ];
 

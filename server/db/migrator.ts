@@ -20,6 +20,8 @@ import planejamento from "./migrations/0004_planning-modules.sql?raw";
 import recompensas from "./migrations/0005_rewards.sql?raw";
 import usoDaIa from "./migrations/0006_ai-usage.sql?raw";
 import captura from "./migrations/0007_capture.sql?raw";
+import sincronizacao from "./migrations/0008_sync.sql?raw";
+import pareamento from "./migrations/0009_pairing.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -104,6 +106,8 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 5, name: "recompensas-e-cambio", run: fromSql(recompensas) },
   { id: 6, name: "uso-da-ia", run: fromSql(usoDaIa) },
   { id: 7, name: "captura-por-notificacao", run: fromSql(captura) },
+  { id: 8, name: "recibos-de-sincronizacao", run: fromSql(sincronizacao) },
+  { id: 9, name: "pareamento-de-aparelho", run: fromSql(pareamento) },
 ];
 
 let applied: Promise<void> | null = null;
