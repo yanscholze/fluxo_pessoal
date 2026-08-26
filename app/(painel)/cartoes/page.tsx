@@ -7,7 +7,7 @@ import { money } from "../../ui/format.ts";
 import { CreditCard, Percent, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Empty, Panel } from "../../ui/primitives.tsx";
-import { CardPanel } from "./card-panel.tsx";
+import { CardsCarousel } from "./cards-carousel.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -78,11 +78,7 @@ export default async function Cartoes() {
         ) : null}
 
         {view.cards.length ? (
-          <div className="space-y-5">
-            {view.cards.map((card) => (
-              <CardPanel key={card.id} card={card} accounts={view.accounts} today={view.today} />
-            ))}
-          </div>
+          <CardsCarousel cards={view.cards} accounts={view.accounts} today={view.today} />
         ) : (
           <Panel>
             <Empty

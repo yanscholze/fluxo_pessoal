@@ -45,6 +45,20 @@ function dia(mesesAtras, diaDoMes) {
   return data.toISOString().slice(0, 10);
 }
 
+/** Uma transação no formato OFX, que é posicional e sem espaço para engano. */
+function linhaOfx(tipo, data, centavos, memo, id) {
+  const valor = (centavos / 100).toFixed(2);
+  return [
+    "<STMTTRN>",
+    `<TRNTYPE>${tipo}`,
+    `<DTPOSTED>${data.replace(/-/g, "")}120000`,
+    `<TRNAMT>${valor}`,
+    `<FITID>${id}`,
+    `<MEMO>${memo}`,
+    "</STMTTRN>",
+  ].join("\n");
+}
+
 function competencia(mesesAtras) {
   const data = new Date(Date.UTC(HOJE.getUTCFullYear(), HOJE.getUTCMonth() - mesesAtras, 1, 12));
   return data.toISOString().slice(0, 7);
@@ -153,7 +167,7 @@ async function main() {
         paymentAccountId: conta,
         closingDay: 13,
         dueDay: 20,
-        limit: 800000,
+        limit: 1500000,
         brand: "Mastercard",
         tier: "Ultravioleta",
         last4: "4417",
@@ -402,20 +416,38 @@ async function main() {
   console.log("5. Parcelamentos (notebook 10x com juros, cadeira 6x sem)");
 
   // --- Faturas pagas -------------------------------------------------------
-  // Paga as faturas mais antigas, deixando as recentes em aberto — é o estado
-  // em que alguém normalmente abre o app.
-  for (let mes = 5; mes >= 2; mes -= 1) {
-    try {
-      await api("/api/v1/invoices/pay", {
-        method: "POST",
-        body: { cardId: cartao, competence: competencia(mes), accountId: conta, paidOn: dia(mes - 1, 19) },
-      });
-    } catch {
-      // Fatura sem saldo devedor: nada a pagar.
-    }
+  // As faturas são pagas a partir do que o servidor **diz** estar em aberto, e
+  // não de uma lista de meses civis. A competência de uma compra no crédito não
+  // é o mês em que ela aconteceu: num cartão que fecha dia 11, o que passou do
+  // dia 11 já é da fatura seguinte. Adivinhar o mês deixava faturas com saldo
+  // devedor sem pagamento e o cenário abria com tudo em atraso.
+  // Pagar uma fatura pode revelar outra atrasada que estava atrás dela, então a
+  // varredura repete até sobrar só uma. Uma passada só deixava o cenário
+  // abrindo com meia dúzia de atrasos — alarme demais para um exemplo.
+  let pagas = 0;
+  let restantes = 0;
+
+  for (let volta = 0; volta < 6; volta += 1) {
+    const cartoes = await api("/api/v1/cards");
+    const principal = cartoes.find((item) => item.id === cartao);
+    const atrasadas = [...principal.overdueInvoices].sort((esquerda, direita) =>
+      esquerda.competence.localeCompare(direita.competence),
+    );
+
+    restantes = atrasadas.length;
+    if (atrasadas.length <= 1) break;
+
+    // A mais antiga primeiro: é a ordem em que alguém realmente quita.
+    const fatura = atrasadas[0];
+    await api("/api/v1/invoices/pay", {
+      method: "POST",
+      body: { cardId: cartao, competence: fatura.competence, accountId: conta, paidOn: fatura.dueDate },
+    });
+    pagas += 1;
+    restantes -= 1;
   }
 
-  console.log("6. Faturas antigas pagas");
+  console.log(`6. ${pagas} faturas atrasadas pagas, ${restantes} deixada em atraso`);
 
   // --- Planejamento --------------------------------------------------------
   for (const [nome, teto] of [
@@ -483,7 +515,7 @@ async function main() {
   console.log("7. Orçamentos, metas e investimentos");
 
   // --- Viagem --------------------------------------------------------------
-  await api("/api/v1/trips", {
+  const viagem = await api("/api/v1/trips", {
     method: "POST",
     body: {
       name: "Chile",
@@ -494,7 +526,106 @@ async function main() {
     },
   });
 
-  console.log("8. Viagem");
+  // Uma viagem sem gastos etiquetados é uma tela vazia. A viagem é etiqueta
+  // sobre lançamentos que já existem — então eles nascem aqui como lançamentos
+  // normais, com `tripId`.
+  const gastosDaViagem = [
+    ["Passagem LATAM", 312000, 12, "Transporte"],
+    ["Hotel em Santiago", 268400, 13, "Moradia"],
+    ["Vale Nevado", 89500, 15, "Lazer"],
+    ["Jantar no Bocanáriz", 47800, 16, "Alimentação"],
+    ["Transfer aeroporto", 21300, 20, "Transporte"],
+  ];
+
+  for (const [descricao, valor, diaDoMes, categoria] of gastosDaViagem) {
+    await api("/api/v1/transactions", {
+      method: "POST",
+      body: {
+        kind: "expense",
+        description: descricao,
+        amount: valor,
+        occurredOn: dia(3, diaDoMes),
+        cardId: cartao,
+        categoryId: idDe(categoria),
+        tripId: viagem.id,
+      },
+    });
+  }
+
+  console.log("8. Viagem ao Chile com cinco gastos etiquetados");
+
+  // --- Capturas por notificação --------------------------------------------
+  // Sugestões pendentes de revisão, como o aplicativo Android produziria. O
+  // texto é o de uma notificação real de banco: quem interpreta é o domínio.
+  const agora = Date.now();
+  await api("/api/v1/captures", {
+    method: "POST",
+    body: {
+      notifications: [
+        {
+          sourceApp: "com.nu.production",
+          title: "Nubank",
+          text: "Compra aprovada: R$ 128,90 em PADARIA SANTO GRAO",
+          postedAt: agora - 2 * 60 * 60 * 1000,
+          deviceEventId: "demo-captura-1",
+        },
+        {
+          sourceApp: "com.nu.production",
+          title: "Nubank",
+          text: "Compra aprovada: R$ 64,50 em POSTO IPIRANGA no débito",
+          postedAt: agora - 26 * 60 * 60 * 1000,
+          deviceEventId: "demo-captura-2",
+        },
+        {
+          sourceApp: "com.picpay",
+          title: "PicPay",
+          text: "Você recebeu R$ 180,00 de Marina Alves",
+          postedAt: agora - 50 * 60 * 60 * 1000,
+          deviceEventId: "demo-captura-3",
+        },
+        {
+          sourceApp: "com.itau",
+          title: "Itaú",
+          text: "Compra aprovada de R$ 2.499,00 em MAGAZINE LUIZA em 10x",
+          postedAt: agora - 74 * 60 * 60 * 1000,
+          deviceEventId: "demo-captura-4",
+        },
+      ],
+    },
+  });
+
+  console.log("9. Quatro capturas de notificação aguardando revisão");
+
+  // --- Importação em revisão -----------------------------------------------
+  // Um extrato OFX pequeno, para a tela de importação abrir já na etapa de
+  // revisão — que é a etapa que o produto precisa mostrar.
+  const extrato = [
+    "OFXHEADER:100",
+    "DATA:OFXSGML",
+    "VERSION:102",
+    "",
+    "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>",
+    "<CURDEF>BRL",
+    "<BANKTRANLIST>",
+    linhaOfx("DEBIT", dia(0, 3), -21990, "ASSINATURA STREAMING", "demo-ofx-1"),
+    linhaOfx("DEBIT", dia(0, 5), -14750, "FARMACIA PAGUE MENOS", "demo-ofx-2"),
+    linhaOfx("DEBIT", dia(0, 6), -8900, "ESTACIONAMENTO CENTRO", "demo-ofx-3"),
+    linhaOfx("CREDIT", dia(0, 7), 45000, "REEMBOLSO VIAGEM", "demo-ofx-4"),
+    linhaOfx("DEBIT", dia(0, 9), -32640, "SUPERMERCADO ANGELONI", "demo-ofx-5"),
+    "</BANKTRANLIST>",
+    "</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>",
+  ].join("\n");
+
+  await api("/api/v1/imports", {
+    method: "POST",
+    body: {
+      filename: "extrato-corrente.ofx",
+      content: extrato,
+      accountId: conta,
+    },
+  });
+
+  console.log("10. Extrato OFX aguardando revisão");
 
   console.log("\nPronto. Entre com:\n");
   console.log(`  ${BASE}/entrar`);

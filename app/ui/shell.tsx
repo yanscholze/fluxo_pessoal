@@ -78,6 +78,7 @@ export const NAV: readonly NavGroup[] = [
     title: "Planejamento",
     items: [
       { href: "/planejamento", label: "Recorrências", icon: Calendar },
+      { href: "/assinaturas", label: "Assinaturas", icon: Repeat },
       { href: "/orcamentos", label: "Orçamentos", icon: Wallet },
       { href: "/metas", label: "Metas", icon: Target },
     ],

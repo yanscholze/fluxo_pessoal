@@ -42,27 +42,16 @@ export function CardPanel({
 
   return (
     <Panel as="article">
+      {/* Nome, bandeira, final e situação vivem na face do cartão, logo acima.
+          Repeti-los aqui seria a mesma informação duas vezes na mesma dobra. */}
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className="flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ring-black/10"
-            style={{ backgroundColor: card.color }}
-            aria-hidden
-          >
-            <CreditCard size={18} strokeWidth={1.6} className="text-white/80" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="flex flex-wrap items-center gap-2 text-heading text-ink">
-              {card.name}
-              {card.isPrimary ? <Badge tone="accent">principal</Badge> : null}
-              {card.kind === "debit" ? <Badge>débito</Badge> : null}
-            </h2>
-            <p className="mt-0.5 truncate text-caption text-ink-subtle">
-              {card.brand ? `${card.brand} · ` : ""}
-              {card.last4 ? `•••• ${card.last4} · ` : ""}
-              paga por {card.paymentAccountName}
-            </p>
-          </div>
+        <div className="min-w-0">
+          <h2 className="text-heading text-ink">
+            {card.kind === "credit" ? "Fatura e limite" : "Uso do cartão"}
+          </h2>
+          <p className="mt-0.5 truncate text-caption text-ink-subtle">
+            {card.brand ? `${card.brand} · ` : ""}paga por {card.paymentAccountName}
+          </p>
         </div>
 
         {card.kind === "credit" ? (

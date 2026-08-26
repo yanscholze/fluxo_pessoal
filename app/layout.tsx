@@ -1,23 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 
 import "./globals.css";
 
 /**
- * Inter, variável.
+ * Plus Jakarta Sans, variável.
  *
- * Escolhida pelos algarismos: ela tem `tnum` de verdade, e uma coluna de
- * valores só fica legível quando todo dígito ocupa a mesma largura. A pilha do
- * sistema não garante isso — no Windows cai em Segoe UI, no Android em Roboto,
- * e a mesma tabela ganha três larguras diferentes.
+ * Humanista, de contornos abertos e terminais levemente arredondados. A
+ * escolha anterior era Inter, geométrica e de formas fechadas: correta para
+ * densidade, mas endurecia o conjunto ao lado de superfícies arredondadas — a
+ * tipografia dizia "painel de sistema" enquanto o resto dizia "produto".
+ *
+ * O critério que não podia ser abandonado na troca são os algarismos: uma
+ * coluna de valores só fica legível quando todo dígito ocupa a mesma largura.
+ * Esta família tem `tnum` de verdade, e a classe `.tabular` o aciona. A pilha
+ * do sistema não garante isso — no Windows cai em Segoe UI, no Android em
+ * Roboto, e a mesma tabela ganha três larguras diferentes.
  *
  * Entra como variável CSS em vez de classe para que `--font-sans`, definida em
  * `globals.css`, continue sendo o único lugar que decide a família.
  */
-const inter = Inter({
+const fonte = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-sans-carregada",
   fallback: ["ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
 });
 
@@ -56,7 +62,7 @@ const TEMA_INICIAL = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={inter.variable} suppressHydrationWarning>
+    <html lang="pt-BR" className={fonte.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEMA_INICIAL }} />
       </head>

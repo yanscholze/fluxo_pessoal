@@ -653,6 +653,7 @@ async function main() {
     "/planejamento",
     "/orcamentos",
     "/metas",
+    "/assinaturas",
     "/investimentos",
     "/viagens",
     "/saude",

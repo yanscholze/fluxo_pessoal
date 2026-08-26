@@ -81,40 +81,40 @@
   /* Tipografia                                                             */
   /* ---------------------------------------------------------------------- */
 
-  /* `--font-inter` é injetado por next/font em app/layout.tsx. O fallback vale
-     enquanto a fonte não chegou, e evita o salto de layout. */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* `--font-sans-carregada` é injetada por next/font em app/layout.tsx. O
+     fallback vale enquanto a fonte não chegou, e evita o salto de layout. */
+  --font-sans: var(--font-sans-carregada), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Escala fechada. Toda a interface sai daqui — não existe tamanho avulso. */
 
   /* O número que é a resposta da tela. Um por tela, no máximo. */
   --text-display: 2.5rem;
   --text-display--line-height: 1.02;
-  --text-display--letter-spacing: -0.035em;
+  --text-display--letter-spacing: -0.026em;
   --text-display--font-weight: 660;
 
   /* Valor de indicador na faixa de KPIs. */
   --text-figure: 1.6875rem;
   --text-figure--line-height: 1.12;
-  --text-figure--letter-spacing: -0.025em;
+  --text-figure--letter-spacing: -0.018em;
   --text-figure--font-weight: 640;
 
   /* Valor secundário dentro de um painel. */
   --text-figure-sm: 1.1875rem;
   --text-figure-sm--line-height: 1.2;
-  --text-figure-sm--letter-spacing: -0.018em;
+  --text-figure-sm--letter-spacing: -0.013em;
   --text-figure-sm--font-weight: 620;
 
   /* Título de página. */
   --text-title: 1.0625rem;
   --text-title--line-height: 1.35;
-  --text-title--letter-spacing: -0.014em;
+  --text-title--letter-spacing: -0.01em;
   --text-title--font-weight: 620;
 
   /* Título de seção dentro de um painel. */
   --text-heading: 0.875rem;
   --text-heading--line-height: 1.4;
-  --text-heading--letter-spacing: -0.006em;
+  --text-heading--letter-spacing: -0.004em;
   --text-heading--font-weight: 600;
 
   /* Corpo. O tamanho padrão de qualquer texto de conteúdo. */
