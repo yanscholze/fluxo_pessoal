@@ -167,7 +167,7 @@ async function main() {
         paymentAccountId: conta,
         closingDay: 13,
         dueDay: 20,
-        limit: 1500000,
+        limit: 2500000,
         brand: "Mastercard",
         tier: "Ultravioleta",
         last4: "4417",
@@ -421,31 +421,31 @@ async function main() {
   // é o mês em que ela aconteceu: num cartão que fecha dia 11, o que passou do
   // dia 11 já é da fatura seguinte. Adivinhar o mês deixava faturas com saldo
   // devedor sem pagamento e o cenário abria com tudo em atraso.
-  // Pagar uma fatura pode revelar outra atrasada que estava atrás dela, então a
-  // varredura repete até sobrar só uma. Uma passada só deixava o cenário
-  // abrindo com meia dúzia de atrasos — alarme demais para um exemplo.
+  // A lista é lida uma vez e percorrida da mais antiga para a mais nova. Pagar
+  // uma fatura pode zerar o saldo devedor de outra, e a versão anterior parava
+  // no primeiro "já quitada" — deixando meia dúzia de atrasos no cenário.
+  const cartoes = await api("/api/v1/cards");
+  const principal = cartoes.find((item) => item.id === cartao);
+  const atrasadas = [...principal.overdueInvoices].sort((esquerda, direita) =>
+    esquerda.competence.localeCompare(direita.competence),
+  );
+
+  // Deixa a última em atraso, junto com a fatura corrente: é o estado em que
+  // alguém normalmente abre o aplicativo, e exercita os dois avisos sem pintar
+  // a tela inteira de vermelho.
   let pagas = 0;
-  let restantes = 0;
-
-  for (let volta = 0; volta < 6; volta += 1) {
-    const cartoes = await api("/api/v1/cards");
-    const principal = cartoes.find((item) => item.id === cartao);
-    const atrasadas = [...principal.overdueInvoices].sort((esquerda, direita) =>
-      esquerda.competence.localeCompare(direita.competence),
-    );
-
-    restantes = atrasadas.length;
-    if (atrasadas.length <= 1) break;
-
-    // A mais antiga primeiro: é a ordem em que alguém realmente quita.
-    const fatura = atrasadas[0];
-    await api("/api/v1/invoices/pay", {
-      method: "POST",
-      body: { cardId: cartao, competence: fatura.competence, accountId: conta, paidOn: fatura.dueDate },
-    });
-    pagas += 1;
-    restantes -= 1;
+  for (const fatura of atrasadas.slice(0, Math.max(0, atrasadas.length - 1))) {
+    try {
+      await api("/api/v1/invoices/pay", {
+        method: "POST",
+        body: { cardId: cartao, competence: fatura.competence, accountId: conta, paidOn: fatura.dueDate },
+      });
+      pagas += 1;
+    } catch (erro) {
+      if (!String(erro).includes("já está quitada")) throw erro;
+    }
   }
+  const restantes = atrasadas.length - pagas;
 
   console.log(`6. ${pagas} faturas atrasadas pagas, ${restantes} deixada em atraso`);
 

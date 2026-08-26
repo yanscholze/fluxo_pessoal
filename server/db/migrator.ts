@@ -22,6 +22,7 @@ import usoDaIa from "./migrations/0006_ai-usage.sql?raw";
 import captura from "./migrations/0007_capture.sql?raw";
 import sincronizacao from "./migrations/0008_sync.sql?raw";
 import pareamento from "./migrations/0009_pairing.sql?raw";
+import categoriaDaCaptura from "./migrations/0010_capture-category.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -32,11 +33,28 @@ type Migration = {
 /** Separador que o drizzle-kit emite entre statements. */
 const STATEMENT_SEPARATOR = "--> statement-breakpoint";
 
+/**
+ * Fatia o arquivo em statements executáveis.
+ *
+ * A intenção do filtro é descartar o pedaço que é **só** comentário. A versão
+ * anterior descartava o pedaço que *começava* com comentário — e uma migration
+ * escrita à mão, que abre explicando o porquê, virava zero statements em
+ * silêncio: ela era registrada como aplicada sem ter tocado no banco, e a falha
+ * só aparecia depois, como coluna inexistente numa inserção.
+ *
+ * Agora as linhas de comentário são removidas e o que sobra decide.
+ */
 function statementsOf(text: string): string[] {
   return text
     .split(STATEMENT_SEPARATOR)
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0 && !statement.startsWith("--"));
+    .map((bloco) =>
+      bloco
+        .split(/\r?\n/)
+        .filter((linha) => !linha.trim().startsWith("--"))
+        .join("\n")
+        .trim(),
+    )
+    .filter((statement) => statement.length > 0);
 }
 
 /** Migration a partir de um arquivo `.sql` gerado pelo drizzle-kit. */
@@ -108,6 +126,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 7, name: "captura-por-notificacao", run: fromSql(captura) },
   { id: 8, name: "recibos-de-sincronizacao", run: fromSql(sincronizacao) },
   { id: 9, name: "pareamento-de-aparelho", run: fromSql(pareamento) },
+  { id: 10, name: "categoria-adivinhada-na-captura", run: fromSql(categoriaDaCaptura) },
 ];
 
 let applied: Promise<void> | null = null;

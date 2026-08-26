@@ -63,6 +63,19 @@ export const captureEvents = sqliteTable(
     installmentTotal: integer("installment_total"),
     /** 0 a 1000 (milésimos). Inteiro para não guardar float. */
     confidenceMilli: integer("confidence_milli").notNull().default(0),
+
+    /**
+     * Categoria adivinhada pelo nome do estabelecimento.
+     *
+     * Separada da categoria que a regra do app determina: uma é decisão do
+     * usuário, outra é palpite da heurística, e guardá-las no mesmo campo
+     * apagaria a diferença — a tela precisa poder dizer "achamos que é
+     * Alimentação" em vez de afirmar que é.
+     */
+    suggestedCategoryId: text("suggested_category_id").references(() => categories.id, {
+      onDelete: "set null",
+    }),
+    categoryConfidenceMilli: integer("category_confidence_milli").notNull().default(0),
     /** Instante em que o Android recebeu a notificação. */
     postedAt: integer("posted_at").notNull(),
     occurredOn: text("occurred_on").notNull(),

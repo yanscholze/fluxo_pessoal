@@ -8,12 +8,14 @@
  */
 
 import { competenceForPurchase } from "../../core/domain/card/invoice-cycle.ts";
+import { guessCategory } from "../../core/domain/capture/categorize.ts";
 import {
   type CapturedDraft,
   type IgnoreReason,
   type NotificationEvent,
   type RecentCapture,
   captureNotification,
+  normalize,
 } from "../../core/domain/capture/notification.ts";
 import { accountParty, cardParty, type Party, type Transaction } from "../../core/domain/ledger/types.ts";
 import { conflict, notFound } from "../../core/kernel/errors.ts";
@@ -66,6 +68,12 @@ export async function ingest(
   const database = getDatabase();
   const regras = await database.select().from(captureSources).where(eq(captureSources.userId, userId));
 
+  // Índice por nome normalizado: o palpite do domínio vem como rótulo, e o
+  // usuário pode ter renomeado a categoria. Sem equivalente, não há palpite.
+  const catalogo = await listCategories(userId);
+  const porNome = new Map(catalogo.map((categoria) => [normalize(categoria.name), categoria.id]));
+  const categoriaDe = (rotulo: string) => porNome.get(normalize(rotulo)) ?? null;
+
   const desde = Math.min(...events.map((item) => item.postedAt), now.getTime()) - RECENT_WINDOW_MS;
   const recentes = await database
     .select({
@@ -102,7 +110,7 @@ export async function ingest(
       merchant: resultado.draft.merchant,
       postedAt: resultado.draft.postedAt,
     });
-    novos.push(toRow(userId, resultado.draft, evento.deviceEventId ?? null, now));
+    novos.push(toRow(userId, resultado.draft, evento.deviceEventId ?? null, now, categoriaDe));
   }
 
   // O índice único por `(user, device_event_id)` absorve o reenvio da fila
@@ -126,7 +134,15 @@ function toRow(
   draft: CapturedDraft,
   deviceEventId: string | null,
   now: Date,
+  categoriaDe: (rotulo: string) => string | null,
 ): typeof captureEvents.$inferInsert {
+  // O domínio devolve um rótulo canônico; a ponte para a categoria cadastrada
+  // é aqui, porque só o serviço conhece o catálogo do usuário. Quem renomeou
+  // "Alimentação" para outra coisa simplesmente não recebe palpite, em vez de
+  // receber um identificador inválido.
+  const palpite = draft.kind === "expense" ? guessCategory(draft.merchant, draft.rawText) : null;
+  const categoriaSugerida = palpite ? categoriaDe(palpite.label) : null;
+
   return {
     id: newId(now.getTime()),
     userId,
@@ -140,6 +156,8 @@ function toRow(
     installmentCurrent: draft.installment?.current ?? null,
     installmentTotal: draft.installment?.total ?? null,
     confidenceMilli: Math.round(draft.confidence * 1000),
+    suggestedCategoryId: categoriaSugerida,
+    categoryConfidenceMilli: categoriaSugerida && palpite ? Math.round(palpite.confidence * 1000) : 0,
     postedAt: draft.postedAt,
     // A data do lançamento é o dia em que a notificação chegou, no fuso de
     // Brasília — não o dia UTC, que viraria o seguinte a partir das 21h.
@@ -161,6 +179,8 @@ export type CaptureView = {
   readonly method: "credit" | "debit" | "cash" | "unknown";
   readonly installment: { current: number; total: number } | null;
   readonly confidencePercent: number;
+  /** Palpite de categoria. `null` quando nada casou — e isso é comum. */
+  readonly suggestedCategory: { id: string; name: string; confidencePercent: number } | null;
   readonly occurredOn: LocalDate;
   readonly status: "pendente" | "confirmado" | "ignorado" | "duplicado";
 };
@@ -204,6 +224,7 @@ export async function buildCapturesView(userId: string, now: Date = new Date()):
   ]);
 
   const rotulo = new Map(fontes.map((fonte) => [fonte.sourceApp, fonte.label]));
+  const nomeDaCategoria = new Map(categorias.map((categoria) => [categoria.id, categoria.name]));
   const toView = (linha: typeof captureEvents.$inferSelect): CaptureView => ({
     id: linha.id,
     sourceApp: linha.sourceApp,
@@ -219,6 +240,14 @@ export async function buildCapturesView(userId: string, now: Date = new Date()):
         ? { current: linha.installmentCurrent, total: linha.installmentTotal }
         : null,
     confidencePercent: linha.confidenceMilli / 10,
+    suggestedCategory:
+      linha.suggestedCategoryId && nomeDaCategoria.has(linha.suggestedCategoryId)
+        ? {
+            id: linha.suggestedCategoryId,
+            name: nomeDaCategoria.get(linha.suggestedCategoryId)!,
+            confidencePercent: linha.categoryConfidenceMilli / 10,
+          }
+        : null,
     occurredOn: localDate(linha.occurredOn),
     status: linha.status,
   });

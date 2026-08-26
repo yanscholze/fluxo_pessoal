@@ -8,6 +8,7 @@ import { CreditCard, Percent, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Empty, Panel } from "../../ui/primitives.tsx";
 import { CardsCarousel } from "./cards-carousel.tsx";
+import { NewCard } from "./new-card.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function Cartoes() {
       <PageHeader
         title="Cartões e faturas"
         description="Fatura em aberto, atrasos, limite disponível e histórico de cada cartão."
+        actions={<NewCard accounts={view.accounts} />}
       />
 
       <Stack gap="lg">

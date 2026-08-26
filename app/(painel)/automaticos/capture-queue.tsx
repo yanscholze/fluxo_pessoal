@@ -137,8 +137,23 @@ export function CaptureQueue({
                     <Campo rotulo="Data">
                       <input name="occurredOn" type="date" defaultValue={item.occurredOn} className={entrada} />
                     </Campo>
-                    <Campo rotulo="Categoria">
-                      <select name="categoryId" className={entrada}>
+                    <Campo
+                      rotulo="Categoria"
+                      dica={
+                        item.suggestedCategory
+                          ? `sugerida pelo estabelecimento · ${Math.round(item.suggestedCategory.confidencePercent)}%`
+                          : undefined
+                      }
+                    >
+                      {/* A sugestão entra pré-selecionada, mas continua um
+                          campo comum: o nome que chega na notificação é o do
+                          adquirente, não o do negócio, e afirmar a categoria
+                          seria transformar palpite em fato. */}
+                      <select
+                        name="categoryId"
+                        className={entrada}
+                        defaultValue={item.suggestedCategory?.id ?? ""}
+                      >
                         <option value="">Sem categoria</option>
                         {options.categories
                           .filter((categoria) =>
@@ -232,10 +247,21 @@ export function CaptureQueue({
 const entrada =
   "h-9 w-full rounded-md border border-line bg-surface px-2.5 text-body-sm text-ink outline-none focus:border-accent";
 
-function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+function Campo({
+  rotulo,
+  dica,
+  children,
+}: {
+  rotulo: string;
+  dica?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-1 block text-caption font-medium text-ink">{rotulo}</span>
+      <span className="mb-1 flex flex-wrap items-baseline gap-x-1.5">
+        <span className="text-caption font-medium text-ink">{rotulo}</span>
+        {dica ? <span className="text-caption text-accent">{dica}</span> : null}
+      </span>
       {children}
     </label>
   );

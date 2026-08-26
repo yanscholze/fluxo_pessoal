@@ -1,6 +1,52 @@
 @import "tailwindcss";
 
 /**
+ * Figtree, variável, auto-hospedada.
+ *
+ * Escrita à mão em vez de vir do `next/font`. O plugin de fontes do vinext
+ * baixa os arquivos certos mas emite `src: url(D:/...)` — um caminho de disco
+ * do Windows, que o navegador não busca. A falha é silenciosa e por isso
+ * perigosa: a página renderiza na fonte do sistema e nada acusa erro.
+ *
+ * A escolha passou por quatro voltas, e o critério que decidiu foi medido, não
+ * presumido. Inter e Plus Jakarta são geométricas de formas fechadas e
+ * terminais retos: resolvem densidade e endurecem o conjunto ao lado de
+ * superfícies arredondadas. DM Sans é fluida mas **não tem `tnum`** — seus
+ * algarismos variam de 10 a 22 px de largura, e uma coluna de valores com
+ * dígitos de larguras diferentes dança a cada atualização.
+ *
+ * Das candidatas fluidas, só quatro têm tabular de verdade (Figtree, Outfit,
+ * Nunito Sans, Rubik). Figtree tem os bojos mais circulares entre elas —
+ * relação `o`/`n` de 1,039 — e é uma família de interface completa, boa tanto
+ * em 40 px de título quanto em 12 px de rótulo.
+ *
+ * Os dois recortes existem para o navegador baixar só o que a página usa: o
+ * latino básico cobre o português, e o estendido entra apenas se aparecer um
+ * caractere fora dele.
+ */
+
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/figtree-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/figtree-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+/**
  * Sistema visual do Fluxo.
  *
  * Um único lugar decide cor, tipografia, espaço, raio, sombra e movimento. Uma
@@ -81,34 +127,33 @@
   /* Tipografia                                                             */
   /* ---------------------------------------------------------------------- */
 
-  /* `--font-sans-carregada` é injetada por next/font em app/layout.tsx. O
-     fallback vale enquanto a fonte não chegou, e evita o salto de layout. */
-  --font-sans: var(--font-sans-carregada), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* A pilha de recuo vale enquanto o `.woff2` não chegou, e evita o salto. */
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Escala fechada. Toda a interface sai daqui — não existe tamanho avulso. */
 
   /* O número que é a resposta da tela. Um por tela, no máximo. */
   --text-display: 2.5rem;
   --text-display--line-height: 1.02;
-  --text-display--letter-spacing: -0.026em;
+  --text-display--letter-spacing: -0.032em;
   --text-display--font-weight: 660;
 
   /* Valor de indicador na faixa de KPIs. */
   --text-figure: 1.6875rem;
   --text-figure--line-height: 1.12;
-  --text-figure--letter-spacing: -0.018em;
+  --text-figure--letter-spacing: -0.022em;
   --text-figure--font-weight: 640;
 
   /* Valor secundário dentro de um painel. */
   --text-figure-sm: 1.1875rem;
   --text-figure-sm--line-height: 1.2;
-  --text-figure-sm--letter-spacing: -0.013em;
+  --text-figure-sm--letter-spacing: -0.016em;
   --text-figure-sm--font-weight: 620;
 
   /* Título de página. */
   --text-title: 1.0625rem;
   --text-title--line-height: 1.35;
-  --text-title--letter-spacing: -0.01em;
+  --text-title--letter-spacing: -0.013em;
   --text-title--font-weight: 620;
 
   /* Título de seção dentro de um painel. */
