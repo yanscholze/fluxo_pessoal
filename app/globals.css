@@ -72,6 +72,81 @@
  *    parecer template.
  */
 
+/* -------------------------------------------------------------------------- */
+/* Famílias opcionais.                                                        */
+/*                                                                            */
+/* O usuário escolhe em Configurações › Aparência, e o `[data-font]` no        */
+/* `<html>` troca `--font-sans`. Só o recorte latino é baixado: ele cobre      */
+/* U+0000-00FF, e o português inteiro cabe ali.                               */
+/* -------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/montserrat.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Comfortaa";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/comfortaa.woff2") format("woff2");
+}
+
+/* Poppins não é variável: cada peso é um arquivo próprio. */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/poppins-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/poppins-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/poppins-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/poppins-700.woff2") format("woff2");
+}
+
+/**
+ * Face só de algarismos.
+ *
+ * Comfortaa e Poppins não têm `tnum`: os dígitos delas variam quase 11 px de
+ * largura, e uma coluna de valores desalinharia a cada atualização. Em vez de
+ * recusar as duas ou entregá-las quebradas, esta face cobre **apenas** os
+ * caracteres que aparecem num valor — algarismos, separadores, cifrão e sinal
+ * — e é aplicada só dentro de `.tabular`, que é onde o alinhamento importa.
+ *
+ * O texto continua na fonte escolhida; só os dígitos das tabelas trocam. Como
+ * a substituta é geométrica como as duas, a emenda não aparece.
+ */
+@font-face {
+  font-family: "Numerais";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/figtree-latin.woff2") format("woff2");
+  unicode-range: U+0030-0039, U+002B, U+002C, U+002D, U+002E, U+0024, U+0025, U+00A0, U+2212, U+2013;
+}
+
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme {
@@ -284,6 +359,46 @@
 
   --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.02), 0 1px 3px rgb(0 0 0 / 0.4);
   --shadow-float: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 24px 56px -16px rgb(0 0 0 / 0.7);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Escolha da família.                                                        */
+/*                                                                            */
+/* Sem atributo, vale Figtree. Cada opção ajusta também o aperto de            */
+/* entreletras: uma geométrica larga como Montserrat precisa de mais aperto    */
+/* que uma humanista, e Comfortaa não aceita nenhum sem fechar as contraformas.*/
+/* -------------------------------------------------------------------------- */
+
+[data-font="montserrat"] {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --text-display--letter-spacing: -0.038em;
+  --text-figure--letter-spacing: -0.028em;
+  --text-figure-sm--letter-spacing: -0.022em;
+  --text-title--letter-spacing: -0.018em;
+}
+
+[data-font="poppins"] {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --text-display--letter-spacing: -0.03em;
+  --text-figure--letter-spacing: -0.02em;
+  --text-figure-sm--letter-spacing: -0.015em;
+  --text-title--letter-spacing: -0.012em;
+}
+
+[data-font="comfortaa"] {
+  --font-sans: "Comfortaa", ui-sans-serif, system-ui, sans-serif;
+  /* Comfortaa já é larga e muito arredondada: apertar fecha as contraformas. */
+  --text-display--letter-spacing: -0.012em;
+  --text-figure--letter-spacing: -0.008em;
+  --text-figure-sm--letter-spacing: -0.004em;
+  --text-title--letter-spacing: 0em;
+  --text-label--letter-spacing: 0.05em;
+}
+
+/* Só as duas sem tabular precisam da face de algarismos. */
+[data-font="poppins"] .tabular,
+[data-font="comfortaa"] .tabular {
+  font-family: "Numerais", var(--font-sans);
 }
 
 /* -------------------------------------------------------------------------- */

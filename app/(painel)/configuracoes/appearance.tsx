@@ -29,15 +29,34 @@ const ACENTOS = [
   ["ambar", "#b45309", "Âmbar"],
 ] as const;
 
+/**
+ * Famílias oferecidas.
+ *
+ * `tabular` registra se a fonte tem algarismo de largura fixa. Comfortaa e
+ * Poppins não têm — os dígitos delas variam quase 11 px —, e por isso o CSS
+ * troca só os algarismos por uma face de apoio dentro das tabelas. O texto
+ * continua na fonte escolhida; a coluna de valores continua alinhada.
+ */
+const FONTES = [
+  { valor: "figtree", nome: "Figtree", nota: "Padrão · humanista", tabular: true },
+  { valor: "montserrat", nome: "Montserrat", nota: "Geométrica · sóbria", tabular: true },
+  { valor: "poppins", nome: "Poppins", nota: "Geométrica · arredondada", tabular: false },
+  { valor: "comfortaa", nome: "Comfortaa", nota: "Muito arredondada", tabular: false },
+] as const;
+
+const FONTE_PADRAO = "figtree";
+
 type Tema = "claro" | "escuro";
 
 export function Appearance() {
   const [tema, setTema] = useState<Tema>("escuro");
   const [acento, setAcento] = useState<string>(PADRAO);
+  const [fonte, setFonte] = useState<string>(FONTE_PADRAO);
 
   useEffect(() => {
     setTema(document.documentElement.dataset.theme === "dark" ? "escuro" : "claro");
     setAcento(document.documentElement.dataset.accent ?? PADRAO);
+    setFonte(document.documentElement.dataset.font ?? FONTE_PADRAO);
   }, []);
 
   function aplicarTema(valor: Tema) {
@@ -51,6 +70,13 @@ export function Appearance() {
     if (valor === PADRAO) delete document.documentElement.dataset.accent;
     else document.documentElement.dataset.accent = valor;
     localStorage.setItem("fluxo:acento", valor);
+  }
+
+  function aplicarFonte(valor: string) {
+    setFonte(valor);
+    if (valor === FONTE_PADRAO) delete document.documentElement.dataset.font;
+    else document.documentElement.dataset.font = valor;
+    localStorage.setItem("fluxo:fonte", valor);
   }
 
   return (
@@ -67,6 +93,39 @@ export function Appearance() {
               { value: "escuro", label: "Escuro", icon: Moon },
             ]}
           />
+        </div>
+      </div>
+
+      <div>
+        <Label>Tipografia</Label>
+        <p className="mt-1 text-caption text-ink-subtle">
+          A amostra usa a própria fonte, com um valor para você conferir os algarismos.
+        </p>
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+          {FONTES.map((opcao) => {
+            const ativa = fonte === opcao.valor;
+            return (
+              <button
+                key={opcao.valor}
+                type="button"
+                onClick={() => aplicarFonte(opcao.valor)}
+                aria-pressed={ativa}
+                data-font={opcao.valor === FONTE_PADRAO ? undefined : opcao.valor}
+                className={`rounded-md border p-3 text-left transition-colors ${
+                  ativa
+                    ? "border-accent-edge bg-accent-wash"
+                    : "border-line-strong bg-surface hover:bg-surface-inset"
+                }`}
+              >
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="text-body font-medium text-ink">{opcao.nome}</span>
+                  {ativa ? <Check size={14} strokeWidth={2.4} className="text-accent" aria-hidden /> : null}
+                </span>
+                <span className="tabular mt-1 block text-figure-sm text-ink">R$ 1.234,56</span>
+                <span className="mt-0.5 block text-caption text-ink-subtle">{opcao.nota}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

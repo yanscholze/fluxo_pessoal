@@ -65,7 +65,11 @@ export function PageHeader({
             <p className="mt-1 max-w-[62ch] text-body-sm text-ink-muted">{description}</p>
           ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+        {/* Sem `shrink-0`: num celular de 375 px, um cabeçalho com navegação de
+            competência mais botão de ação não cabe ao lado do título, e impedir
+            que o bloco ceda empurra a página inteira para fora da tela. Ele
+            quebra para a linha de baixo, que é o comportamento certo. */}
+        {actions ? <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {children ? <div className="mt-5">{children}</div> : null}
     </header>

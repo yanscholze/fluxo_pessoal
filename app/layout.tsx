@@ -28,6 +28,8 @@ const TEMA_INICIAL = `
     document.documentElement.dataset.theme = escuro ? "dark" : "light";
     var acento = localStorage.getItem("fluxo:acento");
     if (acento) document.documentElement.dataset.accent = acento;
+    var fonte = localStorage.getItem("fluxo:fonte");
+    if (fonte) document.documentElement.dataset.font = fonte;
   } catch (e) {
     document.documentElement.dataset.theme = "dark";
   }
