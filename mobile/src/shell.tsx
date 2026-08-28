@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
@@ -21,6 +21,7 @@ import { ExtratoScreen } from "./screens/extrato.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
 import { useLedger } from "./state/ledger.tsx";
+import { Texto } from "./ui/primitives.tsx";
 import { radius, space, type, usePalette } from "./ui/theme.ts";
 
 type Aba = "inicio" | "extrato" | "capturas" | "ajustes";
@@ -88,7 +89,7 @@ export function Shell() {
           elevation: 4,
         })}
       >
-        <Text style={{ color: palette.accentInk, fontSize: 28, lineHeight: 32, fontWeight: "400" }}>+</Text>
+        <Texto style={{ color: palette.accentInk, fontSize: 28, lineHeight: 32, fontWeight: "400" }}>+</Texto>
       </Pressable>
 
       <View
@@ -112,10 +113,10 @@ export function Shell() {
               onPress={() => setAba(item.id)}
               style={{ flex: 1, alignItems: "center", paddingVertical: space.md }}
             >
-              <Text style={[type.small, { color: ativo ? palette.accent : palette.inkSubtle }]}>
+              <Texto style={[type.bodySm, { color: ativo ? palette.accent : palette.inkSubtle }]}>
                 {item.label}
                 {alerta ? " •" : ""}
-              </Text>
+              </Texto>
             </Pressable>
           );
         })}

@@ -21,7 +21,8 @@ import { ApiError, OfflineError } from "../net/client.ts";
 import { claimPairing, startPairing } from "../net/pairing.ts";
 import type { PairingStart } from "../net/types.ts";
 import { useSession } from "../state/session.tsx";
-import { Body, Button, Card, Figure, Label, Notice, Small } from "../ui/primitives.tsx";
+import { Body, Button, Card, Figure, Label, Notice, Small , Texto } from "../ui/primitives.tsx";
+import { familiaDoPeso } from "../ui/fonts.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 /** Intervalo entre consultas. Rápido o bastante para parecer instantâneo. */
@@ -130,7 +131,7 @@ export function ConectarScreen() {
                 marginTop: space.md,
                 marginBottom: space.md,
                 backgroundColor: palette.surfaceSunken,
-                borderRadius: radius.control,
+                borderRadius: radius.md,
                 paddingVertical: space.lg,
                 alignItems: "center",
               }}
@@ -169,12 +170,13 @@ export function ConectarScreen() {
               placeholder="fluxo.seudominio.com.br"
               placeholderTextColor={palette.inkSubtle}
               style={[
+                { fontFamily: familiaDoPeso(type.body.fontWeight) },
                 type.body,
                 {
                   marginTop: space.sm,
                   color: palette.ink,
                   backgroundColor: palette.surfaceSunken,
-                  borderRadius: radius.control,
+                  borderRadius: radius.md,
                   paddingHorizontal: space.md,
                   paddingVertical: 14,
                 },

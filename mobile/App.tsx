@@ -11,6 +11,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { ConectarScreen } from "./src/screens/conectar.tsx";
+import { useTipografia } from "./src/ui/fonts.ts";
 import { Shell } from "./src/shell.tsx";
 import { LedgerProvider } from "./src/state/ledger.tsx";
 import { SessionProvider, useSession } from "./src/state/session.tsx";
@@ -29,8 +30,12 @@ export default function App() {
 function Raiz() {
   const palette = usePalette();
   const { state } = useSession();
+  const tipografiaPronta = useTipografia();
 
-  if (state.status === "carregando") {
+  // Segurar a primeira pintura até a fonte chegar evita o salto de texto que
+  // acontece quando o Roboto do sistema é substituído meio segundo depois — e
+  // são poucos milissegundos, porque os arquivos vêm empacotados no APK.
+  if (!tipografiaPronta || state.status === "carregando") {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: palette.canvas }}>
         <StatusBar style="auto" />

@@ -20,7 +20,13 @@
     },
     "plugins": [
       ["expo-secure-store", { "configureAndroidBackup": true }],
-      "expo-sqlite"
+      "expo-sqlite",
+      ["expo-font", { "fonts": [
+        "./assets/fonts/Figtree-Regular.ttf",
+        "./assets/fonts/Figtree-Medium.ttf",
+        "./assets/fonts/Figtree-SemiBold.ttf",
+        "./assets/fonts/Figtree-Bold.ttf"
+      ] }]
     ],
     "extra": { "eas": { "projectId": "13821e67-9f56-418c-a8bd-fe90eaf83620" } }
   }

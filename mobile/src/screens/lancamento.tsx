@@ -24,7 +24,8 @@ import { type LocalDate, isLocalDate, todayIn } from "@fluxo/core/time/local-dat
 import { useLedger } from "../state/ledger.tsx";
 import type { LocalTransaction, TransactionDraft } from "../storage/model.ts";
 import { competence as formatCompetence, money } from "../ui/format.ts";
-import { Body, Button, Card, Label, Notice, Small } from "../ui/primitives.tsx";
+import { Body, Button, Card, Label, Notice, Small , Texto } from "../ui/primitives.tsx";
+import { familiaDoPeso } from "../ui/fonts.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 const TIPOS: { readonly value: TransactionKind; readonly label: string }[] = [
@@ -149,6 +150,7 @@ export function LancamentoScreen({
             placeholder="0,00"
             placeholderTextColor={palette.inkSubtle}
             style={[
+              { fontFamily: familiaDoPeso(type.figure.fontWeight) },
               type.figure,
               { color: centavos && centavos > 0 ? palette.ink : palette.inkSubtle, paddingVertical: space.sm },
             ]}
@@ -182,12 +184,13 @@ export function LancamentoScreen({
             placeholderTextColor={palette.inkSubtle}
             maxLength={160}
             style={[
+              { fontFamily: familiaDoPeso(type.body.fontWeight) },
               type.body,
               {
                 marginTop: space.sm,
                 color: palette.ink,
                 backgroundColor: palette.surfaceSunken,
-                borderRadius: radius.control,
+                borderRadius: radius.md,
                 paddingHorizontal: space.md,
                 paddingVertical: 14,
               },
@@ -205,12 +208,13 @@ export function LancamentoScreen({
             keyboardType="numbers-and-punctuation"
             maxLength={10}
             style={[
+              { fontFamily: familiaDoPeso(type.body.fontWeight) },
               type.body,
               {
                 marginTop: space.sm,
                 color: dataValida ? palette.ink : palette.negative,
                 backgroundColor: palette.surfaceSunken,
-                borderRadius: radius.control,
+                borderRadius: radius.md,
                 paddingHorizontal: space.md,
                 paddingVertical: 14,
               },

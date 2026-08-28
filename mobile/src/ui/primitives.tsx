@@ -13,12 +13,27 @@ import {
   type StyleProp,
   StyleSheet,
   Text,
+  type TextProps,
   type TextStyle,
   View,
   type ViewStyle,
 } from "react-native";
 
+import { familiaDoPeso } from "./fonts.ts";
 import { radius, space, type, usePalette } from "./theme.ts";
+
+/**
+ * Todo texto do aplicativo passa por aqui.
+ *
+ * No Android `fontWeight` não escolhe entre arquivos de uma família — cada peso
+ * é uma família própria. Este componente lê o peso do estilo já achatado e
+ * escolhe o arquivo certo, para que a hierarquia tipográfica não desapareça num
+ * único regular.
+ */
+export function Texto({ style, ...rest }: TextProps) {
+  const achatado = StyleSheet.flatten(style) as { fontWeight?: string | number } | undefined;
+  return <Text {...rest} style={[{ fontFamily: familiaDoPeso(achatado?.fontWeight) }, style]} />;
+}
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const palette = usePalette();
@@ -29,7 +44,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
           backgroundColor: palette.surface,
           borderColor: palette.line,
           borderWidth: StyleSheet.hairlineWidth,
-          borderRadius: radius.card,
+          borderRadius: radius.lg,
           padding: space.lg,
         },
         style,
@@ -43,9 +58,9 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 export function Label({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const palette = usePalette();
   return (
-    <Text style={[type.label, { color: palette.inkSubtle, textTransform: "uppercase" }, style]}>
+    <Texto style={[type.label, { color: palette.inkSubtle, textTransform: "uppercase" }, style]}>
       {children}
-    </Text>
+    </Texto>
   );
 }
 
@@ -68,7 +83,7 @@ export function Figure({
           ? palette.caution
           : palette.ink;
 
-  return <Text style={[small ? type.figureSmall : type.figure, { color: cor }]}>{children}</Text>;
+  return <Texto style={[small ? type.figureSm : type.figure, { color: cor }]}>{children}</Texto>;
 }
 
 export function Body({
@@ -86,12 +101,12 @@ export function Body({
 }) {
   const palette = usePalette();
   return (
-    <Text
+    <Texto
       numberOfLines={numberOfLines}
       style={[strong ? type.bodyStrong : type.body, { color: muted ? palette.inkMuted : palette.ink }, style]}
     >
       {children}
-    </Text>
+    </Texto>
   );
 }
 
@@ -116,9 +131,9 @@ export function Small({
   }[tone];
 
   return (
-    <Text numberOfLines={numberOfLines} style={[type.small, { color: cor }, style]}>
+    <Texto numberOfLines={numberOfLines} style={[type.bodySm, { color: cor }, style]}>
       {children}
-    </Text>
+    </Texto>
   );
 }
 
@@ -162,7 +177,7 @@ export function Button({
       style={({ pressed }) => [
         {
           backgroundColor: fundo,
-          borderRadius: radius.control,
+          borderRadius: radius.md,
           paddingVertical: 14,
           paddingHorizontal: space.lg,
           alignItems: "center",
@@ -174,7 +189,7 @@ export function Button({
         style,
       ]}
     >
-      {busy ? <ActivityIndicator color={texto} /> : <Text style={[type.bodyStrong, { color: texto }]}>{label}</Text>}
+      {busy ? <ActivityIndicator color={texto} /> : <Texto style={[type.bodyStrong, { color: texto }]}>{label}</Texto>}
     </Pressable>
   );
 }
@@ -248,8 +263,8 @@ export function Notice({
   }[tone];
 
   return (
-    <View style={{ backgroundColor: fundo, borderRadius: radius.control, padding: space.md }}>
-      <Text style={[type.small, { color: cor }]}>{children}</Text>
+    <View style={{ backgroundColor: fundo, borderRadius: radius.md, padding: space.md }}>
+      <Texto style={[type.bodySm, { color: cor }]}>{children}</Texto>
     </View>
   );
 }
