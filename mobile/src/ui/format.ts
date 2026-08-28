@@ -20,6 +20,14 @@ export function money(value: Cents): string {
   return formatMoney(value);
 }
 
+export function percent(value: number, fractionDigits = 0): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "percent",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value / 100);
+}
+
 export function competence(value: Competence): string {
   return formatCompetence(value);
 }

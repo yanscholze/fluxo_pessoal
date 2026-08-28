@@ -17,19 +17,32 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
 import { CapturasScreen } from "./screens/capturas.tsx";
+import { CartoesScreen } from "./screens/cartoes.tsx";
 import { ExtratoScreen } from "./screens/extrato.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
+import { OrcamentosScreen } from "./screens/orcamentos.tsx";
 import { useLedger } from "./state/ledger.tsx";
 import { Texto } from "./ui/primitives.tsx";
 import { radius, space, type, usePalette } from "./ui/theme.ts";
 
-type Aba = "inicio" | "extrato" | "capturas" | "ajustes";
+type Aba = "inicio" | "extrato" | "cartoes" | "orcamentos" | "ajustes" | "capturas";
 
+/**
+ * As abas do celular não espelham as dezenove telas do site, e não deveriam.
+ * Aqui cabem as consultas de bolso — o que se abre de pé, na fila do caixa:
+ * quanto sobra, o que saiu, quanto devo no cartão, quanto ainda posso gastar.
+ * Importação, relatórios e cadastro continuam sendo trabalho de mesa.
+ *
+ * Capturas saiu da barra e virou atalho no Início: é fila de revisão, não
+ * consulta, e ocupava um quinto do espaço de navegação para algo que na maior
+ * parte dos dias está vazio.
+ */
 const ABAS: readonly { readonly id: Aba; readonly label: string }[] = [
   { id: "inicio", label: "Início" },
   { id: "extrato", label: "Extrato" },
-  { id: "capturas", label: "Capturas" },
+  { id: "cartoes", label: "Cartões" },
+  { id: "orcamentos", label: "Orçamento" },
   { id: "ajustes", label: "Ajustes" },
 ];
 
@@ -64,10 +77,14 @@ export function Shell() {
           <InicioScreen onOpenTransaction={abrirLancamento} />
         ) : aba === "extrato" ? (
           <ExtratoScreen onOpenTransaction={abrirLancamento} />
+        ) : aba === "cartoes" ? (
+          <CartoesScreen />
+        ) : aba === "orcamentos" ? (
+          <OrcamentosScreen />
         ) : aba === "capturas" ? (
-          <CapturasScreen />
+          <CapturasScreen onVoltar={() => setAba("ajustes")} />
         ) : (
-          <AjustesScreen />
+          <AjustesScreen onAbrirCapturas={() => setAba("capturas")} />
         )}
       </View>
 

@@ -17,7 +17,7 @@ import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Divider, Label, Notice, Row, Small } from "../ui/primitives.tsx";
 import { space, usePalette } from "../ui/theme.ts";
 
-export function AjustesScreen() {
+export function AjustesScreen({ onAbrirCapturas }: { onAbrirCapturas: () => void }) {
   const palette = usePalette();
   const { state, disconnect } = useSession();
   const { sync, conflicts, synchronize, resolveConflict } = useLedger();
@@ -140,6 +140,20 @@ export function AjustesScreen() {
             />
           </Card>
         ) : null}
+
+        <Card>
+          <Label>Capturas de notificação</Label>
+          <Body muted style={{ marginTop: space.sm }}>
+            Avisos de compra dos aplicativos do banco viram sugestão de lançamento. Nada entra na sua conta
+            sem você confirmar.
+          </Body>
+          <Button
+            label="Ver fila de revisão"
+            variant="secondary"
+            onPress={onAbrirCapturas}
+            style={{ marginTop: space.md }}
+          />
+        </Card>
 
         <Card>
           <Label>Aparelho</Label>

@@ -26,7 +26,7 @@ import { money } from "../ui/format.ts";
 import { Body, Button, Card, Empty, Label, Notice, Small } from "../ui/primitives.tsx";
 import { space, usePalette } from "../ui/theme.ts";
 
-export function CapturasScreen() {
+export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
   const { synchronize } = useLedger();
@@ -89,9 +89,12 @@ export function CapturasScreen() {
           <RefreshControl refreshing={carregando} onRefresh={() => void carregar()} tintColor={palette.accent} />
         }
       >
-        <Body strong style={{ fontSize: 20 }}>
-          Capturas
-        </Body>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
+          <Body strong style={{ fontSize: 20 }}>
+            Capturas
+          </Body>
+          <Button label="Voltar" variant="ghost" onPress={onVoltar} />
+        </View>
 
         {!isBridgeAvailable() ? (
           <Notice tone="caution">
