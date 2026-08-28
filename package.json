@@ -2,6 +2,9 @@
   "name": "fluxo-pessoal",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "mobile"
+  ],
   "engines": {
     "node": ">=22.13.0"
   },

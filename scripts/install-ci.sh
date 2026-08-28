@@ -158,6 +158,11 @@ echo "[sites] running exactly one bounded npm ci"
 export NPM_CONFIG_MAXSOCKETS=1
 export NPM_CONFIG_FETCH_RETRIES=0
 export NPM_CONFIG_FETCH_TIMEOUT=30000
+# O repositório é um workspace npm, e isso não é preferência de organização: é o
+# que a EAS usa para detectar o monorepo e enviar `core/` junto no build do
+# aplicativo. O preço é que o `npm ci` do site também instala as dependências do
+# Android — cerca de 420 pacotes que ele não usa. `--workspaces=false` não
+# resolve, porque o lockfile as iça para a raiz de qualquer forma.
 npm_ci_args=(ci --cache "${expected_cache}")
 if [[ "${use_seeded_cache}" == "1" ]]; then
   npm_ci_args+=(--prefer-offline)
@@ -165,7 +170,7 @@ fi
 timeout \
   --signal=TERM \
   --kill-after="${SITES_INSTALL_KILL_AFTER:-15s}" \
-  "${SITES_INSTALL_TIMEOUT:-8m}" \
+  "${SITES_INSTALL_TIMEOUT:-14m}" \
   npm "${npm_ci_args[@]}"
 
 vinext="${SITES_PROJECT_ROOT}/node_modules/.bin/vinext"

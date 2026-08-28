@@ -1,23 +1,27 @@
 /**
  * Configuração do Metro.
  *
- * Resolve duas coisas.
+ * Resolve três coisas.
  *
  * **1. `core/` é um pacote, não um diretório vizinho.** Domínio, dinheiro,
  * datas e ciclo de fatura ficam na raiz do repositório, e o aplicativo os
- * consome como `@fluxo/core` — uma dependência `file:../core`, que o npm
- * materializa como link em `node_modules`. Sem isso a regra teria que ser
- * reescrita aqui, que é o que a versão anterior fazia e por que o site e o
- * celular divergiam. `watchFolders` completa o arranjo: é o que faz o Metro
- * recarregar quando o domínio muda, em vez de servir a versão em cache.
+ * consome como `@fluxo/core`. Sem isso a regra teria que ser reescrita aqui,
+ * que é o que a versão anterior fazia e por que o site e o celular divergiam.
  *
- * **2. Este repositório escreve a extensão nos imports.** `./foo.ts`, e não
+ * **2. O repositório é um workspace npm.** Isso não é preferência de
+ * organização: é o que a EAS usa para detectar o monorepo e enviar `core/`
+ * junto no build. Sem o campo `workspaces`, a EAS empacota só `mobile/`, e o
+ * `npm install` no servidor dela quebra procurando `../core`.
+ *
+ * Como consequência, as dependências do aplicativo são içadas para o
+ * `node_modules` da raiz — daí `nodeModulesPaths` listar os dois lugares, na
+ * ordem em que devem ser procurados.
+ *
+ * **3. Este repositório escreve a extensão nos imports.** `./foo.ts`, e não
  * `./foo`. É exigência do executor de testes do Node (`--experimental-strip-
  * types`) e vale para `core/` e para o aplicativo igualmente. O resolvedor do
- * Metro não fala esse dialeto nos caminhos relativos: ele espera o
- * especificador sem extensão e tenta as suas próprias. A tradução acontece
- * aqui, num lugar só, em vez de o aplicativo manter uma convenção de import
- * diferente da do resto do projeto.
+ * Metro não fala esse dialeto nos caminhos relativos, então a tradução acontece
+ * aqui, num lugar só.
  */
 
 const path = require("node:path");
@@ -28,7 +32,12 @@ const repositoryRoot = path.resolve(projectRoot, "..");
 
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [path.join(repositoryRoot, "core")];
+config.watchFolders = [repositoryRoot];
+
+config.resolver.nodeModulesPaths = [
+  path.join(projectRoot, "node_modules"),
+  path.join(repositoryRoot, "node_modules"),
+];
 
 /** `./x.ts` e `./x.tsx` viram `./x`, que é o que o Metro sabe resolver. */
 const RELATIVE_TYPESCRIPT = /^(\.{1,2}\/.*)\.(ts|tsx)$/;

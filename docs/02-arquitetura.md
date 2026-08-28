@@ -46,11 +46,17 @@ relativo; o aplicativo o consome como pacote — `@fluxo/core`, declarado como
 `file:../core`, que o npm materializa como link dentro de `mobile/node_modules`.
 Uma regra, uma implementação, dois consumidores.
 
-Workspaces npm resolveriam o mesmo problema e foram descartados: eles hoisteam
-as dependências do aplicativo para o `node_modules` da raiz, o que faria o
-`npm ci` do build de produção instalar React Native, Metro e Expo — 417 pacotes
-que o site não usa, contra um instalador que roda com uma conexão só e prazo
-fechado.
+O repositório **também** é um workspace npm, e essa parte foi adotada a
+contragosto. Workspaces içam as dependências do aplicativo para o
+`node_modules` da raiz, e o `npm ci` do site passa a instalar React Native,
+Metro e Expo — cerca de 420 pacotes que ele não usa, contra um instalador que
+roda com uma conexão só e prazo fechado.
+
+O que obrigou foi a EAS: ela detecta monorepo pelo campo `workspaces` e, sem
+ele, empacota apenas `mobile/` para o build. Como o aplicativo depende de
+`@fluxo/core`, que mora fora dessa pasta, o `npm install` no servidor dela
+quebraria. Entre duplicar o domínio e engordar um instalador, engordar o
+instalador é o mal menor — o prazo do build subiu para 14 minutos.
 
 O `watchFolders` do Metro continua apontando para `core/`: é o que faz uma
 mudança no domínio recarregar no aparelho em vez de servir o cache.
