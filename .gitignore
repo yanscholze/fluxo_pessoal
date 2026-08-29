@@ -54,3 +54,11 @@ mobile/.sites-runtime/
 *.p12
 *.pfx
 google-services.json
+
+# Skills de agente instaladas por `npx skills add`. São ferramenta de quem
+# desenvolve, não parte do produto: cada pessoa instala as que usa, e o
+# conteúdo vem de repositórios de terceiros que este projeto não revisa a
+# cada atualização. O skills-lock.json só faz sentido junto com elas.
+/.agents/
+/.claude/skills/
+/skills-lock.json
