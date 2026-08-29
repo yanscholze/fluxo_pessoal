@@ -43,6 +43,8 @@ next-env.d.ts
 # Cache de build do vinext, incluindo as fontes baixadas do Google.
 /.vinext/
 /.sites-runtime/
+# O mesmo cache aparece dentro do workspace quando o npm roda de lá.
+mobile/.sites-runtime/
 /outputs/
 /work/
 
