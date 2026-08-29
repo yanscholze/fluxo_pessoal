@@ -51,7 +51,7 @@ export default async function Recompensas() {
                 <header className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="flex items-center gap-2 text-heading text-ink">
-                      <Gift size={15} strokeWidth={1.75} className="shrink-0 text-ink-subtle" aria-hidden />
+                      <Gift size={15} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden />
                       {cartao.cardName}
                     </h2>
                     <p className="mt-0.5 text-caption text-ink-subtle">

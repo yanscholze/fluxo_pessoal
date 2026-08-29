@@ -64,7 +64,7 @@ export function CardFace({
 
           {data.overdueCount > 0 ? (
             <span className="flex shrink-0 items-center gap-1 rounded-sm bg-black/35 px-1.5 py-0.5 text-label uppercase text-white">
-              <CircleAlert size={11} strokeWidth={2.2} aria-hidden />
+              <CircleAlert size={11} strokeWidth={2} aria-hidden />
               {data.overdueCount}
             </span>
           ) : (

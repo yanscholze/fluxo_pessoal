@@ -24,7 +24,7 @@ export default function NaoEncontrado() {
       <div>
         <p className="text-label uppercase text-ink-subtle">Erro 404</p>
         <h1 className="mt-1.5 text-title text-ink">Esta página não existe</h1>
-        <p className="mt-1.5 max-w-[42ch] text-body-sm text-ink-muted">
+        <p className="mt-1.5 max-w-measure-sm text-body-sm text-ink-muted">
           O endereço pode ter mudado, ou o atalho que você seguiu está desatualizado.
         </p>
       </div>

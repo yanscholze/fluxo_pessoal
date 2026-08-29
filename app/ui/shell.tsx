@@ -177,7 +177,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
             aria-label="Fechar menu"
             className="ml-auto rounded-md p-1.5 text-ink-muted hover:bg-surface-inset lg:hidden"
           >
-            <X size={17} strokeWidth={1.9} aria-hidden />
+            <X size={17} strokeWidth={1.5} aria-hidden />
           </button>
         </div>
 
@@ -231,9 +231,9 @@ export function Shell({ userName, children }: { userName: string; children: Reac
               className="hidden size-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink lg:inline-flex"
             >
               {recolhida ? (
-                <PanelLeft size={16} strokeWidth={1.8} aria-hidden />
+                <PanelLeft size={16} strokeWidth={1.5} aria-hidden />
               ) : (
-                <PanelLeftClose size={16} strokeWidth={1.8} aria-hidden />
+                <PanelLeftClose size={16} strokeWidth={1.5} aria-hidden />
               )}
             </button>
           </div>
@@ -252,7 +252,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
             aria-label="Abrir menu"
             className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
           >
-            <Menu size={19} strokeWidth={1.9} aria-hidden />
+            <Menu size={19} strokeWidth={1.5} aria-hidden />
           </button>
           <Link href="/" className="text-title text-ink">
             Fluxo
@@ -294,7 +294,7 @@ function ItemDeNavegacao({
       {ativo ? (
         <span className="absolute -left-2.5 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-accent" aria-hidden />
       ) : null}
-      <Icone size={16} strokeWidth={1.8} className="shrink-0" aria-hidden />
+      <Icone size={16} strokeWidth={1.5} className="shrink-0" aria-hidden />
       <span className={join("truncate", recolhida ? "lg:hidden" : "")}>{item.label}</span>
     </Link>
   );
@@ -332,7 +332,7 @@ function BotaoDeTema({ recolhida }: { recolhida: boolean }) {
         recolhida ? "" : "flex-1",
       )}
     >
-      {escuro === false ? <Moon size={16} strokeWidth={1.8} aria-hidden /> : <Sun size={16} strokeWidth={1.8} aria-hidden />}
+      {escuro === false ? <Moon size={16} strokeWidth={1.5} aria-hidden /> : <Sun size={16} strokeWidth={1.5} aria-hidden />}
     </button>
   );
 }
@@ -357,7 +357,7 @@ function BotaoDeSaida({ recolhida }: { recolhida: boolean }) {
         recolhida ? "" : "flex-1",
       )}
     >
-      <LogOut size={16} strokeWidth={1.8} aria-hidden />
+      <LogOut size={16} strokeWidth={1.5} aria-hidden />
     </button>
   );
 }

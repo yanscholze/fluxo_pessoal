@@ -52,7 +52,7 @@ export function BudgetForm({ categories }: { categories: readonly { id: string; 
   return (
     <form
       onSubmit={enviar}
-      className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-line bg-surface p-4 sm:w-auto"
+      className="flex w-full flex-wrap items-end gap-2 rounded-panel border border-line bg-surface p-4 sm:w-auto"
     >
       <label className="block">
         <span className="mb-1.5 block text-caption font-medium text-ink">Categoria</span>

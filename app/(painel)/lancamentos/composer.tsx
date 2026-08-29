@@ -105,7 +105,7 @@ export function Composer({
         role="dialog"
         aria-modal="true"
         aria-label="Novo lançamento"
-        className="max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-float sm:rounded-lg"
+        className="max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
       >
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-title font-semibold text-ink">Novo lançamento</h2>

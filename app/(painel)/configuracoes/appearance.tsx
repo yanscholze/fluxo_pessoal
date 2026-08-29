@@ -119,7 +119,7 @@ export function Appearance() {
               >
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="text-body font-medium text-ink">{opcao.nome}</span>
-                  {ativa ? <Check size={14} strokeWidth={2.4} className="text-accent" aria-hidden /> : null}
+                  {ativa ? <Check size={14} strokeWidth={1.5} className="text-accent" aria-hidden /> : null}
                 </span>
                 <span className="tabular mt-1 block text-figure-sm text-ink">R$ 1.234,56</span>
                 <span className="mt-0.5 block text-caption text-ink-subtle">{opcao.nota}</span>
@@ -155,7 +155,7 @@ export function Appearance() {
                   style={{ backgroundColor: cor }}
                   aria-hidden
                 >
-                  {ativo ? <Check size={10} strokeWidth={3} className="text-white" /> : null}
+                  {ativo ? <Check size={10} strokeWidth={2.5} className="text-white" /> : null}
                 </span>
                 {rotulo}
               </button>

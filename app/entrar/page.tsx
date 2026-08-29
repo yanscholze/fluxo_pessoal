@@ -45,12 +45,12 @@ export default async function Entrar() {
 
         <div className="relative max-w-lg">
           <h1 className="text-display text-ink">Quanto você realmente pode gastar hoje?</h1>
-          <p className="mt-5 max-w-[46ch] text-body leading-relaxed text-ink-muted">
+          <p className="mt-5 max-w-measure text-body leading-relaxed text-ink-muted">
             O Fluxo separa o que você tem do que já está comprometido. Fatura em aberto, parcela a vencer e
             conta fixa saem da conta antes — o que sobra é seu de verdade.
           </p>
 
-          <ol className="mt-9 grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3">
+          <ol className="mt-9 grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-3">
             <Exemplo icone={Wallet} rotulo="Saldo hoje" valor="R$ 8.420" nota="o que existe" />
             <Exemplo icone={CreditCard} rotulo="Comprometido" valor="R$ 3.180" nota="já tem dono" />
             <Exemplo
@@ -92,7 +92,7 @@ function Exemplo({
   return (
     <li className={destaque ? "bg-accent-wash p-4" : "bg-surface p-4"}>
       <p className="flex items-center gap-1.5 text-label uppercase text-ink-subtle">
-        <Icone size={12} strokeWidth={1.9} aria-hidden />
+        <Icone size={12} strokeWidth={2} aria-hidden />
         {rotulo}
       </p>
       <p className={`tabular mt-1.5 text-figure-sm ${destaque ? "text-accent" : "text-ink"}`}>{valor}</p>

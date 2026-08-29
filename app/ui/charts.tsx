@@ -66,7 +66,7 @@ export function ChartFrame({
                 {legend.map((item) => (
                   <li key={item.label} className="flex items-center gap-1.5 text-caption text-ink-muted">
                     <span
-                      className="size-2 shrink-0 rounded-[2px]"
+                      className="size-2 shrink-0 rounded-xs"
                       style={{ backgroundColor: item.color }}
                       aria-hidden
                     />
@@ -294,9 +294,14 @@ export function LineChart({
               fill="transparent"
               className="cursor-crosshair"
             >
+              {/* Uma expressão só, e não duas coladas. `<title>` é elemento de
+                  texto puro: com dois filhos, o React separa os nós no
+                  servidor e o analisador do navegador os funde ao ler o HTML,
+                  de modo que a árvore hidratada nunca bate com a renderizada.
+                  Era isso que derrubava a hidratação do painel inteiro. */}
               <title>
-                {rotulo}
-                {series.map((serie) => ` · ${serie.label}: ${format(serie.values[i] ?? 0)}`).join("")}
+                {rotulo +
+                  series.map((serie) => ` · ${serie.label}: ${format(serie.values[i] ?? 0)}`).join("")}
               </title>
             </rect>
             <line
@@ -422,9 +427,7 @@ export function BarChart({
 
           return (
             <g key={`${barra.label}-${i}`} className="group">
-              <title>
-                {barra.label}: {format(barra.value)}
-              </title>
+              <title>{`${barra.label}: ${format(barra.value)}`}</title>
               <rect
                 x={x}
                 y={barra.value < 0 ? yZero : y}
@@ -528,9 +531,7 @@ export function DonutChart({
                   strokeLinecap="butt"
                   className="transition-opacity hover:opacity-75"
                 >
-                  <title>
-                    {fatia.label}: {format(fatia.value)}
-                  </title>
+                  <title>{`${fatia.label}: ${format(fatia.value)}`}</title>
                 </circle>
               );
             })

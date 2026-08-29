@@ -73,7 +73,7 @@ export function CardPanel({
               {atrasadas.map((invoice) => (
                 <li key={invoice.competence} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-body-sm text-negative">
-                    <CircleAlert size={14} strokeWidth={1.9} aria-hidden />
+                    <CircleAlert size={14} strokeWidth={1.5} aria-hidden />
                     Fatura de {competenceShort(invoice.competence)} venceu em {date(invoice.dueDate)}
                   </span>
                   <span className="flex items-center gap-2.5">

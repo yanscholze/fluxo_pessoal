@@ -58,7 +58,7 @@ export default async function Importar({
       />
 
       <Stack gap="lg">
-        <ol className="grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
+        <ol className="grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-4">
           {ETAPAS.map((etapa, indice) => {
             const concluida = indice < etapaAtual;
             const atual = indice === etapaAtual;

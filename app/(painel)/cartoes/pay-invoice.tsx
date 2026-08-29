@@ -72,7 +72,7 @@ export function PayInvoice({
         role="dialog"
         aria-modal="true"
         aria-label="Pagar fatura"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-[--radius-card] border border-line bg-surface p-5 shadow-float sm:rounded-lg"
+        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
       >
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>

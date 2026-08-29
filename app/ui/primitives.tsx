@@ -78,17 +78,25 @@ export function Panel({
   className?: string;
   as?: "section" | "article" | "div" | "aside" | "li";
 } & Omit<ComponentPropsWithoutRef<"section">, "className" | "children">) {
+  /**
+   * O raio faz parte da variante, e não é um valor solto.
+   *
+   * `inset` é quase sempre uma caixa **dentro** de um painel, e por isso usa o
+   * raio concêntrico: menor que o do pai na medida do respiro entre os dois.
+   * Igualar os dois raios é o detalhe que faz caixa dentro de caixa parecer
+   * template — as curvas ficam paralelas em vez de aninhadas.
+   */
   const superficie = {
-    plain: "bg-surface border border-line shadow-panel",
-    inset: "bg-surface-sunken border border-line",
-    raised: "bg-surface-raised border border-line-strong shadow-float",
+    plain: "rounded-panel bg-surface border border-line shadow-panel",
+    inset: "rounded-nested bg-surface-sunken border border-line",
+    raised: "rounded-panel bg-surface-raised border border-line-strong shadow-float",
     bare: "",
   }[variant];
 
   const espaco = { none: "", sm: "p-3", md: "p-4 sm:p-5", lg: "p-5 sm:p-6" }[padding];
 
   return (
-    <Tag className={join("rounded-lg", superficie, espaco, className)} {...rest}>
+    <Tag className={join(superficie, espaco, className)} {...rest}>
       {children}
     </Tag>
   );
@@ -117,7 +125,7 @@ export function PanelHeader({
     <header className={join("mb-4 flex items-start justify-between gap-4", className)}>
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-heading text-ink">
-          {Icon ? <Icon size={15} strokeWidth={1.75} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
+          {Icon ? <Icon size={15} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
           <span className="truncate">{title}</span>
         </h2>
         {hint ? <p className="mt-1 text-caption text-ink-muted">{hint}</p> : null}
@@ -197,7 +205,11 @@ export function Badge({
   return (
     <span
       className={join(
-        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-label uppercase",
+        // Pílula, e não retângulo de canto levemente quebrado. Num chip de 18 px
+        // de altura, um raio de 6 px não lê como forma escolhida — lê como
+        // adesivo colado na tela. A pílula é a forma que a altura já sugere, e
+        // o respiro horizontal maior tira o texto de junto da borda.
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-label uppercase",
         aparencia,
       )}
     >
@@ -297,7 +309,7 @@ export function Empty({
         </span>
       ) : null}
       <p className="text-body-sm text-ink">{title}</p>
-      {hint ? <p className="max-w-[34ch] text-caption text-ink-subtle">{hint}</p> : null}
+      {hint ? <p className="max-w-measure-sm text-caption text-ink-subtle">{hint}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
@@ -308,7 +320,7 @@ export function ErrorState({ title, hint, action }: { title: string; hint?: stri
   return (
     <div className="flex flex-col items-center gap-2 rounded-md border border-negative/25 bg-negative-wash px-6 py-8 text-center">
       <p className="text-body-sm font-medium text-negative">{title}</p>
-      {hint ? <p className="max-w-[38ch] text-caption text-negative/80">{hint}</p> : null}
+      {hint ? <p className="max-w-measure-sm text-caption text-negative/80">{hint}</p> : null}
       {action ? <div className="mt-1">{action}</div> : null}
     </div>
   );
@@ -342,7 +354,7 @@ export function Notice({
         WASH[tone],
       )}
     >
-      {Icon ? <Icon size={15} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden /> : null}
+      {Icon ? <Icon size={15} strokeWidth={1.5} className="mt-px shrink-0" aria-hidden /> : null}
       <div className="min-w-0 flex-1">{children}</div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>

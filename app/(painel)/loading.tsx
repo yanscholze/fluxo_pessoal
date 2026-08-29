@@ -20,7 +20,7 @@ export default function Carregando() {
         <Skeleton className="mt-2 h-5 w-56" />
       </header>
 
-      <div className="grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((indice) => (
           <div key={indice} className="bg-surface p-4 sm:p-5">
             <Skeleton className="h-2.5 w-20" />

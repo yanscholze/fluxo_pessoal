@@ -76,7 +76,7 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
                       entrada ? "bg-positive-wash text-positive" : "bg-surface-inset text-ink-muted"
                     }`}
                   >
-                    <Icone size={14} strokeWidth={1.9} aria-hidden />
+                    <Icone size={14} strokeWidth={1.5} aria-hidden />
                   </span>
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5">

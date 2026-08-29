@@ -37,7 +37,7 @@ export function FreeToSpend({
 
   return (
     <section
-      className={`reveal relative overflow-hidden rounded-lg border p-5 sm:p-6 ${
+      className={`reveal relative overflow-hidden rounded-panel border p-5 sm:p-6 ${
         negativo ? "border-negative/30 bg-negative-wash" : "border-accent-edge bg-accent-wash"
       }`}
     >
@@ -59,11 +59,11 @@ export function FreeToSpend({
 
           <p className="mt-3 flex items-start gap-2 text-body-sm text-ink-muted">
             {negativo ? (
-              <CircleAlert size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-negative" aria-hidden />
+              <CircleAlert size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-negative" aria-hidden />
             ) : (
-              <TrendingUp size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+              <TrendingUp size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-accent" aria-hidden />
             )}
-            <span className="max-w-[52ch]">
+            <span className="max-w-measure">
               {negativo
                 ? "Os compromissos deste ciclo passam do que você tem. Antecipar gasto novo agora aperta o mês."
                 : "É o que sobra depois de honrar tudo que já está assumido neste ciclo."}

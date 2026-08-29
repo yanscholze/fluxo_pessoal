@@ -80,7 +80,7 @@ export function Delta({
 
   return (
     <span className={join("inline-flex items-center gap-0.5 text-caption font-medium", toneText(tom))}>
-      {neutro ? null : <Seta size={12} strokeWidth={2.25} aria-hidden />}
+      {neutro ? null : <Seta size={12} strokeWidth={2} aria-hidden />}
       <span className="tabular">{percent(Math.abs(variacao), 1)}</span>
       {suffix ? <span className="ml-0.5 font-normal text-ink-subtle">{suffix}</span> : null}
     </span>
@@ -105,7 +105,7 @@ export function Metric({ label, value, tone = "neutral", hint, delta, icon: Icon
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-1.5">
-        {Icon ? <Icon size={13} strokeWidth={1.75} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
+        {Icon ? <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
         <Label>{label}</Label>
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -129,7 +129,7 @@ export function MetricStrip({ metrics, className }: { metrics: readonly MetricPr
   return (
     <div
       className={join(
-        "grid gap-px overflow-hidden rounded-lg border border-line bg-line shadow-panel",
+        "grid gap-px overflow-hidden rounded-panel border border-line bg-line shadow-panel",
         metrics.length >= 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3",
         className,
       )}
@@ -343,7 +343,7 @@ export function ListRow({
           />
         ) : Icone ? (
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-inset text-ink-muted">
-            <Icone size={14} strokeWidth={1.75} aria-hidden />
+            <Icone size={14} strokeWidth={1.5} aria-hidden />
           </span>
         ) : null}
         <span className="min-w-0">

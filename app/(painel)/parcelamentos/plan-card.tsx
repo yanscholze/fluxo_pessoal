@@ -65,7 +65,7 @@ export function PlanCard({ plan }: { plan: PlanView }) {
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-caption text-ink-subtle">
         {plan.nextDueDate ? (
           <span className="flex items-center gap-1.5">
-            <CalendarClock size={13} strokeWidth={1.8} aria-hidden />
+            <CalendarClock size={13} strokeWidth={1.5} aria-hidden />
             próxima em {date(plan.nextDueDate)}
           </span>
         ) : null}

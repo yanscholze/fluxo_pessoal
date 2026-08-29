@@ -179,7 +179,7 @@ export default async function Relatorios({
                     prefetch={false}
                     className="inline-flex items-center gap-1.5 text-body-sm font-medium text-accent hover:underline"
                   >
-                    <Download size={14} strokeWidth={1.9} aria-hidden />
+                    <Download size={14} strokeWidth={1.5} aria-hidden />
                     Exportar CSV
                   </Link>
                 ) : undefined

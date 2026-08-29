@@ -150,14 +150,14 @@ export default async function Planejamento() {
 
       <Stack gap="lg">
         {pendentes.length ? (
-          <section className="rounded-lg border border-caution/30 bg-caution-wash p-4 sm:p-5">
+          <section className="rounded-panel border border-caution/30 bg-caution-wash p-4 sm:p-5">
             <header className="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
               <div className="min-w-0">
                 <h2 className="flex items-center gap-2 text-heading text-ink">
-                  <Clock size={15} strokeWidth={1.75} className="shrink-0 text-caution" aria-hidden />
+                  <Clock size={15} strokeWidth={1.5} className="shrink-0 text-caution" aria-hidden />
                   Aguardando confirmação
                 </h2>
-                <p className="mt-1 max-w-[54ch] text-caption text-ink-muted">
+                <p className="mt-1 max-w-measure text-caption text-ink-muted">
                   Ocorrências de {competenceLong(view.competence)} que ainda não viraram lançamento.
                   Confirmar transforma a projeção em fato — e só então o saldo muda.
                 </p>

@@ -59,7 +59,7 @@ export function Button({
       disabled={rest.disabled || busy}
       aria-busy={busy || undefined}
       className={join(
-        "inline-flex shrink-0 select-none items-center justify-center rounded-md font-medium transition-colors",
+        "press inline-flex shrink-0 select-none items-center justify-center rounded-md font-medium",
         "disabled:pointer-events-none disabled:opacity-45",
         iconRight ? "flex-row-reverse" : "",
         VARIANTE[variant],
@@ -67,7 +67,7 @@ export function Button({
         className,
       )}
     >
-      {Icon ? <Icon size={15} strokeWidth={1.9} className="shrink-0" aria-hidden /> : null}
+      {Icon ? <Icon size={15} strokeWidth={1.5} className="shrink-0" aria-hidden /> : null}
       {children}
     </button>
   );
@@ -101,13 +101,13 @@ export function LinkButton({
       href={href}
       {...rest}
       className={join(
-        "inline-flex shrink-0 select-none items-center justify-center rounded-md font-medium transition-colors",
+        "press inline-flex shrink-0 select-none items-center justify-center rounded-md font-medium",
         VARIANTE[variant],
         TAMANHO[size],
         className,
       )}
     >
-      {Icon ? <Icon size={15} strokeWidth={1.9} className="shrink-0" aria-hidden /> : null}
+      {Icon ? <Icon size={15} strokeWidth={1.5} className="shrink-0" aria-hidden /> : null}
       {children}
     </a>
   );
@@ -135,14 +135,14 @@ export function IconButton({
       title={label}
       {...rest}
       className={join(
-        "inline-flex shrink-0 items-center justify-center rounded-md transition-colors",
+        "press inline-flex shrink-0 items-center justify-center rounded-md",
         "disabled:pointer-events-none disabled:opacity-45",
         size === "sm" ? "size-8" : "size-9",
         VARIANTE[variant],
         className,
       )}
     >
-      <Icon size={16} strokeWidth={1.9} aria-hidden />
+      <Icon size={16} strokeWidth={1.5} aria-hidden />
     </button>
   );
 }
@@ -151,11 +151,25 @@ export function IconButton({
 // Campos
 // ---------------------------------------------------------------------------
 
+/**
+ * Base de todo campo.
+ *
+ * O foco ganha **anel**, e não só troca a cor da borda. Um contorno de 1 px
+ * indo de cinza a verde é quase invisível num campo pequeno — e como o
+ * `focus:outline-none` desliga o contorno do navegador, quem navega por teclado
+ * ficava sem sinal confiável de onde está. O anel resolve os dois: enxerga-se
+ * de longe e nasce do sistema, sem contorno de sistema operacional.
+ *
+ * O `hover` antes repetia `border-line-strong`, que é a cor de repouso: ou
+ * seja, prometia resposta ao passar o mouse e não entregava nenhuma.
+ */
 const CAMPO_BASE =
   "w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink " +
   "placeholder:text-ink-subtle transition-colors " +
-  "hover:border-line-strong focus:border-accent focus:outline-none " +
-  "disabled:opacity-50 aria-[invalid=true]:border-negative";
+  "hover:border-ink-subtle " +
+  "focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-edge " +
+  "disabled:opacity-50 aria-[invalid=true]:border-negative " +
+  "aria-[invalid=true]:focus:ring-negative-wash";
 
 /**
  * Rótulo, campo, dica e erro numa unidade.
@@ -268,7 +282,7 @@ export function Select({
       </select>
       <ChevronDown
         size={14}
-        strokeWidth={1.9}
+        strokeWidth={1.5}
         aria-hidden
         className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
       />
@@ -345,7 +359,7 @@ export function SegmentedControl<T extends string>({
               ativo ? "bg-surface text-ink shadow-panel" : "text-ink-muted hover:text-ink",
             )}
           >
-            {opcao.icon ? <opcao.icon size={13} strokeWidth={1.9} aria-hidden /> : null}
+            {opcao.icon ? <opcao.icon size={13} strokeWidth={1.5} aria-hidden /> : null}
             {opcao.label}
           </button>
         );

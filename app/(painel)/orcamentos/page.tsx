@@ -89,7 +89,7 @@ export default async function Orcamentos({
           </LinkButton>
           <LinkButton href={`/orcamentos?competencia=${proxima}`} size="sm" rel="next">
             {competenceShort(proxima)}
-            <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
+            <ChevronRight size={15} strokeWidth={1.5} aria-hidden />
           </LinkButton>
           {view.competence === competenciaDeHoje ? null : (
             <LinkButton href="/orcamentos" size="sm" variant="ghost">
@@ -116,12 +116,12 @@ export default async function Orcamentos({
                   {semFolga ? (
                     <CircleAlert
                       size={15}
-                      strokeWidth={1.9}
+                      strokeWidth={1.5}
                       className="mt-0.5 shrink-0 text-negative"
                       aria-hidden
                     />
                   ) : (
-                    <Gauge size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+                    <Gauge size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-accent" aria-hidden />
                   )}
                   <span>
                     {semFolga

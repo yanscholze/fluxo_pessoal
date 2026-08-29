@@ -144,15 +144,15 @@ export default async function Contas() {
               tone={negativo ? "negative" : "neutral"}
               className="mt-2"
             />
-            <p className="mt-3 flex max-w-[54ch] items-start gap-2 text-body-sm text-ink-muted">
-              <Landmark size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-ink-subtle" aria-hidden />
+            <p className="mt-3 flex max-w-measure items-start gap-2 text-body-sm text-ink-muted">
+              <Landmark size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-subtle" aria-hidden />
               <span>
                 Conta corrente, dinheiro e benefício, em reais. É o que existe agora — nada aqui é promessa.
               </span>
             </p>
           </div>
 
-          <div className="w-full shrink-0 rounded-lg border border-line bg-surface p-4 shadow-panel lg:w-80">
+          <div className="w-full shrink-0 rounded-panel border border-line bg-surface p-4 shadow-panel lg:w-80">
             <Label className="mb-3">Patrimônio em contas</Label>
             <Breakdown
               parts={[

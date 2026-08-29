@@ -154,14 +154,27 @@
   /* Superfícies — valores do tema claro; o escuro sobrescreve mais abaixo.  */
   /* ---------------------------------------------------------------------- */
 
-  --color-canvas: #f6f7f9;
+  /**
+   * O fundo é deliberadamente mais fundo que o quase-branco de praxe.
+   *
+   * Com `#f6f7f9`, painel branco sobre fundo quase branco separava por 3% de
+   * luminância — no monitor do desenvolvedor dava para ver, num notebook em
+   * sala clara não. Pior: a navegação lateral também é `surface`, então ela
+   * se dissolvia na página em vez de ancorá-la. Aprofundar o fundo é o que faz
+   * a superfície branca **subir**, e é de graça: nenhuma sombra precisa
+   * trabalhar mais para compensar.
+   */
+  --color-canvas: #edeff3;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #f0f2f5;
-  --color-surface-inset: #eaedf1;
+  --color-surface-sunken: #f5f7f9;
+  --color-surface-inset: #e9ecf1;
 
   --color-line: #e2e6ec;
   --color-line-strong: #cdd3dc;
+
+  /* Clareamento no alto da página. Ver a regra de `body`. */
+  --color-canvas-glow: rgb(255 255 255 / 0.85);
 
   /* Texto, em três degraus. Mais que isso vira ruído; menos, vira monotonia. */
   --color-ink: #10151c;
@@ -259,15 +272,66 @@
   /* Forma                                                                  */
   /* ---------------------------------------------------------------------- */
 
+  /* ---------------------------------------------------------------------- */
+  /* Largura                                                                */
+  /*                                                                        */
+  /* Duas famílias, e as duas existiam antes espalhadas como valor avulso.  */
+  /*                                                                        */
+  /* A coluna da página: três larguras, uma por tipo de tela — formulário   */
+  /* não deve esticar, tabela ganha com o espaço, leitura fica no meio.     */
+  /*                                                                        */
+  /* A medida de leitura: quantos caracteres cabem numa linha antes de o    */
+  /* olho perder o começo da seguinte. Havia **sete** valores diferentes    */
+  /* para isso no produto — 34ch, 38ch, 42ch, 46ch, 52ch, 54ch e 62ch —     */
+  /* o que não é calibragem fina, é ausência de decisão: cada tela chutou   */
+  /* o seu. Três degraus cobrem os três casos reais (dica de campo,         */
+  /* parágrafo de apoio, texto de abertura) e passam a ser comparáveis.     */
+  /* ---------------------------------------------------------------------- */
+
+  --container-page-narrow: 48rem;
+  --container-page: 78rem;
+  --container-page-wide: 92rem;
+
+  --container-measure-sm: 42ch;
+  --container-measure: 56ch;
+  --container-measure-lg: 66ch;
+
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  /* Duas sombras, e são discretas. Sombra forte em interface densa vira sujeira. */
-  --shadow-panel: 0 1px 1px rgb(16 21 28 / 0.03), 0 1px 3px -1px rgb(16 21 28 / 0.06);
-  --shadow-float: 0 4px 12px -2px rgb(16 21 28 / 0.1), 0 16px 40px -12px rgb(16 21 28 / 0.18);
+  /**
+   * Raio de painel e raio concêntrico.
+   *
+   * Uma caixa dentro de outra com o **mesmo** raio denuncia que ninguém olhou:
+   * as curvas ficam paralelas em vez de concêntricas, e o conjunto lê como dois
+   * retângulos empilhados. O interno tem que ser menor, e o quanto menor é o
+   * respiro que separa os dois.
+   *
+   * `panel` é a superfície de conteúdo; `nested` é o que vive dentro dela com
+   * um respiro de 4 px (14 − 4 = 10); `inner` é o que encosta com 2 px.
+   */
+  --radius-panel: 0.875rem;
+  --radius-nested: 0.625rem;
+  --radius-inner: 0.75rem;
+
+  /**
+   * Elevação.
+   *
+   * Três degraus, e cada um abre com um realce interno no topo. Esse realce é
+   * o detalhe que separa uma superfície **acesa** de um retângulo pintado: ele
+   * simula a luz batendo na quina de cima, que é como o olho reconhece que uma
+   * peça está à frente da outra. Sem ele, elevação vira só sombra embaixo, e
+   * sombra embaixo em interface densa vira sujeira.
+   */
+  --shadow-panel: inset 0 1px 0 var(--edge-light), 0 1px 2px var(--shade-soft),
+    0 4px 14px -8px var(--shade-cast);
+  --shadow-raise: inset 0 1px 0 var(--edge-light), 0 2px 6px var(--shade-soft),
+    0 12px 28px -12px var(--shade-cast);
+  --shadow-float: inset 0 1px 0 var(--edge-light), 0 4px 16px -2px var(--shade-deep),
+    0 24px 56px -16px var(--shade-cast);
 
   /* ---------------------------------------------------------------------- */
   /* Movimento                                                              */
@@ -275,6 +339,21 @@
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /**
+   * A curva padrão de **todo** `transition-*` do produto.
+   *
+   * O Tailwind aplica `cubic-bezier(0.4, 0, 0.2, 1)` a 150 ms quando ninguém
+   * diz o contrário. É uma curva simétrica: acelera e desacelera na mesma
+   * proporção, e por isso a interface responde com um atraso perceptível no
+   * começo de cada hover. Estas duas variáveis são lidas pelo Tailwind 4 e
+   * trocam esse padrão pela curva do sistema, que sai rápido e assenta devagar
+   * — o movimento que o olho lê como resposta imediata.
+   *
+   * Vale para as dezenove telas sem que nenhuma precise declarar nada.
+   */
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: var(--ease-out-soft);
 
   --animate-rise: rise 0.42s var(--ease-out-soft) both;
   --animate-fade: fade 0.28s var(--ease-out-soft) both;
@@ -322,6 +401,26 @@
 }
 
 /* -------------------------------------------------------------------------- */
+/* A luz das sombras.                                                         */
+/*                                                                            */
+/* Estas quatro moram fora do `@theme` por um motivo mecânico, não de gosto.   */
+/* O Tailwind 4 precisa decompor uma sombra para permitir `shadow-<cor>`, e    */
+/* por isso **assa o valor de `--shadow-*` no build**. Consequência: trocar    */
+/* `--shadow-panel` no bloco do tema escuro não surtia efeito nenhum — o       */
+/* painel escuro vinha usando a sombra do tema claro desde sempre, com um      */
+/* realce branco de 60% que no escuro é uma linha acesa onde deveria haver um  */
+/* fio. Como o texto assado preserva os `var()` que estiverem dentro dele, a   */
+/* indireção devolve o controle ao tema: a geometria fica fixa, a luz troca.   */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --edge-light: rgb(255 255 255 / 0.7);
+  --shade-soft: rgb(16 21 28 / 0.045);
+  --shade-deep: rgb(16 21 28 / 0.1);
+  --shade-cast: rgb(16 21 28 / 0.14);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Tema escuro — o nativo.                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -334,6 +433,8 @@
 
   --color-line: #1d2126;
   --color-line-strong: #2b3138;
+
+  --color-canvas-glow: rgb(255 255 255 / 0.035);
 
   --color-ink: #e9ecef;
   --color-ink-muted: #99a2ac;
@@ -357,8 +458,13 @@
   --color-viz-7: #a3e635;
   --color-viz-8: #94a3b8;
 
-  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.02), 0 1px 3px rgb(0 0 0 / 0.4);
-  --shadow-float: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 24px 56px -16px rgb(0 0 0 / 0.7);
+  /* No escuro o realce interno carrega quase toda a elevação: sombra preta
+     sobre fundo preto não aparece, mas a quina de cima pegando luz sim. E ela
+     precisa ser um fio de 5%, não os 70% que o tema claro usa contra branco. */
+  --edge-light: rgb(255 255 255 / 0.05);
+  --shade-soft: rgb(0 0 0 / 0.5);
+  --shade-deep: rgb(0 0 0 / 0.5);
+  --shade-cast: rgb(0 0 0 / 0.7);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -452,6 +558,18 @@
 
   body {
     background-color: var(--color-canvas);
+    /**
+     * Uma direção de luz para a página inteira.
+     *
+     * Sem isto o fundo é um plano morto e as superfícies flutuam sobre nada —
+     * o realce interno delas afirma que a luz vem de cima, e o fundo não
+     * confirmava. O clareamento é fraco de propósito (3,5% no escuro): a
+     * intenção é que ninguém consiga apontá-lo, só sinta que a tela tem
+     * profundidade. `fixed` mantém a fonte de luz parada enquanto se rola,
+     * como uma janela acima da página, e não uma mancha que acompanha.
+     */
+    background-image: radial-gradient(115% 65% at 50% -15%, var(--color-canvas-glow), transparent 68%);
+    background-attachment: fixed;
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: var(--text-body);
@@ -549,6 +667,32 @@
         animation-range: entry 0% entry 42%;
       }
     }
+  }
+
+  /**
+   * Resposta ao toque.
+   *
+   * Um controle que muda de cor no `:hover` mas não reage ao clique parece
+   * uma imagem de um botão. O afundamento de 1,5% dura 120 ms — abaixo do
+   * limiar em que se percebe uma animação, acima do limiar em que se percebe
+   * que **algo aconteceu**. É a diferença entre apertar e apontar.
+   *
+   * A transição inteira mora aqui em vez de dividir com `transition-colors`
+   * do Tailwind: `transition` é uma propriedade só, e duas declarações na
+   * mesma classe se sobrescrevem em vez de somar.
+   */
+  .press {
+    transition:
+      transform 120ms var(--ease-out-soft),
+      color var(--default-transition-duration) var(--default-transition-timing-function),
+      background-color var(--default-transition-duration) var(--default-transition-timing-function),
+      border-color var(--default-transition-duration) var(--default-transition-timing-function),
+      box-shadow var(--default-transition-duration) var(--default-transition-timing-function),
+      opacity var(--default-transition-duration) var(--default-transition-timing-function);
+  }
+
+  .press:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: scale(0.985);
   }
 
   /* Superfície listrada para estado de carregamento. */

@@ -27,7 +27,7 @@ export function Page({
   width?: "narrow" | "default" | "wide";
   className?: string;
 }) {
-  const limite = { narrow: "max-w-[48rem]", default: "max-w-[78rem]", wide: "max-w-[92rem]" }[width];
+  const limite = { narrow: "max-w-page-narrow", default: "max-w-page", wide: "max-w-page-wide" }[width];
   return (
     <main className={join("mx-auto w-full px-4 pb-16 pt-5 sm:px-6 sm:pb-20 lg:px-8", limite, className)}>
       {children}
@@ -62,7 +62,7 @@ export function PageHeader({
           {eyebrow ? <p className="mb-1 text-label uppercase text-ink-subtle">{eyebrow}</p> : null}
           <h1 className="text-title text-ink">{title}</h1>
           {description ? (
-            <p className="mt-1 max-w-[62ch] text-body-sm text-ink-muted">{description}</p>
+            <p className="mt-1 max-w-measure-lg text-body-sm text-ink-muted">{description}</p>
           ) : null}
         </div>
         {/* Sem `shrink-0`: num celular de 375 px, um cabeçalho com navegação de

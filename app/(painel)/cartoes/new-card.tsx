@@ -143,7 +143,7 @@ export function NewCard({ accounts }: { accounts: readonly { id: string; name: s
       <header className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-2 text-heading text-ink">
-            <CreditCard size={15} strokeWidth={1.75} className="text-ink-subtle" aria-hidden />
+            <CreditCard size={15} strokeWidth={1.5} className="text-ink-subtle" aria-hidden />
             Novo cartão
           </h2>
           <p className="mt-0.5 text-caption text-ink-muted">

@@ -50,7 +50,7 @@ export default async function Viagens() {
                 <header className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="flex flex-wrap items-center gap-2 text-heading text-ink">
-                      <Plane size={15} strokeWidth={1.75} className="shrink-0 text-ink-subtle" aria-hidden />
+                      <Plane size={15} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden />
                       {viagem.name}
                       <Badge tone={situacao.tom}>{situacao.texto}</Badge>
                     </h2>
