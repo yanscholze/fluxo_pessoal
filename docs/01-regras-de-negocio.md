@@ -221,6 +221,59 @@ comportamento de agendamento e projeção é o mesmo.
 
 O usuário confirma o recebimento; a confirmação é idempotente por competência.
 
+### Assinatura
+
+Assinatura é recorrência com papel `subscription`, e não entidade separada:
+duas tabelas para o mesmo débito mensal seriam duas verdades sobre ele.
+
+Exige uma origem — cartão ou conta. Sem ela, a cobrança não sai de lugar
+nenhum e some da projeção.
+
+**Classificação** (streaming, IA, anuidade de cartão) é um eixo diferente da
+categoria. A categoria responde "que tipo de gasto é isto" para o orçamento; a
+classificação responde "que tipo de assinatura é" dentro do bolo de
+assinaturas. Streaming e IA caem na mesma categoria de orçamento e precisam se
+separar no relatório do mês. As classificações são do usuário: as seis
+sugeridas na primeira leitura podem ser renomeadas, arquivadas e ampliadas.
+
+A **anual entra no mês como um doze avos**. Somar o valor cheio produziria um
+"gasto do mês" verdadeiro só no mês da cobrança e falso nos outros onze. O
+custo anual aparece ao lado do mensal em toda tela de assinatura, com o mesmo
+peso: "R$ 89,90 por mês" soa desprezível e "R$ 1.078,80 por ano" é a mesma
+informação, e muda a decisão.
+
+**Pausada** não soma no total e continua na tela, com valor, cartão e
+classificação preservados. **Cancelada** some da lista, e o que já foi cobrado
+fica no razão — saiu da conta de verdade.
+
+Cobrança de assinatura conhecida reconhecida pela captura **não entra na fila
+de revisão**: a assinatura já está cadastrada, e pedir confirmação de uma
+cobrança esperada transforma rotina em tarefa. Ela aparece na aba de
+assinaturas, onde um reajuste fica visível como diferença entre o valor
+cobrado e o cadastrado.
+
+### Conciliação de recebimento
+
+Aponta-se o pagador uma vez — o contratante do projeto, a empresa do salário,
+quem credita o benefício — e o recebimento passa a ser reconhecido. Não há
+automação a montar por evento, nem agendamento, nem data esperada.
+
+A régua da baixa automática é do domínio e **não se configura na tela**: só
+entra sozinho o recebimento cujo nome é equivalente, cujo valor é idêntico ao
+de um **único** candidato em aberto. Qualquer outra situação vira sugestão na
+fila, com o motivo à vista — valor diferente, vários candidatos, sem valor
+combinado — porque o motivo é o que diz o que conferir.
+
+Salário e benefício variam de mês a mês e por isso nunca entram sozinhos:
+chegam à fila como sugestão já apontada para a conta certa.
+
+Aceitar uma sugestão de **valor divergente** quita a parcela, porque a decisão
+é de quem recebeu, mas lança no razão **o que entrou**, não o combinado. Um Pix
+de R$ 1.400 numa parcela de R$ 1.500 deixaria o saldo do Fluxo R$ 100 acima do
+extrato — a divergência que aparece meses depois, sem rastro de onde nasceu. A
+diferença fica registrada na parcela, que é onde ela vira conversa com o
+cliente.
+
 ### Histórico
 
 Cada execução de automação precisa ser registrada: quando rodou, o que gerou.
@@ -389,13 +442,22 @@ para gastar.
 
 ## 15. Relatórios
 
-Períodos: mês, 3 meses, 6 meses, 1 ano, personalizado.
+Quatro recortes, cada um com tela própria: **resumo geral**, **despesas**,
+**renda** e **assinaturas**.
 
-Indicadores: receitas, despesas, saldo líquido, taxa de poupança,
-investimentos, dívidas, parcelamentos.
+Períodos: mês, 3 meses, 6 meses, 12 meses, tudo. O recorte **é preservado ao
+trocar de relatório** — quem está olhando doze meses de despesa e vai ver a
+renda quer os mesmos doze meses, e perder o filtro a cada troca faz o usuário
+desistir de comparar.
 
-Gráficos: receitas × despesas, saldo, categorias, patrimônio, dívidas, fluxo
-mensal. Exportação CSV.
+Despesa e renda respondem a mesma pergunta em direções opostas — quanto, em
+quê, por onde, quais foram os maiores — e por isso têm a mesma estrutura: total
+e média primeiro, porque é o que se leva; a série mês a mês depois, porque diz
+se o total é típico ou exceção; a divisão por categoria em seguida; e os
+maiores lançamentos por último, onde a explicação costuma estar.
+
+O relatório de assinaturas divide o custo por classificação e por cartão — o
+segundo responde quanto cada fatura carrega de cobrança automática.
 
 ---
 
@@ -534,6 +596,39 @@ parcela. Quem decide sobre a parcela é o projeto.
 
 Contrato sem parcela agendada aparece como número próprio — é dinheiro
 combinado que ninguém vai cobrar sozinho.
+
+### Situações da tarefa
+
+Cinco: a fazer, fazendo, travado, revisão, feito. A que justifica o quadro é
+**travado** — tarefa parada esperando terceiro não é "a fazer", e tratá-la como
+tal faz o quadro mentir sobre a capacidade da semana.
+
+O quadro é de todos os projetos abertos ao mesmo tempo, e não um por projeto:
+quem trabalha em cinco simultaneamente precisa da pergunta "o que está
+travado, em qualquer lugar". Projeto concluído ou cancelado fica de fora — sua
+tarefa não é trabalho pendente, é histórico.
+
+### Agenda
+
+Prazo de tarefa, vencimento de parcela, entrega de projeto e proposta
+esperando resposta ocupam **o mesmo calendário**, porque disputam os mesmos
+dias. Quatro listas separadas escondem o que a agenda existe para mostrar: a
+semana em que a entrega, a cobrança e o prazo caem juntos.
+
+O passado só entra quando ainda está em aberto. Parcela vencida e não recebida
+é trabalho de hoje; recebida é histórico.
+
+### Repositório
+
+O endereço do repositório rende atalhos diretos — issues, pull requests,
+commits do ramo do projeto, actions, releases — que dependem só do que já está
+cadastrado.
+
+A atividade (últimos commits, PRs e issues abertas) exige um token, que é
+**segredo do ambiente e nunca coluna no banco**: um vazamento do Fluxo não pode
+virar acesso ao código de todos os clientes. Sem token, a tela diz que a
+leitura não está ligada. É só leitura: nenhuma rota abre issue, comenta ou faz
+merge.
 
 ### Suporte não é funcionalidade nova
 
