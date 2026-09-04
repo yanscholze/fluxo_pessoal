@@ -25,6 +25,7 @@ import pareamento from "./migrations/0009_pairing.sql?raw";
 import categoriaDaCaptura from "./migrations/0010_capture-category.sql?raw";
 import areaDeTrabalho from "./migrations/0011_dev-area.sql?raw";
 import fichaDoProjeto from "./migrations/0012_project-info.sql?raw";
+import conciliacao from "./migrations/0013_receipt-rules.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -131,6 +132,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 10, name: "categoria-adivinhada-na-captura", run: fromSql(categoriaDaCaptura) },
   { id: 11, name: "area-de-trabalho", run: fromSql(areaDeTrabalho) },
   { id: 12, name: "ficha-do-projeto", run: fromSql(fichaDoProjeto) },
+  { id: 13, name: "conciliacao-de-recebimento", run: fromSql(conciliacao) },
 ];
 
 let applied: Promise<void> | null = null;

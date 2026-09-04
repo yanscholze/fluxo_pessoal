@@ -27,6 +27,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 
 import { getDatabase } from "../db/client.ts";
 import { captureEvents, captureSources } from "../db/schema/index.ts";
+import { reconcileCaptures } from "./reconciliation.ts";
 import { findAccount, findCard, listAccounts, listCards, listCategories } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
 import { saveTransactionBatch } from "../repositories/ledger.ts";
@@ -43,6 +44,10 @@ export type IncomingNotification = NotificationEvent & {
 };
 
 export type IngestResult = {
+  /** Recebimentos que a conciliação deu baixa sozinha. */
+  readonly settled?: number;
+  /** Recebimentos com sugestão esperando decisão na fila. */
+  readonly suggested?: number;
   readonly captured: number;
   readonly ignored: number;
   readonly duplicated: number;
@@ -118,11 +123,46 @@ export async function ingest(
   // tentamos inserir: dizer "3 capturadas" quando nada entrou faria o app
   // mostrar um número que não bate com a fila.
   const inseridos = novos.length
-    ? await database.insert(captureEvents).values(novos).onConflictDoNothing().returning({ id: captureEvents.id })
+    ? await database
+        .insert(captureEvents)
+        .values(novos)
+        .onConflictDoNothing()
+        .returning({
+          id: captureEvents.id,
+          kind: captureEvents.kind,
+          merchant: captureEvents.merchant,
+          amountCents: captureEvents.amountCents,
+          occurredOn: captureEvents.occurredOn,
+        })
     : [];
+
+  /**
+   * Conciliação, depois da fila.
+   *
+   * Roda sobre o que **de fato** entrou, não sobre o que se tentou inserir: o
+   * reenvio da fila quando o aparelho reconecta traz tudo de novo, e conciliar
+   * o que já estava lá daria baixa duas vezes na mesma parcela.
+   *
+   * Falhar aqui não derruba a captura. A sugestão é comodidade; a fila é o
+   * produto. Perder uma conciliação custa um lançamento manual — perder a
+   * notificação custa o registro inteiro.
+   */
+  const conciliacao = await reconcileCaptures(
+    userId,
+    inseridos.map((linha) => ({
+      id: linha.id,
+      kind: linha.kind,
+      merchant: linha.merchant,
+      amountCents: linha.amountCents,
+      occurredOn: linha.occurredOn as LocalDate,
+    })),
+    now,
+  ).catch(() => ({ settled: 0, suggested: 0 }));
 
   return {
     captured: inseridos.length,
+    settled: conciliacao.settled,
+    suggested: conciliacao.suggested,
     ignored: Object.values(motivos).reduce((soma, valor) => soma + valor, 0),
     duplicated: duplicadas,
     reasons: motivos,

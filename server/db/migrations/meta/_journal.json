@@ -85,6 +85,13 @@
       "when": 1788527785597,
       "tag": "0012_project-info",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1788537557863,
+      "tag": "0013_receipt-rules",
+      "breakpoints": true
     }
   ]
 }
