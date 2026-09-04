@@ -22,6 +22,24 @@ const METODO: Record<string, string> = {
   unknown: "não identificado",
 };
 
+const ALVO: Record<string, string> = {
+  project: "parcela de projeto",
+  salary: "salário",
+  benefit: "benefício",
+};
+
+/**
+ * Por que a baixa não foi automática.
+ *
+ * O motivo é o que diz o que conferir. "Não deu certo" sozinho obriga o
+ * usuário a refazer a comparação que o sistema já fez.
+ */
+const MOTIVO: Record<string, string> = {
+  valor_diferente: "o valor recebido não bate com o combinado",
+  sem_valor_esperado: "não há valor combinado para conferir",
+  varios_candidatos: "mais de uma parcela em aberto casa com este valor",
+};
+
 export function CaptureQueue({
   items,
   options,
@@ -35,6 +53,24 @@ export function CaptureQueue({
   const [erro, setErro] = useState<string | null>(null);
 
   const cartoes = options.cards.filter((card) => card.kind === "credit");
+
+  /** O "sim" da sugestão de conciliação: dá baixa na parcela ou cria a receita. */
+  async function conciliar(captureId: string) {
+    setEnviando(captureId);
+    setErro(null);
+
+    const resposta = await fetch(`/api/v1/captures/${captureId}/reconcile`, { method: "POST" });
+
+    setEnviando(null);
+
+    if (!resposta.ok) {
+      const body = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(body.error?.message ?? "Não foi possível dar baixa.");
+      return;
+    }
+
+    router.refresh();
+  }
 
   async function decidir(captureId: string, corpo: Record<string, unknown>) {
     setEnviando(captureId);
@@ -104,6 +140,48 @@ export function CaptureQueue({
               <p className="mt-1.5 rounded-md bg-surface-sunken px-3 py-1.5 text-caption text-ink-subtle">
                 {item.rawText}
               </p>
+
+              {item.reconciliation && !expandido ? (
+                <div className="mt-2 rounded-md border border-accent-edge bg-accent-wash px-3 py-2.5">
+                  <p className="text-body-sm text-ink">
+                    Parece ser{" "}
+                    <span className="font-medium">{ALVO[item.reconciliation.target]}</span>
+                    {item.reconciliation.projectName ? (
+                      <>
+                        {" · "}
+                        {item.reconciliation.projectName}
+                        {item.reconciliation.paymentDescription
+                          ? ` (${item.reconciliation.paymentDescription})`
+                          : ""}
+                      </>
+                    ) : null}
+                    {item.reconciliation.expectedCents !== null &&
+                    item.reconciliation.expectedCents !== item.amountCents ? (
+                      <>
+                        {" — combinado "}
+                        <span className="tabular">{money(item.reconciliation.expectedCents)}</span>
+                      </>
+                    ) : null}
+                  </p>
+                  {item.reconciliation.reason ? (
+                    <p className="mt-0.5 text-caption text-ink-muted">
+                      Precisa de conferência: {MOTIVO[item.reconciliation.reason]}.
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={enviando === item.id}
+                    onClick={() => conciliar(item.id)}
+                    className="mt-2 inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 rounded-md border border-transparent bg-accent px-2.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
+                  >
+                    {enviando === item.id
+                      ? "Dando baixa…"
+                      : item.reconciliation.target === "project"
+                        ? "Dar baixa na parcela"
+                        : "Registrar recebimento"}
+                  </button>
+                </div>
+              ) : null}
 
               {expandido ? (
                 <form

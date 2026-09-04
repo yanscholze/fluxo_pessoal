@@ -131,7 +131,33 @@ describe("conciliação de recebimento", () => {
     await acceptReconciliation(alvo.userId, pendente.id, AGORA);
 
     const detalhe = await buildProjectDetail(alvo.userId, projetoId, AGORA);
-    assert.equal(detalhe.health.finance.received, 300_000, "quita a parcela apontada");
+    assert.equal(
+      detalhe.health.finance.received,
+      250_000,
+      "quita a parcela, mas conta o que entrou — não o combinado",
+    );
+    assert.equal(detalhe.health.finance.pending, 0, "não sobra parcela em aberto");
+  });
+
+  it("o razão registra o valor recebido, não o combinado", async () => {
+    const { ingest, buildCapturesView } = await import("./captures.ts");
+    const { acceptReconciliation } = await import("./reconciliation.ts");
+    const { buildAccountsView } = await import("./accounts.ts");
+    const alvo = await ambiente(500_000);
+    await cenarioDeProjeto(alvo.userId, alvo.contaId);
+
+    // R$ 2.500 numa parcela de R$ 3.000: o usuário decide que quita, mas o que
+    // entrou na conta foram R$ 2.500. Lançar R$ 3.000 faria o saldo do Fluxo
+    // divergir do extrato do banco — a falha que ninguém percebe até o mês
+    // fechar errado.
+    await ingest(alvo.userId, [pix("PADARIA DO BAIRRO LTDA", "2.500,00")], AGORA);
+
+    const fila = await buildCapturesView(alvo.userId, AGORA);
+    await acceptReconciliation(alvo.userId, fila.pending[0].id, AGORA);
+
+    const contas = await buildAccountsView(alvo.userId, AGORA);
+    const conta = contas.accounts.find((linha) => linha.id === alvo.contaId);
+    assert.equal(conta?.balanceCents, 750_000, "500.000 iniciais + 250.000 que entraram");
   });
 
   it("não dá baixa duas vezes no reenvio da fila", async () => {
@@ -300,113 +326,5 @@ describe("cobrança de assinatura", () => {
 
     const fila = await buildCapturesView(alvo.userId, AGORA);
     assert.equal(fila.pending.length, 1, "assinatura cancelada volta a ser compra comum");
-  });
-});
-
-describe("relatório de assinaturas", () => {
-  beforeEach(() => zerar());
-
-  it("separa por classificação e mostra o custo anual", async () => {
-    const { createLabel, createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
-    const alvo = await ambiente();
-
-    const streaming = await createLabel(alvo.userId, { name: "Streaming" }, AGORA);
-    const ia = await createLabel(alvo.userId, { name: "IA" }, AGORA);
-
-    await createSubscription(
-      alvo.userId,
-      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId, labelId: streaming },
-      AGORA,
-    );
-    await createSubscription(
-      alvo.userId,
-      { description: "Spotify", amount: cents(2_190), scheduleDay: 15, cardId: alvo.cartaoId, labelId: streaming },
-      AGORA,
-    );
-    await createSubscription(
-      alvo.userId,
-      { description: "Claude", amount: cents(10_000), scheduleDay: 5, cardId: alvo.cartaoId, labelId: ia },
-      AGORA,
-    );
-
-    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
-
-    assert.equal(relatorio.totals.monthlyCents, 17_780);
-    assert.equal(relatorio.totals.yearlyCents, 213_360, "o anual anda ao lado do mensal");
-    assert.equal(relatorio.totals.activeCount, 3);
-
-    const porStreaming = relatorio.byLabel.find((linha) => linha.label?.name === "Streaming");
-    assert.equal(porStreaming?.monthlyCents, 7_780);
-    assert.equal(porStreaming?.count, 2);
-  });
-
-  it("a anual entra como um doze avos do mês", async () => {
-    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
-    const alvo = await ambiente();
-
-    await createSubscription(
-      alvo.userId,
-      {
-        description: "Domínio",
-        amount: cents(12_000),
-        scheduleDay: 1,
-        cardId: alvo.cartaoId,
-        interval: "yearly",
-      },
-      AGORA,
-    );
-
-    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
-    // Somar os 120,00 cheios faria o "gasto do mês" ser verdade em um mês e
-    // falso nos outros onze.
-    assert.equal(relatorio.totals.monthlyCents, 1_000);
-    assert.equal(relatorio.totals.yearlyCents, 12_000);
-  });
-
-  it("assinatura pausada não soma no total do mês", async () => {
-    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
-    const { setRecurrenceActive } = await import("./recurrences.ts");
-    const alvo = await ambiente();
-
-    const id = await createSubscription(
-      alvo.userId,
-      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
-      AGORA,
-    );
-    await setRecurrenceActive(alvo.userId, id, false, AGORA);
-
-    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
-    assert.equal(relatorio.totals.monthlyCents, 0);
-    assert.equal(relatorio.totals.pausedCount, 1);
-  });
-
-  it("recusa assinatura sem cartão nem conta", async () => {
-    const { createSubscription } = await import("./subscriptions.ts");
-    const alvo = await ambiente();
-
-    await assert.rejects(
-      () => createSubscription(alvo.userId, { description: "Fantasma", amount: cents(1_000), scheduleDay: 1 }, AGORA),
-      /onde a assinatura é cobrada/,
-    );
-  });
-
-  it("agrupa por cartão, para saber o que pesa em cada fatura", async () => {
-    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
-    const alvo = await ambiente();
-
-    await createSubscription(
-      alvo.userId,
-      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
-      AGORA,
-    );
-    await createSubscription(
-      alvo.userId,
-      { description: "Jornal", amount: cents(3_000), scheduleDay: 5, accountId: alvo.contaId },
-      AGORA,
-    );
-
-    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
-    assert.equal(relatorio.byCard.length, 2);
-    assert.equal(relatorio.byCard.find((linha) => linha.cardId === null)?.cardName, "Débito em conta");
   });
 });

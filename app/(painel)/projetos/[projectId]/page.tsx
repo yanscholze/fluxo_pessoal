@@ -139,14 +139,27 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
                       title={parcela.description}
                       subtitle={
                         parcela.receivedOn
-                          ? `Recebido em ${dateShort(parcela.receivedOn as LocalDate)}`
+                          ? // Quando entrou menos (ou mais) que o combinado, o
+                            // combinado precisa continuar visível: é a diferença
+                            // que o usuário vai cobrar ou perdoar.
+                            parcela.receivedAmountCents === null
+                            ? `Recebido em ${dateShort(parcela.receivedOn as LocalDate)}`
+                            : `Recebido em ${dateShort(parcela.receivedOn as LocalDate)} · combinado ${money(parcela.amountCents)}`
                           : `Vence ${dateShort(parcela.dueOn as LocalDate)}`
                       }
-                      value={money(parcela.amountCents)}
+                      value={money(parcela.receivedAmountCents ?? parcela.amountCents)}
                       valueTone={parcela.receivedOn ? "positive" : vencida ? "negative" : "neutral"}
                       badge={
                         parcela.receivedOn ? (
-                          <Badge tone="positive">recebido</Badge>
+                          parcela.receivedAmountCents === null ? (
+                            <Badge tone="positive">recebido</Badge>
+                          ) : (
+                            <Badge tone="caution">
+                              {parcela.receivedAmountCents < parcela.amountCents
+                                ? "recebido a menor"
+                                : "recebido a maior"}
+                            </Badge>
+                          )
                         ) : vencida ? (
                           <Badge tone="negative">vencido</Badge>
                         ) : null

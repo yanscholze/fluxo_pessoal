@@ -18,6 +18,14 @@ export type PaymentLike = {
   readonly dueOn: LocalDate;
   /** Preenchido quando o dinheiro entrou de verdade. */
   readonly receivedOn: LocalDate | null;
+  /**
+   * O que entrou, quando não foi o combinado.
+   *
+   * Cliente que paga R$ 1.400 numa parcela de R$ 1.500 quita a parcela — a
+   * decisão é de quem recebeu — mas quem entrou na conta foram R$ 1.400. Somar
+   * o combinado faria o "recebido" do projeto contar dinheiro que não existe.
+   */
+  readonly receivedAmount?: Cents | null;
 };
 
 /** Uma sessão de trabalho. */
@@ -64,7 +72,7 @@ export function summarizeFinance(
     agendado += payment.amount;
 
     if (payment.receivedOn) {
-      received += payment.amount;
+      received += payment.receivedAmount ?? payment.amount;
       continue;
     }
 

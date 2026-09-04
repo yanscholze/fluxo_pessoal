@@ -58,6 +58,7 @@ function paraDominio(rows: readonly PaymentRow[]): PaymentLike[] {
     amount: cents(row.amountCents),
     dueOn: row.dueOn as LocalDate,
     receivedOn: (row.receivedOn as LocalDate | null) ?? null,
+    receivedAmount: row.receivedAmountCents === null ? null : cents(row.receivedAmountCents),
   }));
 }
 
@@ -498,7 +499,19 @@ export async function schedulePayment(
 export async function receivePayment(
   userId: string,
   paymentId: string,
-  input: { accountId: string; receivedOn?: LocalDate | null; categoryId?: string | null },
+  input: {
+    accountId: string;
+    receivedOn?: LocalDate | null;
+    categoryId?: string | null;
+    /**
+     * O que entrou de verdade, quando difere do combinado.
+     *
+     * O razão precisa registrar o que o banco mostra. Lançar o valor da parcela
+     * quando entrou outro faz o saldo do Fluxo divergir do extrato — e a
+     * divergência aparece meses depois, sem rastro de onde nasceu.
+     */
+    amount?: Cents | null;
+  },
   now: Date = new Date(),
 ): Promise<{ transactionId: string }> {
   const database = getDatabase();
@@ -514,13 +527,14 @@ export async function receivePayment(
   if (!projeto) throw notFound("Projeto", parcela.projectId);
 
   const recebidoEm = input.receivedOn ?? todayIn(now);
+  const entrou = input.amount ?? cents(parcela.amountCents);
 
   const { ids } = await recordTransaction(
     userId,
     {
       kind: "income",
       description: `${projeto.name} · ${parcela.description}`,
-      amount: cents(parcela.amountCents),
+      amount: entrou,
       occurredOn: recebidoEm,
       accountId: input.accountId,
       categoryId: input.categoryId ?? null,
@@ -531,7 +545,13 @@ export async function receivePayment(
 
   await database
     .update(projectPayments)
-    .set({ receivedOn: recebidoEm, transactionId: ids[0], updatedAt: now.toISOString() })
+    .set({
+      receivedOn: recebidoEm,
+      // Só guarda quando divergiu: nulo continua significando "entrou o combinado".
+      receivedAmountCents: entrou === parcela.amountCents ? null : entrou,
+      transactionId: ids[0],
+      updatedAt: now.toISOString(),
+    })
     .where(and(eq(projectPayments.userId, userId), eq(projectPayments.id, paymentId)));
 
   await recordEvent({

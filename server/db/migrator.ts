@@ -28,6 +28,7 @@ import fichaDoProjeto from "./migrations/0012_project-info.sql?raw";
 import conciliacao from "./migrations/0013_receipt-rules.sql?raw";
 import classificacoes from "./migrations/0014_subscription-labels.sql?raw";
 import cobrancaDeAssinatura from "./migrations/0015_subscription-charges.sql?raw";
+import valorRecebido from "./migrations/0016_received-amount.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -137,6 +138,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 13, name: "conciliacao-de-recebimento", run: fromSql(conciliacao) },
   { id: 14, name: "classificacoes-de-assinatura", run: fromSql(classificacoes) },
   { id: 15, name: "cobranca-de-assinatura-fora-da-fila", run: fromSql(cobrancaDeAssinatura) },
+  { id: 16, name: "valor-efetivamente-recebido", run: fromSql(valorRecebido) },
 ];
 
 let applied: Promise<void> | null = null;

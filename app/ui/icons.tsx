@@ -53,6 +53,7 @@ export {
   KeyRound,
   Server,
   User,
+  Users,
   Landmark,
   Link2,
   ListFilter,

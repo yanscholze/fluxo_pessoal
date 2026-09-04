@@ -256,6 +256,14 @@ export const projectPayments = sqliteTable(
     amountCents: integer("amount_cents").notNull(),
     dueOn: text("due_on").notNull(),
     receivedOn: text("received_on"),
+    /**
+     * O que entrou, quando não foi o combinado.
+     *
+     * Nulo é o caso normal: entrou o valor da parcela. Preenchido quando o
+     * pagamento divergiu e o usuário mesmo assim deu a parcela por quitada —
+     * é este valor que vai ao razão, porque é ele que está no extrato.
+     */
+    receivedAmountCents: integer("received_amount_cents"),
     transactionId: text("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

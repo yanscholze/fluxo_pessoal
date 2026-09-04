@@ -1,11 +1,15 @@
+import { listAccounts, listCategories } from "../../../server/repositories/catalog.ts";
 import { buildCapturesView } from "../../../server/services/captures.ts";
+import { listReceiptRules } from "../../../server/services/reconciliation.ts";
+import { listProjects } from "../../../server/services/work.ts";
 import { currentUser } from "../../auth-context.ts";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { dateShort, money } from "../../ui/format.ts";
-import { Layers, ShieldCheck, Zap } from "../../ui/icons.tsx";
+import { Layers, ShieldCheck, Users, Zap } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader, type Tone } from "../../ui/primitives.tsx";
 import { CaptureQueue } from "./capture-queue.tsx";
+import { PayerRules } from "./payer-rules.tsx";
 import { SourceRules } from "./source-rules.tsx";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +36,13 @@ export default async function Automaticos() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const view = await buildCapturesView(user.id);
+  const [view, regras, projetos, contas, categorias] = await Promise.all([
+    buildCapturesView(user.id),
+    listReceiptRules(user.id),
+    listProjects(user.id),
+    listAccounts(user.id),
+    listCategories(user.id),
+  ]);
 
   return (
     <Page>
@@ -65,6 +75,31 @@ export default async function Automaticos() {
               hint="Conecte o aplicativo Android e permita a leitura de notificações para as compras aparecerem aqui."
             />
           )}
+        </Panel>
+
+        <Panel>
+          <PanelHeader
+            title="Quem paga o quê"
+            icon={Users}
+            hint="Aponte o pagador uma vez; o recebimento passa a ser reconhecido"
+          />
+          <PayerRules
+            rules={regras.map((regra) => ({
+              id: regra.id,
+              payerName: regra.payerName,
+              target: regra.target,
+              projectId: regra.projectId,
+              accountId: regra.accountId,
+              categoryId: regra.categoryId,
+              isActive: regra.isActive,
+              lastMatchedAt: regra.lastMatchedAt,
+            }))}
+            projects={projetos.map((projeto) => ({ id: projeto.id, name: projeto.name }))}
+            accounts={contas.map((conta) => ({ id: conta.id, name: conta.name }))}
+            categories={categorias
+              .filter((categoria) => categoria.kind === "income")
+              .map((categoria) => ({ id: categoria.id, name: categoria.name }))}
+          />
         </Panel>
 
         <Panel>

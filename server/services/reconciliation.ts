@@ -293,6 +293,9 @@ export async function reconcileCaptures(
           accountId: decisao.candidate.accountId,
           receivedOn: captura.occurredOn,
           categoryId: decisao.candidate.categoryId,
+          // Idêntico ao combinado por definição — a baixa automática só acontece
+          // quando os valores batem. Passar mesmo assim mantém uma origem só.
+          amount: cents(captura.amountCents),
         },
         now,
       );
@@ -482,6 +485,9 @@ export async function acceptReconciliation(
         accountId: regra.accountId,
         receivedOn: ocorridoEm,
         categoryId: regra.categoryId,
+        // O que entrou, não o que foi combinado: a sugestão existe justamente
+        // porque os dois podem divergir, e é o extrato que manda no razão.
+        amount: cents(linha.amountCents),
       },
       now,
     );

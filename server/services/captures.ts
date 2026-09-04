@@ -26,7 +26,13 @@ import { type LocalDate, localDate, todayIn } from "../../core/time/local-date.t
 import { and, desc, eq, gte } from "drizzle-orm";
 
 import { getDatabase } from "../db/client.ts";
-import { captureEvents, captureSources } from "../db/schema/index.ts";
+import {
+  captureEvents,
+  captureReconciliations,
+  captureSources,
+  projectPayments,
+  projects,
+} from "../db/schema/index.ts";
 import { reconcileCaptures } from "./reconciliation.ts";
 import { findAccount, findCard, listAccounts, listCards, listCategories } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
@@ -226,6 +232,25 @@ export type CaptureView = {
   readonly suggestedCategory: { id: string; name: string; confidencePercent: number } | null;
   readonly occurredOn: LocalDate;
   readonly status: "pendente" | "confirmado" | "ignorado" | "duplicado" | "assinatura";
+  /**
+   * O que a conciliação reconheceu neste recebimento.
+   *
+   * Só existe em captura de entrada que casou com um pagador cadastrado. O
+   * motivo acompanha a sugestão porque é ele que diz o que o usuário precisa
+   * conferir: valor diferente do combinado, várias parcelas possíveis, ou
+   * simplesmente um pagamento cujo valor ninguém prometeu.
+   */
+  readonly reconciliation: ReconciliationHint | null;
+};
+
+export type ReconciliationHint = {
+  readonly target: "project" | "salary" | "benefit";
+  readonly outcome: "exact" | "suggested";
+  readonly reason: "valor_diferente" | "sem_valor_esperado" | "varios_candidatos" | null;
+  readonly projectName: string | null;
+  readonly paymentDescription: string | null;
+  readonly expectedCents: number | null;
+  readonly dueOn: LocalDate | null;
 };
 
 export type CapturesView = {
@@ -253,13 +278,30 @@ const RECENT_LIMIT = 30;
 export async function buildCapturesView(userId: string, now: Date = new Date()): Promise<CapturesView> {
   const database = getDatabase();
 
-  const [eventos, fontes, contas, cartoes, categorias] = await Promise.all([
+  const [eventos, conciliacoes, fontes, contas, cartoes, categorias] = await Promise.all([
     database
       .select()
       .from(captureEvents)
       .where(eq(captureEvents.userId, userId))
       .orderBy(desc(captureEvents.postedAt))
       .limit(200),
+    // Colunas explícitas: num `join`, `user_id` e `created_at` existem nas duas
+    // tabelas, e a linha achatada faz uma sobrescrever a outra sem erro.
+    database
+      .select({
+        captureEventId: captureReconciliations.captureEventId,
+        target: captureReconciliations.target,
+        outcome: captureReconciliations.outcome,
+        reason: captureReconciliations.reason,
+        paymentDescription: projectPayments.description,
+        expectedCents: projectPayments.amountCents,
+        dueOn: projectPayments.dueOn,
+        projectName: projects.name,
+      })
+      .from(captureReconciliations)
+      .leftJoin(projectPayments, eq(projectPayments.id, captureReconciliations.paymentId))
+      .leftJoin(projects, eq(projects.id, projectPayments.projectId))
+      .where(eq(captureReconciliations.userId, userId)),
     database.select().from(captureSources).where(eq(captureSources.userId, userId)),
     listAccounts(userId),
     listCards(userId),
@@ -267,6 +309,20 @@ export async function buildCapturesView(userId: string, now: Date = new Date()):
   ]);
 
   const rotulo = new Map(fontes.map((fonte) => [fonte.sourceApp, fonte.label]));
+  const conciliacaoDe = new Map<string, ReconciliationHint>(
+    conciliacoes.map((linha) => [
+      linha.captureEventId,
+      {
+        target: linha.target,
+        outcome: linha.outcome,
+        reason: linha.reason,
+        projectName: linha.projectName,
+        paymentDescription: linha.paymentDescription,
+        expectedCents: linha.expectedCents,
+        dueOn: linha.dueOn ? localDate(linha.dueOn) : null,
+      },
+    ]),
+  );
   const nomeDaCategoria = new Map(categorias.map((categoria) => [categoria.id, categoria.name]));
   const toView = (linha: typeof captureEvents.$inferSelect): CaptureView => ({
     id: linha.id,
@@ -293,6 +349,7 @@ export async function buildCapturesView(userId: string, now: Date = new Date()):
         : null,
     occurredOn: localDate(linha.occurredOn),
     status: linha.status,
+    reconciliation: conciliacaoDe.get(linha.id) ?? null,
   });
 
   return {
