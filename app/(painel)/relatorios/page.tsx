@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-
 import { type ReportPeriod, buildReport } from "../../../server/services/reports.ts";
 import { currentUser } from "../../auth-context.ts";
 import { ChartFrame, DonutChart, LineChart, VIZ, chartColor } from "../../ui/charts.tsx";
@@ -40,7 +38,10 @@ export default async function Relatorios({
   searchParams: Promise<{ periodo?: string }>;
 }) {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const params = await searchParams;
   const periodo = periodoValido(params.periodo);

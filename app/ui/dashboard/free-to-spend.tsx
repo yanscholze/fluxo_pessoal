@@ -6,9 +6,13 @@
  * numa tela de nove caixas. Hierarquia se constrói tirando destaque de tudo o
  * mais, não somando enfeite a este.
  *
- * Vem sempre acompanhada da conta que o produziu. Um número financeiro sem a
- * origem obriga o usuário a confiar cegamente; com a decomposição ao lado, ele
- * confere.
+ * Vem sempre acompanhada do que a produziu. Um número financeiro sem a origem
+ * obriga o usuário a confiar cegamente; com as parcelas ao lado, ele confere.
+ *
+ * A folga é o **menor saldo projetado** do horizonte, não a soma das parcelas:
+ * a ordem dos vencimentos muda a resposta. Por isso as parcelas aparecem como
+ * o que pesa no período, e não como uma conta que termina no resultado — somar
+ * a coluna e não bater no total seria pior do que não mostrar nada.
  */
 
 import { daysBetween } from "../../../core/time/local-date.ts";
@@ -65,8 +69,8 @@ export function FreeToSpend({
             )}
             <span className="max-w-measure">
               {negativo
-                ? "Os compromissos deste ciclo passam do que você tem. Antecipar gasto novo agora aperta o mês."
-                : "É o que sobra depois de honrar tudo que já está assumido neste ciclo."}
+                ? `Os compromissos assumidos passam do que você tem. Em ${date(data.lowestOn)} o saldo fica negativo mesmo sem nenhum gasto novo.`
+                : `É quanto pode sair hoje sem furar nenhum compromisso até ${date(data.horizonEnd)}. O ponto mais apertado é ${date(data.lowestOn)}.`}
             </span>
           </p>
 
@@ -95,20 +99,20 @@ export function FreeToSpend({
         </div>
 
         <div className="w-full shrink-0 rounded-md border border-line bg-surface p-4 lg:w-72">
-          <Label className="mb-3">Como chegamos aqui</Label>
+          <Label className="mb-3">O que pesa até {date(data.horizonEnd)}</Label>
           <Breakdown
             parts={[
               { label: "Saldo hoje", cents: data.liquidBalanceCents, sign: "+" },
-              { label: "A receber no ciclo", cents: data.pendingIncomeCents, sign: "+" },
+              { label: "A receber", cents: data.pendingIncomeCents, sign: "+" },
               { label: "Faturas em aberto", cents: data.openInvoicesCents, sign: "−" },
               { label: "Contas previstas", cents: data.otherCommitmentsCents, sign: "−" },
             ]}
-            result={{
-              label: "Livre para gastar",
-              cents: data.amountCents,
-              tone: negativo ? "negative" : "neutral",
-            }}
           />
+          <p className="mt-3 border-t border-line pt-3 text-caption text-ink-subtle">
+            A folga não é a soma dessas linhas: é o saldo no dia mais apertado do
+            período, porque dinheiro que entra depois de uma conta vencer não
+            paga essa conta.
+          </p>
         </div>
       </div>
     </section>

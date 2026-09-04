@@ -78,7 +78,13 @@ function windowBounds(cards: readonly PositionCard[], today: LocalDate): { start
     : { start: firstDayOfMonth(today), end: lastDayOfMonth(today) };
 }
 
-/** Total em aberto de todas as faturas de um cartão: a ativa e as atrasadas. */
+/**
+ * Total em aberto de todas as faturas de um cartão: a ativa e as atrasadas.
+ *
+ * Só entra o que existe no razão. Uma assinatura ainda por lançar é gasto
+ * futuro, não dívida de hoje — e somá-la aqui criaria um saldo devedor sem
+ * lançamento correspondente, que nenhum pagamento consegue quitar.
+ */
 export function openInvoiceTotal(
   entries: readonly LedgerEntry[],
   card: PositionCard,
@@ -92,29 +98,44 @@ export function openInvoiceTotal(
 export type FreeToSpend = {
   /** Saldo atual das contas de uso corrente em reais. */
   readonly liquidBalance: Cents;
-  /** Receitas previstas dentro da janela e ainda não recebidas. */
+  /** Receitas previstas dentro do horizonte e ainda não recebidas. */
   readonly pendingIncome: Cents;
   /** Faturas em aberto — a ativa e as atrasadas. */
   readonly openInvoices: Cents;
-  /** Demais compromissos previstos da janela, fora do crédito. */
+  /** Demais compromissos previstos do horizonte, fora do crédito. */
   readonly otherCommitments: Cents;
+  /**
+   * Quanto pode sair hoje sem que o saldo fique negativo em nenhum momento do
+   * horizonte. Negativo significa que os compromissos já assumidos não cabem
+   * no que existe mais o que está por entrar.
+   */
   readonly amount: Cents;
+  /** A data do ponto mais apertado — onde `amount` foi medido. */
+  readonly lowestOn: LocalDate;
   readonly windowStart: LocalDate;
   readonly windowEnd: LocalDate;
+  /** Até onde a projeção olhou para achar o ponto mais apertado. */
+  readonly horizonEnd: LocalDate;
 };
 
 /**
- * Quanto pode ser gasto sem furar compromisso já assumido.
+ * Quanto pode ser gasto agora sem furar compromisso já assumido.
  *
- * ```
- *   saldo líquido atual
- * + receitas previstas da janela
- * − faturas em aberto
- * − demais compromissos previstos da janela
- * ```
+ * A resposta **não** é `saldo + entradas − saídas` do período. Essa conta
+ * ignora a ordem dos fatos, e a ordem é o problema inteiro: com R$ 3.000 na
+ * conta, R$ 6.000 de salário no dia 8 e R$ 1.950 de aluguel no dia 10, a soma
+ * responde R$ 7.050 — mas gastar R$ 7.050 hoje deixa a conta negativa até o
+ * dia 8. O dinheiro do dia 8 não está disponível no dia 5.
  *
- * Parte do saldo **real** das contas, não da soma dos lançamentos do mês: essa
- * última ignoraria o que já estava na conta antes e a fatura ainda não paga.
+ * A resposta certa é o **menor saldo projetado** do horizonte: percorre-se a
+ * linha do tempo somando o que entra e subtraindo o que sai, e a folga é o
+ * ponto mais apertado dessa curva. Gastar exatamente esse valor hoje encosta
+ * em zero no pior momento e não passa disso.
+ *
+ * O horizonte vai do fim do ciclo do cartão de referência **ou** do último
+ * vencimento em aberto, o que for mais longe. É o que garante que o salário
+ * que cai antes do vencimento da fatura seja contado junto com ela, em vez de
+ * um dos dois ficar de fora por acaso do calendário.
  */
 export function computeFreeToSpend(input: PositionInput): FreeToSpend {
   const policy = input.policy ?? NO_EXCLUSIONS;
@@ -131,21 +152,74 @@ export function computeFreeToSpend(input: PositionInput): FreeToSpend {
     return categoryId !== null && policy.excludedCategoryIds.has(categoryId);
   };
 
+  const creditCards = input.cards.filter((card) => card.kind === "credit");
+
+  /**
+   * Pagamentos de fatura esperados, cada um na data em que precisa sair.
+   *
+   * Fatura já vencida e não paga sai **hoje**: o dinheiro é devido agora, e
+   * empurrá-la para a data de vencimento passada a faria cair fora do
+   * horizonte e sumir da conta.
+   */
+  const invoiceDues: { on: LocalDate; amount: Cents }[] = [];
+  for (const card of creditCards) {
+    const active = activeCompetence(card, input.today);
+    for (const competence of [...overdueCompetences(input.entries, card.id, active), active]) {
+      const { outstanding } = invoiceTotals(input.entries, card.id, competence);
+      if (outstanding <= 0) continue;
+      const due = dueDateFor(card, competence);
+      invoiceDues.push({ on: due < input.today ? input.today : due, amount: outstanding });
+    }
+  }
+
+  const horizonEnd = invoiceDues.reduce<LocalDate>(
+    (limite, pagamento) => (pagamento.on > limite ? pagamento.on : limite),
+    end,
+  );
+
   let pendingIncome = 0;
   let otherCommitments = 0;
+  const movimentos: { on: LocalDate; amount: number }[] = [];
+
   for (const entry of input.entries) {
     if (entry.state !== "planned") continue;
     if (entry.party.kind !== "account" || !liquidIds.has(entry.party.accountId)) continue;
-    if (entry.effectiveOn < start || entry.effectiveOn > end) continue;
+    if (entry.effectiveOn < start || entry.effectiveOn > horizonEnd) continue;
     if (isExcluded(entry)) continue;
+
     if (entry.amount > 0) pendingIncome += entry.amount;
     else otherCommitments -= entry.amount;
+
+    // Previsto com data já passada continua devendo acontecer: entra hoje,
+    // não na data vencida, senão nunca pesaria na curva.
+    movimentos.push({
+      on: entry.effectiveOn < input.today ? input.today : entry.effectiveOn,
+      amount: entry.amount,
+    });
+  }
+
+  for (const pagamento of invoiceDues) {
+    movimentos.push({ on: pagamento.on, amount: -pagamento.amount });
+  }
+
+  movimentos.sort((esquerda, direita) => (esquerda.on < direita.on ? -1 : esquerda.on > direita.on ? 1 : 0));
+
+  // O ponto de partida entra na comparação: quando tudo que vem pela frente só
+  // acrescenta, a folga é o próprio saldo de hoje — e não a soma com o que
+  // ainda não chegou.
+  let corrente = liquidBalance as number;
+  let menor = corrente;
+  let menorEm = input.today;
+  for (const movimento of movimentos) {
+    corrente += movimento.amount;
+    if (corrente < menor) {
+      menor = corrente;
+      menorEm = movimento.on;
+    }
   }
 
   const openInvoices = sum(
-    input.cards
-      .filter((card) => card.kind === "credit")
-      .map((card) => openInvoiceTotal(input.entries, card, input.today)),
+    creditCards.map((card) => openInvoiceTotal(input.entries, card, input.today)),
   );
 
   return {
@@ -153,9 +227,11 @@ export function computeFreeToSpend(input: PositionInput): FreeToSpend {
     pendingIncome: pendingIncome as Cents,
     openInvoices,
     otherCommitments: otherCommitments as Cents,
-    amount: (liquidBalance + pendingIncome - openInvoices - otherCommitments) as Cents,
+    amount: menor as Cents,
+    lowestOn: menorEm,
     windowStart: start,
     windowEnd: end,
+    horizonEnd,
   };
 }
 
@@ -317,7 +393,11 @@ export function projectedInvoicePayments(input: PositionInput): Map<Competence, 
     }
 
     for (const competence of competences) {
-      const { outstanding } = invoiceTotals(input.entries, card.id, competence);
+      // Aqui a projeção **entra**: a pergunta é quanto a fatura vai custar
+      // quando vencer, e a assinatura recorrente vai estar nela.
+      const { outstanding } = invoiceTotals(input.entries, card.id, competence, undefined, {
+        includeProjected: true,
+      });
       if (outstanding <= 0) continue;
 
       const dueDate = dueDateFor(card, competence);
@@ -337,6 +417,8 @@ export const EMPTY_FREE_TO_SPEND: FreeToSpend = {
   openInvoices: ZERO,
   otherCommitments: ZERO,
   amount: ZERO,
+  lowestOn: "1970-01-01" as LocalDate,
   windowStart: "1970-01-01" as LocalDate,
   windowEnd: "1970-01-01" as LocalDate,
+  horizonEnd: "1970-01-01" as LocalDate,
 };

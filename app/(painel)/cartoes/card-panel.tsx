@@ -6,7 +6,7 @@ import type { CardsView, CardView, InvoiceView } from "../../../server/services/
 import { Button } from "../../ui/controls.tsx";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, money, percent, relativeDay } from "../../ui/format.ts";
-import { CircleAlert, CreditCard } from "../../ui/icons.tsx";
+import { CircleAlert } from "../../ui/icons.tsx";
 import { Badge, Divider, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
 import { PayInvoice } from "./pay-invoice.tsx";
 

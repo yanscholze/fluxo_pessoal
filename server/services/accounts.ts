@@ -6,7 +6,7 @@
  * alguém gastar dinheiro que ainda não recebeu.
  */
 
-import { isInvestment, liquidAccounts } from "../../core/domain/account/types.ts";
+import { liquidAccounts } from "../../core/domain/account/types.ts";
 import { CONSUMPTION, accountBalance, flow, projectedAccountBalance } from "../../core/domain/ledger/balance.ts";
 import type { Cents } from "../../core/kernel/money.ts";
 import { type Competence, competenceOf, range, shift } from "../../core/time/competence.ts";

@@ -13,6 +13,7 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { forbidden } from "../../core/kernel/errors.ts";
+import { SESSION_COOKIE } from "../../core/kernel/session-cookie.ts";
 import { newId } from "../../core/kernel/id.ts";
 import { getDatabase } from "../db/client.ts";
 import { sessions, users } from "../db/schema/index.ts";
@@ -22,7 +23,7 @@ export type SessionKind = "web" | "device";
 export const WEB_SESSION_DAYS = 30;
 export const DEVICE_SESSION_DAYS = 180;
 
-export const SESSION_COOKIE = "fluxo_session";
+export { SESSION_COOKIE };
 
 export type AuthenticatedUser = {
   readonly id: string;

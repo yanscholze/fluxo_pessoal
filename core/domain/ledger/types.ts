@@ -124,3 +124,33 @@ export type LedgerEntry = {
 
 /** Movimentação ainda sem identidade, como sai das regras de postagem. */
 export type DraftLedgerEntry = Omit<LedgerEntry, "id">;
+
+// ---------------------------------------------------------------------------
+// Projeção
+// ---------------------------------------------------------------------------
+
+/**
+ * Prefixo do identificador de um lançamento que **não existe no banco**.
+ *
+ * Mora aqui, e não no módulo de recorrência, porque a distinção é do razão:
+ * consultas sobre movimentações precisam saber se estão olhando um fato ou uma
+ * previsão, e a de recorrência é só uma das origens possíveis de previsão.
+ */
+export const VIRTUAL_PREFIX = "virtual:";
+
+export function isVirtual(transactionId: string): boolean {
+  return transactionId.startsWith(VIRTUAL_PREFIX);
+}
+
+/**
+ * A movimentação veio de uma projeção calculada, não de uma linha do banco.
+ *
+ * A diferença importa sempre que a resposta precisa ser **acionável**. Uma
+ * cobrança projetada não pode compor o saldo devedor de uma fatura: não existe
+ * lançamento para quitar, então o pagamento nunca a cobre e a fatura fica
+ * eternamente com um resíduo que o usuário não tem como zerar.
+ */
+export function isProjected(entry: LedgerEntry): boolean {
+  return isVirtual(entry.transactionId);
+}
+

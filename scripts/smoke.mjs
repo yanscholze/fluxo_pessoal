@@ -685,8 +685,11 @@ async function main() {
   console.log(`     faturas em aberto  −${real(livre.openInvoicesCents)}`);
   console.log(`     contas previstas   −${real(livre.otherCommitmentsCents)}`);
   console.log(`     ─────────────────────────────`);
+  // A folga é o menor saldo projetado do horizonte, não a soma das linhas
+  // acima: elas dizem o que pesa, a ordem dos vencimentos é que decide.
   console.log(`     livre para gastar   ${real(livre.amountCents)}`);
-  console.log(`     ciclo ${livre.windowStart} a ${livre.windowEnd}`);
+  console.log(`     aperto em           ${livre.lowestOn}`);
+  console.log(`     ciclo ${livre.windowStart} a ${livre.windowEnd} · horizonte até ${livre.horizonEnd}`);
 
   console.log(
     `\n${verificacoes - falhas}/${verificacoes} verificações passaram${falhas ? ` — ${falhas} FALHA(S)` : ""}`,

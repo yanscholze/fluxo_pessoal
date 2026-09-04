@@ -59,11 +59,6 @@ function linhaOfx(tipo, data, centavos, memo, id) {
   ].join("\n");
 }
 
-function competencia(mesesAtras) {
-  const data = new Date(Date.UTC(HOJE.getUTCFullYear(), HOJE.getUTCMonth() - mesesAtras, 1, 12));
-  return data.toISOString().slice(0, 7);
-}
-
 async function entrar() {
   // Conta nova na primeira execução; nas seguintes só entra.
   try {

@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { buildHealthView } from "../../../server/services/health.ts";
 import { currentUser } from "../../auth-context.ts";
 import { KeyValue, MetricStrip, Timeline, type TimelineItem } from "../../ui/data-display.tsx";
@@ -45,7 +43,10 @@ const EVENTO: Record<string, string> = {
  */
 export default async function Saude() {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const view = await buildHealthView(user.id);
   const criticos = view.signals.filter((sinal) => sinal.status === "critico").length;

@@ -46,17 +46,25 @@ export function PageHeader({
   title,
   description,
   actions,
+  back,
   children,
 }: {
   eyebrow?: ReactNode;
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
+  /**
+   * Botão de voltar. Fica **acima** do sobretítulo, alinhado à esquerda: é
+   * navegação, não ação da tela, e misturá-lo com os botões da direita o
+   * faria competir com a ação principal.
+   */
+  back?: ReactNode;
   /** Barra de filtros ou abas. Aparece abaixo do título, separada. */
   children?: ReactNode;
 }) {
   return (
     <header className="mb-6">
+      {back ? <div className="-ml-2 mb-2">{back}</div> : null}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           {eyebrow ? <p className="mb-1 text-label uppercase text-ink-subtle">{eyebrow}</p> : null}

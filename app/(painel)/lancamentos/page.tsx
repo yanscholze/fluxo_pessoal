@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { parseCompetence, shift } from "../../../core/time/competence.ts";
 import { buildStatement } from "../../../server/services/statement.ts";
 import { currentUser } from "../../auth-context.ts";
@@ -24,10 +22,13 @@ export const dynamic = "force-dynamic";
 export default async function Lancamentos({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; novo?: string }>;
 }) {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const params = await searchParams;
   const statement = await buildStatement(user.id, {
@@ -48,7 +49,11 @@ export default async function Lancamentos({
               anterior={shift(statement.competence, -1)}
               proxima={shift(statement.competence, 1)}
             />
-            <Composer options={statement.options} competence={statement.competence} />
+            <Composer
+              options={statement.options}
+              competence={statement.competence}
+              defaultOpen={params.novo === "1"}
+            />
           </>
         }
       />

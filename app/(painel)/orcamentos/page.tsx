@@ -12,8 +12,6 @@
  * de mesmo peso.
  */
 
-import { redirect } from "next/navigation";
-
 import { competenceOf, next, parseCompetence, previous } from "../../../core/time/competence.ts";
 import { listCategories } from "../../../server/repositories/catalog.ts";
 import { type BudgetView, buildBudgetsView } from "../../../server/services/budgets.ts";
@@ -42,7 +40,10 @@ export default async function Orcamentos({
   searchParams: Promise<{ competencia?: string }>;
 }) {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const params = await searchParams;
   const [view, categories] = await Promise.all([

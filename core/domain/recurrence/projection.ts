@@ -16,15 +16,16 @@ import type { Competence } from "../../time/competence.ts";
 import type { CycleConfig } from "../card/invoice-cycle.ts";
 import { competenceForPurchase } from "../card/invoice-cycle.ts";
 import { postTransaction } from "../ledger/posting.ts";
-import { type LedgerEntry, type Transaction, accountParty, cardParty } from "../ledger/types.ts";
+import {
+  VIRTUAL_PREFIX,
+  type LedgerEntry,
+  type Transaction,
+  accountParty,
+  cardParty,
+} from "../ledger/types.ts";
 import { type Occurrence, type Recurrence, occurrenceKey, projectOccurrences } from "./schedule.ts";
 
-/** Prefixo que marca uma linha que não existe no banco. */
-const VIRTUAL_PREFIX = "virtual:";
-
-export function isVirtual(transactionId: string): boolean {
-  return transactionId.startsWith(VIRTUAL_PREFIX);
-}
+export { isVirtual } from "../ledger/types.ts";
 
 /**
  * Lançamento virtual de uma ocorrência.

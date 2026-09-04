@@ -98,18 +98,37 @@ nunca previstos).
 
 ### Livre para gastar
 
+É o **menor saldo projetado** do horizonte:
+
 ```
-saldo líquido das contas de uso corrente
-+ receitas previstas do ciclo atual ainda não recebidas
-− fatura em aberto dos cartões
-− demais compromissos previstos do ciclo (não-crédito)
+percorre a linha do tempo a partir do saldo de hoje,
+somando cada receita prevista e subtraindo cada compromisso
+na data em que ele acontece — inclusive o pagamento de cada
+fatura em aberto, na data do vencimento.
+A folga é o ponto mais baixo dessa curva.
 ```
+
+**Não** é `saldo + entradas − saídas` do período. Essa soma ignora a ordem dos
+fatos, e a ordem é o problema inteiro: com R$ 3.000 na conta, R$ 6.000 de
+salário no dia 8 e R$ 1.950 de aluguel no dia 10, a soma responde R$ 7.050 — e
+gastar R$ 7.050 no dia 5 deixa a conta negativa até o dia 8. Dinheiro que entra
+depois de uma conta vencer não paga essa conta.
+
+O horizonte vai até o fim do **ciclo de fatura** do cartão de referência ou até
+o último vencimento em aberto, o que for mais longe — é o que garante que o
+salário que cai antes do vencimento seja contado junto com a fatura, em vez de
+um dos dois ficar de fora por acaso do calendário.
+
+O resultado pode ser **negativo**: significa que os compromissos já assumidos
+não cabem no que existe mais o que está por entrar.
 
 "Saldo líquido" soma apenas contas corrente / dinheiro / benefício em BRL, e
 ignora contas marcadas como fora dos totais. Investimento não entra: não é
 dinheiro pensado para gastar.
 
-A janela é o **ciclo de fatura**, não o mês civil.
+Fatura em aberto conta **só o que existe no razão**. Uma assinatura recorrente
+ainda não lançada é gasto futuro, não dívida de hoje: somá-la criaria um saldo
+devedor sem lançamento para quitar, que nenhum pagamento zera.
 
 ### Reserva de emergência
 
@@ -473,3 +492,51 @@ deles seja possível.
     assuma esse."
 12. **Componente monolítico.** Uma página de 1504 linhas com todas as telas,
     todo o estado e cálculo financeiro embutido no JSX.
+
+---
+
+## Trabalho
+
+### Horas
+
+A unidade é o **milésimo de hora**, inteiro: meia hora é 500, um quarto é 250,
+e quatro quartos somam exatamente 1000. É a mesma decisão do dinheiro em
+centavos, pelo mesmo motivo — oito sessões de 0,1h em decimal somam
+0,7999999999999999, e o valor a cobrar sai um centavo errado.
+
+A API recebe **minutos inteiros**; a conversão acontece uma única vez, na
+borda.
+
+O valor/hora é **congelado no registro** da sessão. Reajustar o valor do
+projeto não reescreve o que já foi trabalhado por outro preço.
+
+### Valor/hora efetivo
+
+```
+recebido ÷ tempo total trabalhado
+```
+
+Divide pelo tempo **todo**, cobrável ou não. Usar só as horas cobráveis
+inflaria o número justamente nos projetos que deram mais retrabalho —
+escondendo o prejuízo que se quer enxergar.
+
+Sem tempo registrado o resultado é **nulo**, não zero nem infinito.
+
+### Cobrança de projeto
+
+Uma parcela do contrato é previsão enquanto não tem lançamento associado.
+Ao ser recebida, cria uma **receita no razão**, na conta escolhida — e a partir
+daí o dinheiro do trabalho conta no saldo, no patrimônio e no livre para gastar
+como qualquer outro.
+
+O caminho inverso não existe: apagar a receita no extrato não desmarca a
+parcela. Quem decide sobre a parcela é o projeto.
+
+Contrato sem parcela agendada aparece como número próprio — é dinheiro
+combinado que ninguém vai cobrar sozinho.
+
+### Suporte não é funcionalidade nova
+
+Suporte é consertar o que deveria funcionar, e nasce **não cobrável**.
+Funcionalidade nova é desenvolvimento e nasce cobrável. Misturar os dois numa
+lista de "tarefas" apaga a diferença que decide o que entra na próxima fatura.

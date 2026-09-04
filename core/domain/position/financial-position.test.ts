@@ -159,7 +159,58 @@ describe("livre para gastar", () => {
 
     assert.equal(livre.pendingIncome, 500000);
     assert.equal(livre.otherCommitments, 200000);
-    assert.equal(livre.amount, 600000);
+
+    // A folga é o ponto mais apertado da curva, não a soma do período.
+    // Hoje é 05/08 e há R$ 3.000 na conta; o salário só cai no dia 7. Somar
+    // tudo daria R$ 6.000 — e gastar R$ 6.000 hoje deixaria a conta em
+    // −R$ 3.000 por dois dias. O dinheiro do dia 7 não está disponível no
+    // dia 5.
+    assert.equal(livre.amount, 300000);
+    assert.equal(livre.lowestOn, "2026-08-05", "o aperto é hoje, antes do salário");
+  });
+
+  it("a folga cai para depois quando o compromisso vence antes da entrada", () => {
+    const entries = razao(
+      lancamento({
+        id: "aluguel",
+        kind: "expense",
+        amount: cents(250000),
+        state: "planned",
+        occurredOn: localDate("2026-08-08"),
+      }),
+      lancamento({
+        id: "salario",
+        kind: "income",
+        amount: cents(500000),
+        state: "planned",
+        occurredOn: localDate("2026-08-12"),
+      }),
+    );
+
+    const livre = computeFreeToSpend({ accounts: contas, cards: [cartaoFecha13], entries, today: hoje });
+
+    // R$ 3.000 hoje, −R$ 2.500 no dia 8, +R$ 5.000 no dia 12. O fundo do poço
+    // é o dia 8, com R$ 500 — é tudo que pode sair hoje sem furar o aluguel.
+    assert.equal(livre.amount, 50000);
+    assert.equal(livre.lowestOn, "2026-08-08");
+  });
+
+  it("a mesma entrada e a mesma saída em ordem invertida dão folgas diferentes", () => {
+    const cedo = razao(
+      lancamento({ id: "e", kind: "income", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-06") }),
+      lancamento({ id: "s", kind: "expense", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-12") }),
+    );
+    const tarde = razao(
+      lancamento({ id: "s", kind: "expense", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-06") }),
+      lancamento({ id: "e", kind: "income", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-12") }),
+    );
+
+    const base = { accounts: contas, cards: [cartaoFecha13], today: hoje };
+
+    // A soma do período é idêntica nos dois casos. A ordem é que decide se o
+    // dinheiro chega a faltar — e é justamente isso que a folga precisa dizer.
+    assert.equal(computeFreeToSpend({ ...base, entries: cedo }).amount, 300000);
+    assert.equal(computeFreeToSpend({ ...base, entries: tarde }).amount, -100000);
   });
 
   it("ignora previstos fora da janela do ciclo", () => {

@@ -14,10 +14,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+
+import { BackButton } from "./back-button.tsx";
+import { BottomNav } from "./bottom-nav.tsx";
+import { gravarPreferencia, usePreferencia } from "./browser-preference.ts";
 
 import {
   BarChart3,
+  Briefcase,
   Calendar,
   CreditCard,
   Gauge,
@@ -86,6 +91,7 @@ export const NAV: readonly NavGroup[] = [
   {
     title: "Patrimônio",
     items: [
+      { href: "/patrimonio", label: "Visão geral", icon: Landmark },
       { href: "/investimentos", label: "Investimentos", icon: TrendingUp },
       { href: "/recompensas", label: "Recompensas", icon: Gift },
       { href: "/viagens", label: "Viagens", icon: Plane },
@@ -94,6 +100,10 @@ export const NAV: readonly NavGroup[] = [
   {
     title: "Análise",
     items: [{ href: "/relatorios", label: "Relatórios", icon: BarChart3 }],
+  },
+  {
+    title: "Trabalho",
+    items: [{ href: "/projetos", label: "Projetos", icon: Briefcase }],
   },
   {
     title: "Sistema",
@@ -112,21 +122,21 @@ const CHAVE_RECOLHIDA = "fluxo:menu-recolhido";
 export function Shell({ userName, children }: { userName: string; children: ReactNode }) {
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
-  const [recolhida, setRecolhida] = useState(false);
+  const [rotaDaGaveta, setRotaDaGaveta] = useState(pathname);
 
   // Navegar fecha a gaveta: no celular ela cobre a tela inteira, e ficar
   // aberta depois do clique esconde justamente a página que o usuário pediu.
-  useEffect(() => setMenuAberto(false), [pathname]);
+  // Ajuste durante a renderização, não em efeito: fechar num efeito pinta a
+  // gaveta aberta sobre a página nova por um quadro antes de sumir.
+  if (rotaDaGaveta !== pathname) {
+    setRotaDaGaveta(pathname);
+    setMenuAberto(false);
+  }
 
-  useEffect(() => {
-    setRecolhida(localStorage.getItem(CHAVE_RECOLHIDA) === "1");
-  }, []);
+  const recolhida = usePreferencia(() => localStorage.getItem(CHAVE_RECOLHIDA) === "1", false);
 
   function alternarLargura() {
-    setRecolhida((atual) => {
-      localStorage.setItem(CHAVE_RECOLHIDA, atual ? "0" : "1");
-      return !atual;
-    });
+    gravarPreferencia(() => {}, CHAVE_RECOLHIDA, recolhida ? "0" : "1");
   }
 
   return (
@@ -254,13 +264,23 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           >
             <Menu size={19} strokeWidth={1.5} aria-hidden />
           </button>
+
+          {/* Voltar some quando não há para onde: no celular a barra tem três
+              elementos e um botão inerte ocuparia o espaço do único que
+              importa. */}
+          <BackButton fallback="/" label="Voltar" hideWhenEmpty compact />
+
           <Link href="/" className="text-title text-ink">
             Fluxo
           </Link>
         </header>
 
-        <div className="min-w-0 flex-1">{children}</div>
+        {/* O respiro embaixo é do tamanho da barra inferior: sem ele o último
+            cartão da página fica escondido atrás dela no celular. */}
+        <div className="min-w-0 flex-1 pb-20 lg:pb-0">{children}</div>
       </div>
+
+      <BottomNav />
     </div>
   );
 }
@@ -308,18 +328,25 @@ function iniciais(nome: string): string {
 }
 
 function BotaoDeTema({ recolhida }: { recolhida: boolean }) {
-  const [escuro, setEscuro] = useState<boolean | null>(null);
-
-  useEffect(() => setEscuro(document.documentElement.dataset.theme === "dark"), []);
+  // `null` no servidor: lá não há `<html>` com tema para consultar, e chutar
+  // "claro" faria o botão trocar de rótulo sozinho na hidratação.
+  const escuro = usePreferencia<boolean | "">(
+    (raiz) => raiz.dataset.theme === "dark",
+    "",
+  );
 
   function alternar() {
     const proximo = !escuro;
-    setEscuro(proximo);
-    document.documentElement.dataset.theme = proximo ? "dark" : "light";
-    localStorage.setItem("fluxo:tema", proximo ? "escuro" : "claro");
+    gravarPreferencia(
+      (raiz) => {
+        raiz.dataset.theme = proximo ? "dark" : "light";
+      },
+      "fluxo:tema",
+      proximo ? "escuro" : "claro",
+    );
   }
 
-  const rotulo = escuro === null ? "Alternar tema" : escuro ? "Usar tema claro" : "Usar tema escuro";
+  const rotulo = escuro === "" ? "Alternar tema" : escuro ? "Usar tema claro" : "Usar tema escuro";
 
   return (
     <button

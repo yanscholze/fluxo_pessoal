@@ -10,7 +10,13 @@
 import { type Cents, ZERO, clampToZero, negate, sum } from "../../kernel/money.ts";
 import type { Competence } from "../../time/competence.ts";
 import type { LocalDate } from "../../time/local-date.ts";
-import { type LedgerEntry, type Party, type TransactionKind, isSameParty } from "./types.ts";
+import {
+  type LedgerEntry,
+  type Party,
+  type TransactionKind,
+  isProjected,
+  isSameParty,
+} from "./types.ts";
 
 export type EntryState = LedgerEntry["state"];
 
@@ -27,6 +33,15 @@ export type EntryFilter = {
   readonly competence?: Competence;
   /** Natureza do fato de origem. Use para separar consumo de remanejamento. */
   readonly kinds?: readonly TransactionKind[];
+  /**
+   * Inclui movimentações projetadas — as que não existem como linha no banco.
+   *
+   * Padrão `false`. Uma consulta só deve pedir projeção quando a pergunta é
+   * sobre o **futuro** ("quanto vou gastar"); perguntas sobre o **presente**
+   * ("quanto devo", "quanto posso pagar") precisam ficar restritas ao que
+   * existe, porque só isso é quitável.
+   */
+  readonly includeProjected?: boolean;
 };
 
 /** Movimentações que representam consumo — o que conta como receita e despesa. */
@@ -38,6 +53,7 @@ const CONFIRMED: readonly EntryState[] = ["confirmed"];
 const ALL_STATES: readonly EntryState[] = ["confirmed", "planned"];
 
 export function matches(entry: LedgerEntry, filter: EntryFilter): boolean {
+  if (!filter.includeProjected && isProjected(entry)) return false;
   if (filter.party && !isSameParty(entry.party, filter.party)) return false;
   if (filter.accountIds && (entry.party.kind !== "account" || !filter.accountIds.has(entry.party.accountId))) {
     return false;
@@ -94,7 +110,12 @@ export function projectedAccountBalance(
   openingBalance: Cents = ZERO,
 ): Cents {
   return (openingBalance +
-    balance(entries, { party: { kind: "account", accountId }, states: ALL_STATES, upTo: asOf })) as Cents;
+    balance(entries, {
+      party: { kind: "account", accountId },
+      states: ALL_STATES,
+      upTo: asOf,
+      includeProjected: true,
+    })) as Cents;
 }
 
 /** Soma dos saldos confirmados de um conjunto de contas. */
@@ -132,8 +153,14 @@ export function invoiceTotals(
   cardId: string,
   competence: Competence,
   states: readonly EntryState[] = ALL_STATES,
+  options: { readonly includeProjected?: boolean } = {},
 ): InvoiceTotals {
-  const rows = select(entries, { party: { kind: "card", cardId }, competence, states });
+  const rows = select(entries, {
+    party: { kind: "card", cardId },
+    competence,
+    states,
+    includeProjected: options.includeProjected ?? false,
+  });
 
   let charges = 0;
   let payments = 0;
@@ -162,6 +189,31 @@ export function cardDebt(entries: readonly LedgerEntry[], cardId: string): Cents
 }
 
 /**
+ * Dívida do cartão **até uma data**, só com o que já aconteceu.
+ *
+ * Diferente de `cardDebt`, que responde "quanto se deve hoje, contando o que
+ * já está agendado": aqui a pergunta é histórica — "quanto se devia naquele
+ * dia?" —, e por isso a parcela que ainda não venceu fica de fora. É o que
+ * permite reconstruir a evolução do patrimônio mês a mês sem misturar dívida
+ * realizada com compromisso futuro.
+ */
+export function cardDebtAsOf(
+  entries: readonly LedgerEntry[],
+  cardId: string,
+  asOf: LocalDate,
+): Cents {
+  return clampToZero(
+    negate(
+      balance(entries, {
+        party: { kind: "card", cardId },
+        states: CONFIRMED,
+        upTo: asOf,
+      }),
+    ),
+  );
+}
+
+/**
  * Limite comprometido: tudo que o cartão deve, em qualquer competência.
  *
  * Parcelas futuras ocupam limite mesmo sem terem "acontecido", e fatura
@@ -179,6 +231,7 @@ export function committedLimit(
 ): Cents {
   const byCompetence = new Map<Competence, number>();
   for (const entry of entries) {
+    if (isProjected(entry)) continue;
     if (entry.party.kind !== "card" || entry.party.cardId !== cardId) continue;
     if (fromCompetence && entry.competence < fromCompetence) continue;
     byCompetence.set(entry.competence, (byCompetence.get(entry.competence) ?? 0) + entry.amount);

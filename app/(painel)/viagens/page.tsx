@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { buildTripsView } from "../../../server/services/trips.ts";
 import { currentUser } from "../../auth-context.ts";
 import { DonutChart, VIZ } from "../../ui/charts.tsx";
@@ -28,7 +26,10 @@ const SITUACAO: Record<string, { texto: string; tom: Tone }> = {
  */
 export default async function Viagens() {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const view = await buildTripsView(user.id);
 

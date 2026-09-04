@@ -23,6 +23,7 @@ import captura from "./migrations/0007_capture.sql?raw";
 import sincronizacao from "./migrations/0008_sync.sql?raw";
 import pareamento from "./migrations/0009_pairing.sql?raw";
 import categoriaDaCaptura from "./migrations/0010_capture-category.sql?raw";
+import areaDeTrabalho from "./migrations/0011_dev-area.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -127,6 +128,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 8, name: "recibos-de-sincronizacao", run: fromSql(sincronizacao) },
   { id: 9, name: "pareamento-de-aparelho", run: fromSql(pareamento) },
   { id: 10, name: "categoria-adivinhada-na-captura", run: fromSql(categoriaDaCaptura) },
+  { id: 11, name: "area-de-trabalho", run: fromSql(areaDeTrabalho) },
 ];
 
 let applied: Promise<void> | null = null;

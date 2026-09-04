@@ -10,6 +10,7 @@ import {
   accountBalance,
   availableLimit,
   cardDebt,
+  cardDebtAsOf,
   committedLimit,
   flow,
   invoiceTotals,
@@ -490,3 +491,45 @@ describe("fluxo do período", () => {
 // Garante que o tipo `Cents` não vaze como `number` cru nas somas.
 const _tipoPreservado: Cents = accountBalance([], CONTA, localDate("2026-08-31"), cents(1));
 void _tipoPreservado;
+
+describe("dívida do cartão numa data passada", () => {
+  it("ignora o que ainda não aconteceu", () => {
+    const entries = [
+      ...razao(lancamento({ id: "compra", kind: "expense", amount: cents(20000), origin: cardParty(CARTAO) })),
+      ...razao(
+        lancamento({
+          id: "futura",
+          kind: "expense",
+          amount: cents(50000),
+          origin: cardParty(CARTAO),
+          state: "planned",
+          occurredOn: localDate("2026-09-10"),
+          competence: competence("2026-09"),
+        }),
+      ),
+    ];
+
+    // `cardDebt` conta o compromisso inteiro; a versão datada conta só o fato.
+    assert.equal(cardDebt(entries, CARTAO), 70000);
+    assert.equal(cardDebtAsOf(entries, CARTAO, localDate("2026-08-31")), 20000);
+  });
+
+  it("o pagamento abate a partir da data em que saiu", () => {
+    const entries = [
+      ...razao(lancamento({ id: "compra", kind: "expense", amount: cents(20000), origin: cardParty(CARTAO) })),
+      ...razao(
+        lancamento({
+          id: "pagamento",
+          kind: "invoice_payment",
+          amount: cents(20000),
+          origin: accountParty(CONTA),
+          destination: cardParty(CARTAO),
+          occurredOn: localDate("2026-09-20"),
+        }),
+      ),
+    ];
+
+    assert.equal(cardDebtAsOf(entries, CARTAO, localDate("2026-09-19")), 20000, "véspera do pagamento");
+    assert.equal(cardDebtAsOf(entries, CARTAO, localDate("2026-09-20")), 0, "no dia do pagamento");
+  });
+});

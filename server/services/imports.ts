@@ -85,7 +85,12 @@ export async function startImport(
   const format = detectFormat(input.content);
   const parsed: ParseResult = format === "ofx" ? parseOfx(input.content) : parseCsv(input.content);
 
-  if (!parsed.rows.length && !parsed.discarded.length) {
+  // Sem nenhuma linha legível não há o que revisar, e um lote vazio é um beco
+  // sem saída: a tela abre a revisão, não mostra nada e não oferece ação. O
+  // arquivo pode até ter conteúdo — cabeçalho, rodapé, texto solto —, mas se
+  // nada virou lançamento, o problema é o arquivo, e dizer isso na hora do
+  // envio é a única resposta útil.
+  if (!parsed.rows.length) {
     throw validationError("Não foi possível ler nenhum lançamento neste arquivo", [
       { path: "file", message: "Envie um extrato em OFX ou CSV" },
     ]);

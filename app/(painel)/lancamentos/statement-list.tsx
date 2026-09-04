@@ -9,6 +9,7 @@ import {
   Receipt,
 } from "../../ui/icons.tsx";
 import { Badge, Empty, Panel, type Tone } from "../../ui/primitives.tsx";
+import { RowActions } from "./row-actions.tsx";
 
 const NATUREZA: Record<StatementRow["kind"], { label: string; icon: LucideIcon; tone: Tone }> = {
   expense: { label: "Despesa", icon: ArrowDownRight, tone: "negative" },
@@ -53,6 +54,7 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
           { key: "natureza", header: "Natureza", hideBelow: "lg" },
           { key: "data", header: "Data", align: "right", width: "5.5rem" },
           { key: "valor", header: "Valor", align: "right", width: "8rem" },
+          { key: "acoes", header: "Ações", align: "right", width: "4.5rem" },
         ]}
       >
         {rows.map((row) => {
@@ -134,6 +136,12 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
                   {entrada ? "+ " : "− "}
                   {money(row.amountCents)}
                 </span>
+              </Td>
+
+              {/* Corrigir e apagar ficam na linha, e a coluna não some no
+                  celular: é justamente lá que o valor é digitado com pressa. */}
+              <Td align="right">
+                <RowActions row={row} />
               </Td>
             </Tr>
           );

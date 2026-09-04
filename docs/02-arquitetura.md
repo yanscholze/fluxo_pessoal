@@ -97,6 +97,14 @@ dívida do cartão      = −Σ entries[cartão]
 patrimônio            = Σ contas + Σ investimentos − Σ dívidas
 ```
 
+Projeção não é fato. As recorrências entram no razão como movimentações
+**virtuais**, calculadas na leitura, e toda consulta sabe distingui-las: elas
+contam para prever o futuro — saldo projetado, fluxo dos próximos meses — e
+nunca para dizer o que se deve **agora**. Fatura em aberto, dívida do cartão e
+limite comprometido olham só o que existe no banco, porque só isso é quitável.
+Somar uma assinatura ainda não lançada ao saldo devedor de uma fatura produz
+uma dívida que nenhum pagamento zera.
+
 Saldo **nunca** é coluna atualizada por delta. É sempre derivado. Uma conta tem
 `saldo_inicial` e uma data de abertura; o resto é soma. Isso elimina por
 construção a classe inteira de bug "o saldo desandou e ninguém sabe quando".
@@ -109,7 +117,14 @@ pagamento da fatura. É isso que impede o gasto ser contado duas vezes.
 ## 3. Modelo de dados
 
 SQLite/D1 com Drizzle. Migrations **versionadas em arquivo**, aplicadas por
-comando — nunca DDL em tempo de requisição.
+comando — **nunca DDL derivado por introspecção**.
+
+A aplicação acontece na primeira requisição depois de um deploy, porque o Sites
+não expõe passo onde rodar `wrangler d1 migrations apply`. Isso **não** é o
+antipadrão de re-derivar schema a cada requisição: existe um diário, cada
+migration tem número, roda uma única vez e em ordem, e o resultado é memoizado
+por isolate — uma consulta ao diário na primeira requisição, nada nas
+seguintes. Ver `server/db/migrator.ts`.
 
 Convenções: identificadores `text` (ULID, ordenável por tempo, sem semântica
 embutida); dinheiro em **centavos inteiros**; datas civis em `YYYY-MM-DD`;
@@ -174,13 +189,39 @@ A revisão é um estado do banco, não do navegador.
 - `budgets`, `goals`, `goal_contributions`, `investments`,
   `investment_movements`, `reward_redemptions`.
 
+### Trabalho
+
+A segunda metade do produto: a primeira responde "como está meu dinheiro",
+esta responde "de onde ele vem".
+
+- `clients` — quem paga.
+- `projects` — nome, cliente, situação, prazo, valor contratado, valor/hora
+  combinado, estimativa, repositório e ambiente. O **recebido não é coluna**:
+  é a soma das parcelas quitadas.
+- `project_tasks` — tarefa, pendência, suporte e melhoria na mesma tabela, com
+  `kind` diferente. Separar suporte de funcionalidade nova é exigência do
+  negócio: suporte é consertar o que deveria funcionar e normalmente não se
+  cobra; funcionalidade nova se cobra.
+- `time_entries` — **uma linha por sessão de trabalho**, com duração em
+  milésimos de hora. "Horas trabalhadas" como número no projeto seria um
+  contador que ninguém sabe reconstruir; aqui o total é sempre soma, pelo mesmo
+  princípio que faz saldo ser derivado.
+- `project_payments` — parcela do contrato. Enquanto `transaction_id` é `null`
+  é previsão de recebimento; preenchida, **é dinheiro no razão**. Receber por
+  um projeto cria uma receita como qualquer outra, ou o dinheiro do trabalho
+  não apareceria no patrimônio.
+- `proposals`, `project_deployments`, `project_events`.
+
 Assinatura **não** ganha tabela: é uma `recurrence` com papel `subscription`.
 Duplicar o agendamento seria repetir a regra mais delicada do sistema.
 
 ### Sincronização e apoio
 
 - `sync_mutations` — recibo por `mutation_id`, para idempotência.
-- `attachments`, `notifications`, `feedback`, `user_profiles`, `ai_usage`.
+- `user_profiles`, `ai_usage`, `exchange_rates`, `pairing_requests`.
+
+`attachments`, `notifications` e `feedback` estavam listadas aqui e **não
+existem**: eram planejamento descrito como se fosse estado.
 
 ---
 
@@ -209,7 +250,7 @@ endpoint despachante.
 /api/v1/accounts            GET POST
 /api/v1/accounts/:id        GET PATCH DELETE
 /api/v1/transactions        GET POST
-/api/v1/transactions/:id    GET PATCH DELETE
+/api/v1/transactions/:id    GET PATCH DELETE   (ainda não implementada)
 /api/v1/cards/:id/invoices  GET
 /api/v1/invoices/:id/pay    POST
 /api/v1/installments        GET POST
@@ -253,7 +294,16 @@ de depuração do Android sai do repositório.
 - `core/` tem cobertura de unidade obrigatória: dinheiro, calendário,
   competência, ciclo de fatura, parcelamento, antecipação, saldo, projeção,
   livre para gastar, duplicidade.
-- `server/` tem teste de serviço nos fluxos que movem dinheiro.
+- `server/` tem teste de serviço contra um SQLite real, com as migrations de
+  verdade aplicadas: pagamento de fatura, parcelamento, importação, recorrência,
+  correção e exclusão de lançamento, cobrança de projeto e **isolamento entre
+  usuários**. O adaptador em `server/testing/` implementa a interface do D1 sobre
+  o `node:sqlite`, e o driver continua sendo o `drizzle-orm/d1` — o SQL
+  exercitado no teste é o mesmo que o Worker emite.
+- O código de produção não tem gancho de teste. `cloudflare:workers` é
+  redirecionado por um carregador (`server/testing/loader.mjs`); fazer a
+  aplicação perguntar "estou num teste?" seria uma segunda implementação
+  escondida atrás de um `if`.
 - Nenhuma regra financeira entra sem teste que a fixe.
 
 ---
@@ -282,6 +332,8 @@ Android gerado):
 | Captura por notificação | ✓ | ✓ | ✓ | ✓ |
 | Sincronização e pareamento | ✓ | ✓ | ✓ | ✓ |
 | Aplicativo Android | ✓ | ✓ | — | ✓ |
+| Patrimônio | ✓ | ✓ | — | ✓ |
+| Projetos, horas e cobrança | ✓ | ✓ | ✓ | ✓ |
 
 Investimentos, viagens, relatórios e saúde financeira não têm módulo próprio em
 `core/` porque não têm regra própria: são leituras sobre o razão e sobre o que

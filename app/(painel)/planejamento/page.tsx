@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { buildPlanningView, type RecurrenceView } from "../../../server/services/planning.ts";
 import { currentUser } from "../../auth-context.ts";
 import { BarChart, ChartFrame } from "../../ui/charts.tsx";
@@ -61,7 +59,10 @@ type ComPendente = RecurrenceView & { pending: NonNullable<RecurrenceView["pendi
  */
 export default async function Planejamento() {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const view = await buildPlanningView(user.id);
 

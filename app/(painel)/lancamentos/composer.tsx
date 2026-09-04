@@ -23,12 +23,21 @@ type Erro = { message?: string; issues?: { path: string; message: string }[] };
 export function Composer({
   options,
   competence,
+  defaultOpen = false,
 }: {
   options: Statement["options"];
   competence: Competence;
+  /**
+   * Já aberto ao entrar na tela.
+   *
+   * É o que a ação central da barra inferior do celular usa: lá o gesto é
+   * "quero registrar um gasto agora", e chegar na tela com o formulário
+   * fechado cobraria um segundo toque para nada.
+   */
+  defaultOpen?: boolean;
 }) {
   const router = useRouter();
-  const [aberto, setAberto] = useState(false);
+  const [aberto, setAberto] = useState(defaultOpen);
   const [tipo, setTipo] = useState<Tipo>("expense");
   const [origem, setOrigem] = useState<Origem>("account");
   const [parcelas, setParcelas] = useState(1);

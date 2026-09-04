@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { listDeviceSessions } from "../../../server/auth/session.ts";
 import { currentUser } from "../../auth-context.ts";
 import { ListRow } from "../../ui/data-display.tsx";
@@ -26,7 +24,10 @@ const PASSOS = [
  */
 export default async function Conectar() {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const aparelhos = await listDeviceSessions(user.id);
 

@@ -115,8 +115,11 @@ export type Dashboard = {
     readonly pendingIncomeCents: number;
     readonly openInvoicesCents: number;
     readonly otherCommitmentsCents: number;
+    /** Data do ponto mais apertado da projeção — onde a folga foi medida. */
+    readonly lowestOn: LocalDate;
     readonly windowStart: LocalDate;
     readonly windowEnd: LocalDate;
+    readonly horizonEnd: LocalDate;
   };
   readonly monthFlow: {
     readonly incomeCents: number;
@@ -228,8 +231,10 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       pendingIncomeCents: position.freeToSpend.pendingIncome,
       openInvoicesCents: position.freeToSpend.openInvoices,
       otherCommitmentsCents: position.freeToSpend.otherCommitments,
+      lowestOn: position.freeToSpend.lowestOn,
       windowStart: position.freeToSpend.windowStart,
       windowEnd: position.freeToSpend.windowEnd,
+      horizonEnd: position.freeToSpend.horizonEnd,
     },
     monthFlow: monthFlow(entries, accounts, competence),
     accounts: summarizeAccounts(accounts, entries, today),
@@ -238,7 +243,12 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     categorySpend: spendByCategory(entries, meta, categories, competence),
     cashflow: projectCashflow({
       ...positionInput,
-      competences: series(shift(competence, 1), CASHFLOW_MONTHS),
+      // A série começa na competência **corrente**, não na seguinte.
+      // Começando no mês que vem, todo o resto do mês em curso — o próximo
+      // salário, o aluguel, a fatura que vence — era dobrado para dentro da
+      // primeira barra, que ficava inflada e incomparável com as demais. E a
+      // pergunta mais imediata, "como este mês termina?", não tinha resposta.
+      competences: series(competence, CASHFLOW_MONTHS),
     }).map((point) => ({
       competence: point.competence,
       inflowCents: point.inflow,

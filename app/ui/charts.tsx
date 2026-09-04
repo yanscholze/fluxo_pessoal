@@ -386,7 +386,7 @@ export function BarChart({
   className?: string;
 }) {
   const H = 220;
-  const { maximo, minimo, amplitude } = escalaY(
+  const { minimo, amplitude } = escalaY(
     bars.map((barra) => barra.value),
     true,
   );

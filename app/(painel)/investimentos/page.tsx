@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { latest } from "../../../core/time/local-date.ts";
 import {
   ASSET_CLASS_LABEL,
@@ -35,7 +33,10 @@ const ORDEM_LIQUIDEZ: readonly Liquidity[] = ["daily", "scheduled", "maturity"];
  */
 export default async function Investimentos() {
   const user = await currentUser();
-  if (!user) redirect("/entrar");
+  // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
+  // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
+  // renderização — que o Vite transmite como erro para todas as abas.
+  if (!user) return null;
 
   const view = await buildInvestmentsView(user.id);
   const { totals } = view;

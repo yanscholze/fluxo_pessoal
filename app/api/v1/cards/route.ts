@@ -15,6 +15,11 @@ export const GET = handle(async (request: Request) => {
   const user = await requireUser(request);
   // Cartão sem fatura e sem limite disponível não diz nada útil, e esses dois
   // números são exatamente o que o painel já calcula.
+  //
+  // O painel injeta recorrências projetadas no razão, mas fatura, dívida e
+  // limite comprometido são calculados só sobre o que existe — ver
+  // `EntryFilter.includeProjected`. É o que faz esta rota e a tela `/cartoes`
+  // responderem o mesmo número.
   const dashboard = await buildDashboard(user.id);
   return json({ data: dashboard.cards });
 });

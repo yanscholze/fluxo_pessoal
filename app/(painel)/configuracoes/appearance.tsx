@@ -13,8 +13,7 @@
  * tema faria uma receita ficar azul.
  */
 
-import { useEffect, useState } from "react";
-
+import { gravarPreferencia, usePreferencia } from "../../ui/browser-preference.ts";
 import { SegmentedControl } from "../../ui/controls.tsx";
 import { Check, Moon, Sun } from "../../ui/icons.tsx";
 import { Label } from "../../ui/primitives.tsx";
@@ -49,34 +48,46 @@ const FONTE_PADRAO = "figtree";
 type Tema = "claro" | "escuro";
 
 export function Appearance() {
-  const [tema, setTema] = useState<Tema>("escuro");
-  const [acento, setAcento] = useState<string>(PADRAO);
-  const [fonte, setFonte] = useState<string>(FONTE_PADRAO);
-
-  useEffect(() => {
-    setTema(document.documentElement.dataset.theme === "dark" ? "escuro" : "claro");
-    setAcento(document.documentElement.dataset.accent ?? PADRAO);
-    setFonte(document.documentElement.dataset.font ?? FONTE_PADRAO);
-  }, []);
+  // O `<html>` já carrega a escolha aplicada antes da primeira pintura; estes
+  // são leitores dela, não uma segunda cópia do estado.
+  const tema = usePreferencia<Tema>(
+    (raiz) => (raiz.dataset.theme === "dark" ? "escuro" : "claro"),
+    "escuro",
+  );
+  const acento = usePreferencia((raiz) => raiz.dataset.accent ?? PADRAO, PADRAO);
+  const fonte = usePreferencia((raiz) => raiz.dataset.font ?? FONTE_PADRAO, FONTE_PADRAO);
 
   function aplicarTema(valor: Tema) {
-    setTema(valor);
-    document.documentElement.dataset.theme = valor === "escuro" ? "dark" : "light";
-    localStorage.setItem("fluxo:tema", valor);
+    gravarPreferencia(
+      (raiz) => {
+        raiz.dataset.theme = valor === "escuro" ? "dark" : "light";
+      },
+      "fluxo:tema",
+      valor,
+    );
   }
 
   function aplicarAcento(valor: string) {
-    setAcento(valor);
-    if (valor === PADRAO) delete document.documentElement.dataset.accent;
-    else document.documentElement.dataset.accent = valor;
-    localStorage.setItem("fluxo:acento", valor);
+    gravarPreferencia(
+      (raiz) => {
+        // O padrão não tem atributo: o `:root` do CSS já define o verde.
+        if (valor === PADRAO) raiz.removeAttribute("data-accent");
+        else raiz.dataset.accent = valor;
+      },
+      "fluxo:acento",
+      valor,
+    );
   }
 
   function aplicarFonte(valor: string) {
-    setFonte(valor);
-    if (valor === FONTE_PADRAO) delete document.documentElement.dataset.font;
-    else document.documentElement.dataset.font = valor;
-    localStorage.setItem("fluxo:fonte", valor);
+    gravarPreferencia(
+      (raiz) => {
+        if (valor === FONTE_PADRAO) raiz.removeAttribute("data-font");
+        else raiz.dataset.font = valor;
+      },
+      "fluxo:fonte",
+      valor,
+    );
   }
 
   return (
