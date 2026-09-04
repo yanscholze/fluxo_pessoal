@@ -121,6 +121,31 @@ const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    id: 1,
+    name: "campos-do-livre-para-gastar",
+    sql: `
+      -- Os três campos que faltavam para o aplicativo calcular "livre para
+      -- gastar" com a mesma regra do site.
+      --
+      -- Sem eles o aparelho caía numa aproximação — saldo menos comprometido —
+      -- e mostrava um número diferente do que o site mostrava para o mesmo
+      -- dinheiro. Uma regra, uma implementação, dois consumidores: para isso
+      -- valer, os dois precisam receber as mesmas entradas.
+
+      -- Conta fora dos totais não entra em saldo nem em livre para gastar.
+      ALTER TABLE accounts ADD COLUMN include_in_totals INTEGER NOT NULL DEFAULT 1;
+
+      -- Categoria que o usuário marcou para não pesar na folga.
+      ALTER TABLE categories ADD COLUMN exclude_from_free_to_spend INTEGER NOT NULL DEFAULT 0;
+
+      -- O cartão principal define a **janela** do cálculo: do fechamento dele
+      -- ao seguinte. Sem saber qual é, o aparelho mediria o mesmo dinheiro num
+      -- período diferente.
+      ALTER TABLE cards ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE cards ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 let handle: SQLite.SQLiteDatabase | null = null;

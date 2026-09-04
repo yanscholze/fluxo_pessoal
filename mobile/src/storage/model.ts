@@ -21,6 +21,8 @@ export type LocalAccount = {
   readonly currency: string;
   /** Saldo cadastrado da conta antes da primeira movimentação. */
   readonly openingBalance: Cents;
+  /** Fora dos totais, a conta não entra em saldo nem em livre para gastar. */
+  readonly includeInTotals: boolean;
   readonly color: string | null;
   readonly archivedAt: string | null;
 };
@@ -29,6 +31,8 @@ export type LocalCategory = {
   readonly id: string;
   readonly name: string;
   readonly kind: string;
+  /** Marcada para não pesar no livre para gastar. */
+  readonly excludeFromFreeToSpend: boolean;
   readonly color: string | null;
   readonly archivedAt: string | null;
 };
@@ -40,6 +44,9 @@ export type LocalCard = CycleConfig & {
   readonly kind: string;
   /** Teto do cartão. Zero significa "não cadastrado", não "sem limite". */
   readonly limit: Cents;
+  /** Define a janela do livre para gastar: do fechamento dele ao seguinte. */
+  readonly isPrimary: boolean;
+  readonly sortOrder: number;
   readonly color: string | null;
   readonly archivedAt: string | null;
 };

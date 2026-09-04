@@ -290,39 +290,59 @@ function wireShape(registro: LocalTransaction): Record<string, unknown> {
 
 export async function listAccounts(): Promise<LocalAccount[]> {
   const database = await openDatabase();
-  const linhas = await database.getAllAsync<Omit<LocalAccount, "openingBalance"> & { openingBalanceCents: number }>(
+  const linhas = await database.getAllAsync<
+    Omit<LocalAccount, "openingBalance" | "includeInTotals"> & {
+      openingBalanceCents: number;
+      includeInTotals: number;
+    }
+  >(
     `SELECT id, name, kind, currency, opening_balance_cents AS openingBalanceCents,
-            color, archived_at AS archivedAt
+            include_in_totals AS includeInTotals, color, archived_at AS archivedAt
        FROM accounts WHERE archived_at IS NULL ORDER BY name`,
   );
-  return linhas.map(({ openingBalanceCents, ...conta }) => ({
+  return linhas.map(({ openingBalanceCents, includeInTotals, ...conta }) => ({
     ...conta,
     openingBalance: cents(openingBalanceCents),
+    // O SQLite guarda booleano como inteiro; a conversão acontece na borda.
+    includeInTotals: includeInTotals !== 0,
   }));
 }
 
 export async function listCategories(): Promise<LocalCategory[]> {
   const database = await openDatabase();
-  return database.getAllAsync<LocalCategory>(
-    `SELECT id, name, kind, color, archived_at AS archivedAt
+  const linhas = await database.getAllAsync<
+    Omit<LocalCategory, "excludeFromFreeToSpend"> & { excludeFromFreeToSpend: number }
+  >(
+    `SELECT id, name, kind, exclude_from_free_to_spend AS excludeFromFreeToSpend,
+            color, archived_at AS archivedAt
        FROM categories WHERE archived_at IS NULL ORDER BY name`,
   );
+  return linhas.map(({ excludeFromFreeToSpend, ...categoria }) => ({
+    ...categoria,
+    excludeFromFreeToSpend: excludeFromFreeToSpend !== 0,
+  }));
 }
 
 export async function listCards(): Promise<LocalCard[]> {
   const database = await openDatabase();
   const linhas = await database.getAllAsync<
-    Omit<LocalCard, "limit" | "dueAdjustment"> & { limitCents: number; dueAdjustment: string }
+    Omit<LocalCard, "limit" | "dueAdjustment" | "isPrimary"> & {
+      limitCents: number;
+      dueAdjustment: string;
+      isPrimary: number;
+    }
   >(
     `SELECT id, name, kind, closing_day AS closingDay, due_day AS dueDay,
-            due_adjustment AS dueAdjustment, limit_cents AS limitCents, color,
+            due_adjustment AS dueAdjustment, limit_cents AS limitCents,
+            is_primary AS isPrimary, sort_order AS sortOrder, color,
             archived_at AS archivedAt
-       FROM cards WHERE archived_at IS NULL ORDER BY name`,
+       FROM cards WHERE archived_at IS NULL ORDER BY sort_order, name`,
   );
 
-  return linhas.map(({ limitCents, dueAdjustment, ...cartao }) => ({
+  return linhas.map(({ limitCents, dueAdjustment, isPrimary, ...cartao }) => ({
     ...cartao,
     limit: cents(limitCents),
+    isPrimary: isPrimary !== 0,
     // A coluna é texto; o domínio só conhece dois valores. Estreitar aqui
     // evita que um dado estranho chegue a `dueDateFor` como se fosse válido.
     dueAdjustment: dueAdjustment === "previous" ? "previous" : "next",
@@ -411,11 +431,13 @@ export async function applyServerCatalog(catalog: {
   await database.withExclusiveTransactionAsync(async (transacao) => {
     for (const conta of catalog.accounts) {
       await transacao.runAsync(
-        `INSERT INTO accounts (id, name, kind, currency, opening_balance_cents, color, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO accounts
+           (id, name, kind, currency, opening_balance_cents, include_in_totals, color, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, kind = excluded.kind, currency = excluded.currency,
            opening_balance_cents = excluded.opening_balance_cents,
+           include_in_totals = excluded.include_in_totals,
            color = excluded.color, archived_at = excluded.archived_at`,
         [
           String(conta.id),
@@ -423,6 +445,9 @@ export async function applyServerCatalog(catalog: {
           String(conta.kind ?? "checking"),
           String(conta.currency ?? "BRL"),
           Number(conta.openingBalanceCents ?? 0),
+          // Ausente é `true`: um servidor antigo que não manda o campo não pode
+          // fazer as contas sumirem do saldo do aparelho.
+          conta.includeInTotals === false ? 0 : 1,
           (conta.color as string | null) ?? null,
           (conta.archivedAt as string | null) ?? null,
         ],
@@ -431,15 +456,18 @@ export async function applyServerCatalog(catalog: {
 
     for (const categoria of catalog.categories) {
       await transacao.runAsync(
-        `INSERT INTO categories (id, name, kind, color, archived_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO categories
+           (id, name, kind, exclude_from_free_to_spend, color, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-           name = excluded.name, kind = excluded.kind, color = excluded.color,
-           archived_at = excluded.archived_at`,
+           name = excluded.name, kind = excluded.kind,
+           exclude_from_free_to_spend = excluded.exclude_from_free_to_spend,
+           color = excluded.color, archived_at = excluded.archived_at`,
         [
           String(categoria.id),
           String(categoria.name ?? ""),
           String(categoria.kind ?? "expense"),
+          categoria.excludeFromFreeToSpend === true ? 1 : 0,
           (categoria.color as string | null) ?? null,
           (categoria.archivedAt as string | null) ?? null,
         ],
@@ -449,12 +477,14 @@ export async function applyServerCatalog(catalog: {
     for (const cartao of catalog.cards) {
       await transacao.runAsync(
         `INSERT INTO cards
-           (id, name, kind, closing_day, due_day, due_adjustment, limit_cents, color, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (id, name, kind, closing_day, due_day, due_adjustment, limit_cents,
+            is_primary, sort_order, color, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, kind = excluded.kind, closing_day = excluded.closing_day,
            due_day = excluded.due_day, due_adjustment = excluded.due_adjustment,
            limit_cents = excluded.limit_cents,
+           is_primary = excluded.is_primary, sort_order = excluded.sort_order,
            color = excluded.color, archived_at = excluded.archived_at`,
         [
           String(cartao.id),
@@ -464,6 +494,8 @@ export async function applyServerCatalog(catalog: {
           Number(cartao.dueDay ?? 10),
           cartao.dueAdjustment === "previous" ? "previous" : "next",
           Number(cartao.limitCents ?? 0),
+          cartao.isPrimary === true ? 1 : 0,
+          Number(cartao.sortOrder ?? 0),
           (cartao.color as string | null) ?? null,
           (cartao.archivedAt as string | null) ?? null,
         ],

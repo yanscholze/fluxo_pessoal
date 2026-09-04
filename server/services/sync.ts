@@ -389,6 +389,10 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       // razão é "início + movimentações", e mandar só as movimentações daria
       // um número diferente do que o site mostra.
       openingBalanceCents: conta.openingBalanceCents,
+      // Conta fora dos totais não entra em saldo, patrimônio nem livre para
+      // gastar. Sem este sinalizador o aplicativo somaria contas que o site
+      // deixa de fora, e os dois mostrariam saldos diferentes.
+      includeInTotals: conta.includeInTotals,
       color: conta.color,
       archivedAt: conta.archivedAt,
     })),
@@ -396,6 +400,9 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       id: categoria.id,
       name: categoria.name,
       kind: categoria.kind,
+      // Categoria marcada para não pesar no livre para gastar. É política do
+      // usuário, e precisa viajar junto ou o número diverge.
+      excludeFromFreeToSpend: categoria.excludeFromFreeToSpend,
       color: categoria.color,
       archivedAt: categoria.archivedAt,
     })),
@@ -409,6 +416,11 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       // Limite disponível é uma das telas principais do aplicativo, e sem o
       // teto cadastrado não há como calculá-lo offline.
       limitCents: cartao.limitCents,
+      // O cartão principal define a **janela** do livre para gastar — do
+      // fechamento dele ao seguinte. Sem saber qual é, o aplicativo mediria o
+      // mesmo dinheiro num período diferente do site.
+      isPrimary: cartao.isPrimary,
+      sortOrder: cartao.sortOrder,
       color: cartao.color,
       archivedAt: cartao.archivedAt,
     })),

@@ -27,6 +27,12 @@ import {
 } from "@fluxo/core/domain/ledger/balance.ts";
 import { postTransaction } from "@fluxo/core/domain/ledger/posting.ts";
 import {
+  type FreeToSpend,
+  type PositionCard,
+  computeFreeToSpend,
+} from "@fluxo/core/domain/position/financial-position.ts";
+import type { Account, AccountKind, CurrencyCode } from "@fluxo/core/domain/account/types.ts";
+import {
   accountParty,
   cardParty,
   type LedgerEntry,
@@ -134,13 +140,68 @@ export type Overview = {
   readonly balance: Cents;
   /** Dívida de cartão já assumida. Dinheiro que já tem dono. */
   readonly committed: Cents;
-  /** Saldo menos comprometido. Nunca apresentado como saldo. */
+  /**
+   * Quanto pode sair hoje sem furar compromisso já assumido.
+   *
+   * É o **menor saldo projetado** do horizonte, calculado por
+   * `computeFreeToSpend` — a mesmíssima função que o site chama. Antes daqui
+   * saía `saldo − comprometido`, uma aproximação que ignora a ordem dos
+   * vencimentos e dava um número diferente do que o site mostrava para o mesmo
+   * dinheiro.
+   */
   readonly free: Cents;
+  /** A decomposição, para a tela poder explicar o número. */
+  readonly freeToSpend: FreeToSpend;
   readonly income: Cents;
   readonly expense: Cents;
   readonly cards: readonly CardSummary[];
   readonly skipped: number;
 };
+
+/**
+ * Traduz a conta local para o modelo do domínio.
+ *
+ * O formato do fio é deliberadamente mais raso que o do domínio, e os campos
+ * que faltam não são inventados: são preenchidos com o valor **neutro** — o que
+ * não altera nenhuma das contas que `computeFreeToSpend` faz. `openedOn` no
+ * início dos tempos não move saldo (o saldo é "inicial + movimentações", e a
+ * data de abertura só documenta); `goalAmount` e o rendimento não entram no
+ * cálculo da folga.
+ *
+ * O que **não** é neutro — `includeInTotals`, a moeda, o tipo — viaja pela
+ * sincronização e chega de verdade.
+ */
+function toDomainAccount(conta: LocalAccount, userId: string): Account {
+  return {
+    id: conta.id,
+    userId,
+    name: conta.name,
+    institution: "",
+    kind: conta.kind as AccountKind,
+    currency: conta.currency as CurrencyCode,
+    openingBalance: conta.openingBalance,
+    openedOn: "1970-01-01" as LocalDate,
+    goalAmount: null,
+    monthlyYieldBasisPoints: 0,
+    includeInTotals: conta.includeInTotals,
+    isProtected: false,
+    color: conta.color ?? "#000000",
+    sortOrder: 0,
+    archivedAt: conta.archivedAt,
+  };
+}
+
+function toPositionCard(cartao: LocalCard): PositionCard {
+  return {
+    id: cartao.id,
+    kind: cartao.kind === "debit" ? "debit" : "credit",
+    isPrimary: cartao.isPrimary,
+    sortOrder: cartao.sortOrder,
+    closingDay: cartao.closingDay,
+    dueDay: cartao.dueDay,
+    dueAdjustment: cartao.dueAdjustment,
+  };
+}
 
 /**
  * O painel inicial.
@@ -154,6 +215,7 @@ export function overview(input: {
   rows: readonly LocalTransaction[];
   accounts: readonly LocalAccount[];
   cards: readonly LocalCard[];
+  categories: readonly LocalCategory[];
   userId: string;
   today: LocalDate;
   competence: Competence;
@@ -194,10 +256,32 @@ export function overview(input: {
     kinds: CONSUMPTION,
   });
 
+  /**
+   * A folga, pela regra do domínio.
+   *
+   * Recebe as mesmas entradas que o servidor monta: contas traduzidas, cartões
+   * com a marcação de principal, o razão inteiro, o índice de categoria de cada
+   * lançamento e a política de exclusão. Mesma função, mesmas entradas, mesmo
+   * número — que é o ponto.
+   */
+  const freeToSpend = computeFreeToSpend({
+    accounts: input.accounts.map((conta) => toDomainAccount(conta, input.userId)),
+    cards: input.cards.map(toPositionCard),
+    entries,
+    categoryByTransaction: new Map(input.rows.map((row) => [row.id, row.categoryId])),
+    today: input.today,
+    policy: {
+      excludedCategoryIds: new Set(
+        input.categories.filter((categoria) => categoria.excludeFromFreeToSpend).map((c) => c.id),
+      ),
+    },
+  });
+
   return {
     balance,
     committed,
-    free: subtract(balance, committed),
+    free: freeToSpend.amount,
+    freeToSpend,
     income: consumo.inflow,
     expense: consumo.outflow,
     cards,

@@ -142,8 +142,8 @@ export function InicioScreen({
           </Texto>
           <Small style={{ marginTop: space.xs }}>
             {negativo
-              ? "As faturas passam do que há em conta."
-              : "Saldo depois de honrar as faturas em aberto."}
+              ? "Os compromissos assumidos passam do que você tem."
+              : "Quanto pode sair hoje sem furar nenhum compromisso."}
           </Small>
 
           <FaixaDeIndicadores>
@@ -157,12 +157,26 @@ export function InicioScreen({
               style={{ width: 1, backgroundColor: palette.line, marginHorizontal: space.md }}
             />
             <View style={{ flex: 1 }}>
-              <Label>Comprometido</Label>
+              <Label>Faturas em aberto</Label>
               <Texto style={[type.figureSm, { color: palette.inkMuted, marginTop: 2 }]}>
-                {overview ? money(overview.committed) : "—"}
+                {overview ? money(overview.freeToSpend.openInvoices) : "—"}
               </Texto>
             </View>
           </FaixaDeIndicadores>
+
+          {/*
+            A folga não é a soma das linhas acima, e a tela precisa dizer isso.
+            Mostrar parcelas que não fecham com o total é pior do que não
+            mostrar nada — o usuário confere, não bate, e para de confiar.
+          */}
+          {overview ? (
+            <Small style={{ marginTop: space.md }}>
+              Medido no dia mais apertado até {relativeDate(overview.freeToSpend.horizonEnd)}
+              {overview.freeToSpend.pendingIncome > 0
+                ? ` · ${money(overview.freeToSpend.pendingIncome)} a receber no período`
+                : ""}
+            </Small>
+          ) : null}
         </View>
 
         {charts.balanceDays.length > 1 ? (

@@ -232,11 +232,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       rows: transactions,
       accounts,
       cards,
+      categories,
       userId: conectado.credentials.user.id,
       today: hoje,
       competence: competenceOf(hoje),
     });
-  }, [conectado, transactions, accounts, cards]);
+  }, [conectado, transactions, accounts, cards, categories]);
 
   /**
    * As séries dos gráficos.
