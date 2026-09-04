@@ -12,6 +12,7 @@
     "install:ci": "bash scripts/install-ci.sh",
     "dev": "vite",
     "build": "bash scripts/build-verified.sh",
+    "deploy": "bash scripts/sites-env.sh -- wrangler deploy --config dist/server/wrangler.json",
     "start": "vinext start",
     "test": "npm run test:core && npm run test:server && npm run test:mobile",
     "test:core": "node --experimental-strip-types --test \"core/**/*.test.ts\"",
