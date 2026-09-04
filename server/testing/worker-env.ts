@@ -11,9 +11,22 @@
  * existe teste.
  */
 
-/** Preenchido por `instalarBanco` antes de qualquer serviço ser importado. */
-export const env: { DB: unknown } = { DB: null };
+/**
+ * Preenchido por `instalarBinding` antes de qualquer serviço ser importado.
+ *
+ * Os segredos ficam aqui pelo mesmo motivo do binding: em produção eles vêm do
+ * ambiente do Worker, e o teste precisa conseguir dizer "existe token" ou "não
+ * existe token" sem que o código de produção ganhe um jeito de ser configurado
+ * por fora.
+ */
+export const env: { DB: unknown; GITHUB_TOKEN?: string; OPENAI_API_KEY?: string } = { DB: null };
 
 export function instalarBinding(binding: unknown): void {
   env.DB = binding;
+}
+
+/** Define ou remove um segredo do ambiente simulado. */
+export function definirSegredo(nome: "GITHUB_TOKEN" | "OPENAI_API_KEY", valor: string | undefined): void {
+  if (valor === undefined) delete env[nome];
+  else env[nome] = valor;
 }

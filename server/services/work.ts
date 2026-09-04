@@ -36,6 +36,7 @@ import { and, eq } from "drizzle-orm";
 import {
   type PaymentRow,
   type ProjectRow,
+  type TaskRow,
   type TimeEntryRow,
   findProject,
   listClients,
@@ -820,3 +821,236 @@ export async function buildProjectDetail(
 }
 
 export { listClients, listProjects, findProject };
+
+// ---------------------------------------------------------------------------
+// Quadro de tarefas
+// ---------------------------------------------------------------------------
+
+export type BoardTask = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectColor: string | null;
+  readonly clientName: string | null;
+  readonly title: string;
+  readonly details: string | null;
+  readonly kind: TaskRow["kind"];
+  readonly priority: TaskRow["priority"];
+  readonly status: TaskRow["status"];
+  readonly dueOn: LocalDate | null;
+  readonly billable: boolean;
+  /** Vencida e ainda não concluída. */
+  readonly isLate: boolean;
+};
+
+export type BoardView = {
+  readonly today: LocalDate;
+  readonly tasks: readonly BoardTask[];
+  readonly projects: readonly { id: string; name: string; color: string | null }[];
+};
+
+/**
+ * O quadro de tarefas de todos os projetos.
+ *
+ * Um quadro por projeto responderia "o que falta neste projeto"; quem trabalha
+ * em cinco ao mesmo tempo precisa da outra pergunta — "o que está travado, em
+ * qualquer lugar". Por isso a tarefa carrega o projeto, e não o contrário.
+ *
+ * Projeto encerrado fica de fora: tarefa de projeto concluído não é trabalho
+ * pendente, é histórico, e enche a coluna com o que ninguém vai fazer.
+ */
+export async function buildBoard(userId: string, now: Date = new Date()): Promise<BoardView> {
+  const today = todayIn(now);
+
+  const [listaProjetos, listaClientes, tarefas] = await Promise.all([
+    listProjects(userId),
+    listClients(userId, true),
+    listTasks(userId),
+  ]);
+
+  const nomeCliente = new Map(listaClientes.map((cliente) => [cliente.id, cliente.name]));
+  const abertos = listaProjetos.filter(
+    (projeto) => !["done", "cancelled"].includes(projeto.status),
+  );
+  const porId = new Map(abertos.map((projeto) => [projeto.id, projeto]));
+
+  const doQuadro = tarefas.filter((tarefa) => porId.has(tarefa.projectId));
+
+  return {
+    today,
+    tasks: doQuadro.map((tarefa) => {
+      const projeto = porId.get(tarefa.projectId)!;
+      const prazo = (tarefa.dueOn as LocalDate | null) ?? null;
+
+      return {
+        id: tarefa.id,
+        projectId: projeto.id,
+        projectName: projeto.name,
+        projectColor: projeto.color,
+        clientName: projeto.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+        title: tarefa.title,
+        details: tarefa.details,
+        kind: tarefa.kind,
+        priority: tarefa.priority,
+        status: tarefa.status,
+        dueOn: prazo,
+        billable: tarefa.billable,
+        isLate: prazo !== null && prazo < today && tarefa.status !== "done",
+      } satisfies BoardTask;
+    }),
+    projects: abertos.map((projeto) => ({
+      id: projeto.id,
+      name: projeto.name,
+      color: projeto.color,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+export type AgendaKind = "task" | "payment" | "delivery" | "proposal";
+
+export type AgendaItem = {
+  readonly id: string;
+  readonly kind: AgendaKind;
+  readonly on: LocalDate;
+  readonly title: string;
+  readonly projectId: string | null;
+  readonly projectName: string | null;
+  readonly projectColor: string | null;
+  readonly clientName: string | null;
+  /** Só para parcela e proposta: o dinheiro em jogo naquela data. */
+  readonly amountCents: number | null;
+  readonly isLate: boolean;
+  readonly isDone: boolean;
+};
+
+export type AgendaView = {
+  readonly today: LocalDate;
+  readonly items: readonly AgendaItem[];
+};
+
+/** Janela da agenda: o mês corrente e os dois seguintes bastam para planejar. */
+const AGENDA_DIAS = 90;
+
+/**
+ * O que tem data marcada na área de trabalho.
+ *
+ * Prazo de tarefa, vencimento de parcela, entrega de projeto e proposta
+ * esperando resposta ocupam o mesmo calendário porque disputam os mesmos dias.
+ * Separá-los em quatro listas esconde exatamente o que a agenda existe para
+ * mostrar: a semana em que a entrega, a cobrança e o prazo caem juntos.
+ *
+ * O passado entra só quando ainda está em aberto — uma parcela vencida e não
+ * recebida continua sendo trabalho de hoje; uma já recebida é histórico.
+ */
+export async function buildAgenda(userId: string, now: Date = new Date()): Promise<AgendaView> {
+  const today = todayIn(now);
+  const limite = addDays(today, AGENDA_DIAS);
+
+  const [listaProjetos, listaClientes, tarefas, parcelas, propostas] = await Promise.all([
+    listProjects(userId),
+    listClients(userId, true),
+    listTasks(userId),
+    listPayments(userId),
+    listProposals(userId),
+  ]);
+
+  const nomeCliente = new Map(listaClientes.map((cliente) => [cliente.id, cliente.name]));
+  const porId = new Map(listaProjetos.map((projeto) => [projeto.id, projeto]));
+
+  const contexto = (projectId: string | null) => {
+    const projeto = projectId ? porId.get(projectId) : undefined;
+    return {
+      projectId: projeto?.id ?? null,
+      projectName: projeto?.name ?? null,
+      projectColor: projeto?.color ?? null,
+      clientName: projeto?.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+    };
+  };
+
+  const itens: AgendaItem[] = [];
+
+  for (const tarefa of tarefas) {
+    const prazo = (tarefa.dueOn as LocalDate | null) ?? null;
+    if (!prazo || prazo > limite) continue;
+    const feita = tarefa.status === "done";
+    // Tarefa vencida e concluída é ruído: ninguém precisa saber que fechou tarde.
+    if (feita && prazo < today) continue;
+
+    itens.push({
+      id: `task:${tarefa.id}`,
+      kind: "task",
+      on: prazo,
+      title: tarefa.title,
+      ...contexto(tarefa.projectId),
+      amountCents: null,
+      isLate: !feita && prazo < today,
+      isDone: feita,
+    });
+  }
+
+  for (const parcela of parcelas) {
+    const vencimento = parcela.dueOn as LocalDate;
+    if (vencimento > limite) continue;
+    const recebida = parcela.receivedOn !== null;
+    if (recebida && vencimento < today) continue;
+
+    itens.push({
+      id: `payment:${parcela.id}`,
+      kind: "payment",
+      on: vencimento,
+      title: parcela.description,
+      ...contexto(parcela.projectId),
+      amountCents: parcela.receivedAmountCents ?? parcela.amountCents,
+      isLate: !recebida && vencimento < today,
+      isDone: recebida,
+    });
+  }
+
+  for (const projeto of listaProjetos) {
+    const entrega = (projeto.dueOn as LocalDate | null) ?? null;
+    if (!entrega || entrega > limite) continue;
+    const entregue = projeto.deliveredOn !== null;
+    if (entregue && entrega < today) continue;
+
+    itens.push({
+      id: `delivery:${projeto.id}`,
+      kind: "delivery",
+      on: entrega,
+      // O nome do projeto já aparece na linha de baixo; repeti-lo no título
+      // gastaria a largura da tela dizendo a mesma coisa duas vezes.
+      title: "Entrega do projeto",
+      ...contexto(projeto.id),
+      amountCents: null,
+      isLate: !entregue && entrega < today,
+      isDone: entregue,
+    });
+  }
+
+  for (const proposta of propostas) {
+    // Só a que foi enviada e ainda não teve resposta ocupa lugar na agenda: o
+    // rascunho não cobra retorno de ninguém.
+    if (proposta.status !== "sent" || !proposta.sentOn) continue;
+    const cobrar = addDays(proposta.sentOn as LocalDate, proposta.deadlineDays ?? 7);
+    if (cobrar > limite) continue;
+
+    itens.push({
+      id: `proposal:${proposta.id}`,
+      kind: "proposal",
+      on: cobrar,
+      title: `Cobrar resposta · ${proposta.title}`,
+      ...contexto(proposta.projectId),
+      amountCents: proposta.amountCents,
+      isLate: cobrar < today,
+      isDone: false,
+    });
+  }
+
+  return {
+    today,
+    items: itens.sort((esquerda, direita) => esquerda.on.localeCompare(direita.on)),
+  };
+}

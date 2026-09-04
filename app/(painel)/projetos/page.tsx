@@ -7,6 +7,7 @@ import { Briefcase, CircleAlert, Clock, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, SectionTitle, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
 import { NewProject } from "./new-project.tsx";
+import { WorkNav } from "./work-nav.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,9 @@ export default async function Projetos() {
         title="Projetos"
         description="Prazo, esforço e cobrança de cada projeto, e o que já entrou de dinheiro."
         actions={<NewProject />}
-      />
+      >
+        <WorkNav />
+      </PageHeader>
 
       <Stack gap="lg">
         <MetricStrip

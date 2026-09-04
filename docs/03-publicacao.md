@@ -52,6 +52,29 @@ deploy: é o `vite.config.ts` que o escreve no `wrangler.json` gerado.
 O token precisa de permissão de edição em Workers e em D1. Em máquina pessoal,
 `npx wrangler login` faz o mesmo por navegador e dispensa o token.
 
+### Segredos opcionais
+
+Nada disso é obrigatório: sem qualquer um deles o Fluxo sobe e funciona, apenas
+com o recurso correspondente desligado e dizendo isso na tela.
+
+```bash
+npx wrangler secret put OPENAI_API_KEY --config dist/server/wrangler.json
+npx wrangler secret put GITHUB_TOKEN --config dist/server/wrangler.json
+```
+
+| Segredo | Liga | Permissão mínima |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Assistente e leitura de comprovante | — |
+| `GITHUB_TOKEN` | Commits, PRs e issues na tela do projeto | leitura de repositórios (`repo` só se forem privados) |
+
+Segredo do Worker, **nunca** coluna no banco. O Fluxo guarda dado financeiro de
+uma pessoa; um vazamento dele não pode virar acesso de escrita ao código de
+todos os clientes dela. Pelo mesmo motivo a ficha do projeto guarda onde a
+senha do painel está — "1Password, cofre Clientes" — e não a senha.
+
+O token do GitHub é usado só para ler. Nenhuma rota do Fluxo abre issue,
+comenta ou faz merge.
+
 ### Depois de publicar
 
 As migrations são aplicadas na primeira requisição depois do deploy — há um

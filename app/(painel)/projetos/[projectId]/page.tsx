@@ -12,6 +12,7 @@ import { Page, PageHeader, SectionTitle, Stack } from "../../../ui/page-frame.ts
 import { Badge, Empty, Meter, Notice, Panel, PanelHeader } from "../../../ui/primitives.tsx";
 import { LogTime } from "./log-time.tsx";
 import { PaymentActions } from "./payment-actions.tsx";
+import { GithubPanel } from "./github-panel.tsx";
 import { ProjectInfoCard } from "./project-info.tsx";
 import { ProposalsPanel } from "./proposals-panel.tsx";
 import { TasksPanel } from "./tasks-panel.tsx";
@@ -121,6 +122,12 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
             credentialsHint: project.credentialsHint,
             documentationUrl: project.documentationUrl,
           }}
+        />
+
+        <GithubPanel
+          projectId={project.id}
+          repositoryUrl={project.repositoryUrl}
+          mainBranch={project.mainBranch}
         />
 
         <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">

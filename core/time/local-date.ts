@@ -213,6 +213,11 @@ export function formatShort(value: LocalDate, locale = "pt-BR"): string {
   return dateFormatter(locale, { day: "2-digit", month: "short" }).format(toUtcNoon(value));
 }
 
+/** `qui.` — o dia da semana sozinho, para agrupar a agenda por dia. */
+export function formatWeekdayShort(value: LocalDate, locale = "pt-BR"): string {
+  return dateFormatter(locale, { weekday: "short" }).format(toUtcNoon(value));
+}
+
 /** `quinta-feira, 13 de agosto de 2026` */
 export function formatLong(value: LocalDate, locale = "pt-BR"): string {
   return dateFormatter(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(

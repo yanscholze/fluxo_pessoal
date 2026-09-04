@@ -12,7 +12,13 @@ import {
   formatLong as formatCompetenceLong,
   formatShort as formatCompetenceShort,
 } from "../../core/time/competence.ts";
-import { type LocalDate, daysBetween, format as formatDate, formatShort as formatDateShort } from "../../core/time/local-date.ts";
+import {
+  type LocalDate,
+  daysBetween,
+  format as formatDate,
+  formatShort as formatDateShort,
+  formatWeekdayShort,
+} from "../../core/time/local-date.ts";
 
 export function money(value: number, options: { currency?: string; signed?: boolean } = {}): string {
   return format(cents(value), {
@@ -47,6 +53,10 @@ export function date(value: LocalDate): string {
 
 export function dateShort(value: LocalDate): string {
   return formatDateShort(value);
+}
+
+export function weekdayShort(value: LocalDate): string {
+  return formatWeekdayShort(value);
 }
 
 export function competenceShort(value: Competence): string {
