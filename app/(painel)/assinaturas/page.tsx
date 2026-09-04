@@ -9,6 +9,8 @@ import { Calendar, Check, Layers, Repeat, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { NewSubscription } from "./new-subscription.tsx";
+import { SubscriptionActions } from "./subscription-actions.tsx";
+import type { Opcoes } from "./subscription-form.tsx";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
@@ -49,9 +51,20 @@ export default async function Assinaturas() {
     .filter((recorrencia) => recorrencia.role === "subscription")
     .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);
 
-  const classificacaoDe = new Map(
-    relatorio.subscriptions.map((assinatura) => [assinatura.id, assinatura.label]),
-  );
+  // O relatório é a fonte da edição: ele sabe o cartão, a conta, a categoria e
+  // a classificação de cada assinatura, que é o que o formulário precisa.
+  const detalheDe = new Map(relatorio.subscriptions.map((assinatura) => [assinatura.id, assinatura]));
+
+  const opcoes: Opcoes = {
+    cards: cartoes.map((cartao) => ({ id: cartao.id, name: cartao.name })),
+    accounts: contas
+      .filter((conta) => conta.archivedAt === null)
+      .map((conta) => ({ id: conta.id, name: conta.name })),
+    labels: relatorio.labels.map((rotulo) => ({ id: rotulo.id, name: rotulo.name })),
+    categories: categorias
+      .filter((categoria) => categoria.kind === "expense")
+      .map((categoria) => ({ id: categoria.id, name: categoria.name })),
+  };
 
   const ativas = assinaturas.filter((assinatura) => assinatura.isActive);
   const total = ativas.reduce((soma, assinatura) => soma + assinatura.amountCents, 0);
@@ -72,12 +85,7 @@ export default async function Assinaturas() {
         title="Assinaturas"
         description="O que é cobrado todo mês sem você decidir nada. O custo anual está ao lado do mensal de propósito."
         actions={
-          <NewSubscription
-            cards={cartoes}
-            accounts={contas.filter((conta) => conta.archivedAt === null)}
-            labels={relatorio.labels}
-            categories={categorias.filter((categoria) => categoria.kind === "expense")}
-          />
+          <NewSubscription opcoes={opcoes} />
         }
       />
 
@@ -117,8 +125,8 @@ export default async function Assinaturas() {
             ]}
           />
 
-          <div className="grid gap-5 lg:grid-cols-3">
-            <Panel className="lg:col-span-2">
+          <div className="grid gap-5 xl:grid-cols-3">
+            <Panel className="xl:col-span-2">
               <PanelHeader
                 title="Suas assinaturas"
                 icon={Repeat}
@@ -130,11 +138,11 @@ export default async function Assinaturas() {
                 columns={[
                   { key: "servico", header: "Serviço" },
                   { key: "classificacao", header: "Classificação", hideBelow: "md" },
-                  { key: "cobranca", header: "Cobrança", hideBelow: "lg" },
                   { key: "onde", header: "Sai de", hideBelow: "xl" },
-                  { key: "proxima", header: "Próxima", align: "right", hideBelow: "sm" },
-                  { key: "mensal", header: "Por mês", align: "right", width: "7rem" },
-                  { key: "anual", header: "Por ano", align: "right", width: "8rem" },
+                  { key: "proxima", header: "Próxima", align: "right", hideBelow: "lg" },
+                  { key: "mensal", header: "Por mês", align: "right", width: "6.5rem" },
+                  { key: "anual", header: "Por ano", align: "right", width: "7rem", hideBelow: "sm" },
+                  { key: "acoes", header: "", align: "right", width: "6.5rem" },
                 ]}
               >
                 {assinaturas.map((assinatura) => (
@@ -148,23 +156,22 @@ export default async function Assinaturas() {
                         </span>
                         {assinatura.isActive ? null : <Badge tone="neutral">pausada</Badge>}
                       </span>
-                      {assinatura.categoryName ? (
-                        <span className="mt-0.5 block truncate text-caption text-ink-subtle">
-                          {assinatura.categoryName}
-                        </span>
-                      ) : null}
+                      <span className="mt-0.5 block truncate text-caption text-ink-subtle">
+                        {assinatura.scheduleLabel}
+                        {assinatura.categoryName ? ` · ${assinatura.categoryName}` : ""}
+                      </span>
                     </Td>
 
                     <Td hideBelow="md">
-                      {classificacaoDe.get(assinatura.id) ? (
+                      {detalheDe.get(assinatura.id)?.label ? (
                         <span className="flex items-center gap-1.5">
                           <span
                             className="size-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: classificacaoDe.get(assinatura.id)?.color }}
+                            style={{ backgroundColor: detalheDe.get(assinatura.id)?.label?.color }}
                             aria-hidden
                           />
                           <span className="truncate text-body-sm text-ink-muted">
-                            {classificacaoDe.get(assinatura.id)?.name}
+                            {detalheDe.get(assinatura.id)?.label?.name}
                           </span>
                         </span>
                       ) : (
@@ -172,15 +179,11 @@ export default async function Assinaturas() {
                       )}
                     </Td>
 
-                    <Td hideBelow="lg" className="text-body-sm text-ink-muted">
-                      {assinatura.scheduleLabel}
-                    </Td>
-
                     <Td hideBelow="xl" className="truncate text-body-sm text-ink-muted">
                       {assinatura.originName}
                     </Td>
 
-                    <Td align="right" hideBelow="sm" className="tabular whitespace-nowrap text-caption text-ink-subtle">
+                    <Td align="right" hideBelow="lg" className="tabular whitespace-nowrap text-caption text-ink-subtle">
                       {assinatura.next ? date(assinatura.next.date) : "—"}
                     </Td>
 
@@ -192,8 +195,33 @@ export default async function Assinaturas() {
                       </span>
                     </Td>
 
-                    <Td align="right" className="tabular text-body-sm text-ink-muted">
+                    <Td align="right" hideBelow="sm" className="tabular text-body-sm text-ink-muted">
                       {money(assinatura.amountCents * 12)}
+                    </Td>
+
+                    <Td align="right">
+                      {(() => {
+                        const detalhe = detalheDe.get(assinatura.id);
+                        if (!detalhe) return null;
+
+                        return (
+                          <SubscriptionActions
+                            isActive={assinatura.isActive}
+                            opcoes={opcoes}
+                            assinatura={{
+                              id: detalhe.id,
+                              description: detalhe.description,
+                              amountCents: detalhe.amountCents,
+                              scheduleDay: detalhe.scheduleDay,
+                              interval: detalhe.interval,
+                              cardId: detalhe.cardId,
+                              accountId: detalhe.accountId,
+                              categoryId: detalhe.categoryId,
+                              labelId: detalhe.label?.id ?? null,
+                            }}
+                          />
+                        );
+                      })()}
                     </Td>
                   </Tr>
                 ))}

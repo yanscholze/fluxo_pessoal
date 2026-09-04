@@ -179,3 +179,126 @@ describe("classificação de assinatura", () => {
     assert.equal(relatorio.totals.monthlyCents, 4_500, "a assinatura continua custando o mesmo");
   });
 });
+
+describe("edição de assinatura", () => {
+  beforeEach(() => {
+    zerar();
+  });
+
+  it("o reajuste muda o valor sem perder classificação nem cartão", async () => {
+    const { createLabel, createSubscription, updateSubscription, buildSubscriptionsReport } =
+      await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    const rotulo = await createLabel(alvo.userId, { name: "Streaming" }, AGORA);
+    const id = await createSubscription(
+      alvo.userId,
+      {
+        description: "Netflix",
+        amount: cents(5_590),
+        scheduleDay: 12,
+        cardId: alvo.cartaoId,
+        labelId: rotulo,
+      },
+      AGORA,
+    );
+
+    await updateSubscription(alvo.userId, id, { amount: cents(6_290) }, AGORA);
+
+    const [assinatura] = (await buildSubscriptionsReport(alvo.userId, AGORA)).subscriptions;
+    assert.equal(assinatura.amountCents, 6_290);
+    assert.equal(assinatura.label?.id, rotulo, "o reajuste não pode zerar a classificação");
+    assert.equal(assinatura.cardId, alvo.cartaoId);
+  });
+
+  it("trocar o cartão pela conta limpa o cartão, para a cobrança não contar duas vezes", async () => {
+    const { createSubscription, updateSubscription, buildSubscriptionsReport } = await import(
+      "./subscriptions.ts"
+    );
+    const alvo = await ambiente();
+
+    const id = await createSubscription(
+      alvo.userId,
+      { description: "Jornal", amount: cents(3_000), scheduleDay: 5, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    await updateSubscription(alvo.userId, id, { accountId: alvo.contaId }, AGORA);
+
+    const [assinatura] = (await buildSubscriptionsReport(alvo.userId, AGORA)).subscriptions;
+    assert.equal(assinatura.cardId, null);
+    assert.equal(assinatura.accountId, alvo.contaId);
+  });
+
+  it("limpar a classificação é diferente de não mexer nela", async () => {
+    const { createLabel, createSubscription, updateSubscription, buildSubscriptionsReport } =
+      await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    const rotulo = await createLabel(alvo.userId, { name: "Streaming" }, AGORA);
+    const id = await createSubscription(
+      alvo.userId,
+      {
+        description: "Netflix",
+        amount: cents(5_590),
+        scheduleDay: 12,
+        cardId: alvo.cartaoId,
+        labelId: rotulo,
+      },
+      AGORA,
+    );
+
+    // Sem `clearLabel`, um patch de valor preserva a classificação.
+    await updateSubscription(alvo.userId, id, { amount: cents(5_990) }, AGORA);
+    assert.equal(
+      (await buildSubscriptionsReport(alvo.userId, AGORA)).subscriptions[0].label?.id,
+      rotulo,
+    );
+
+    await updateSubscription(alvo.userId, id, { clearLabel: true }, AGORA);
+    assert.equal((await buildSubscriptionsReport(alvo.userId, AGORA)).subscriptions[0].label, null);
+  });
+
+  it("cancelar a assinatura tira ela da lista", async () => {
+    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const { removeRecurrence } = await import("./recurrences.ts");
+    const alvo = await ambiente();
+
+    const id = await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    assert.equal(await removeRecurrence(alvo.userId, id), true);
+
+    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(relatorio.subscriptions.length, 0);
+    assert.equal(relatorio.totals.monthlyCents, 0);
+
+    // Segunda chamada não é erro: o botão pode ser clicado duas vezes.
+    assert.equal(await removeRecurrence(alvo.userId, id), false);
+  });
+
+  it("a assinatura de um usuário não é editável por outro", async () => {
+    const { createSubscription, updateSubscription } = await import("./subscriptions.ts");
+    const { removeRecurrence } = await import("./recurrences.ts");
+    const { signUp } = await import("./auth.ts");
+    const alvo = await ambiente();
+
+    const id = await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    const { user: outro } = await signUp({
+      email: "outro@fluxo.app",
+      password: "senha-de-teste-123",
+      displayName: "Outra Pessoa",
+    });
+
+    await assert.rejects(() => updateSubscription(outro.id, id, { amount: cents(1) }, AGORA));
+    assert.equal(await removeRecurrence(outro.id, id), false);
+  });
+});

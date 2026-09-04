@@ -144,6 +144,25 @@ export async function setRecurrenceActive(
 }
 
 /**
+ * Apaga a regra.
+ *
+ * O que ela já produziu **fica**: as ocorrências confirmadas viraram lançamento
+ * no razão e são fato, não previsão. Apagar a regra só interrompe o futuro —
+ * levar as transações junto reescreveria meses já fechados e faria o saldo
+ * mudar sozinho.
+ */
+export async function removeRecurrence(userId: string, recurrenceId: string): Promise<boolean> {
+  const rule = await findRecurrence(userId, recurrenceId);
+  if (!rule) return false;
+
+  const { eq, and } = await import("drizzle-orm");
+  await getDatabase()
+    .delete(recurrences)
+    .where(and(eq(recurrences.userId, userId), eq(recurrences.id, recurrenceId)));
+  return true;
+}
+
+/**
  * Confirma que a ocorrência aconteceu.
  *
  * Idempotente: a impressão digital é a chave da ocorrência, e o índice único

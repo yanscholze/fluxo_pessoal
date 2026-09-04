@@ -8,8 +8,9 @@
  * urgente, não a mais antiga.
  *
  * Concluir é um clique na própria linha. Um menu de situações com cinco opções
- * seria mais completo e mais lento — e "feito" é 90% do que se marca. As outras
- * situações continuam existindo na API para quando a tela de quadro existir.
+ * seria mais completo e mais lento — e "feito" é 90% do que se marca aqui, onde
+ * a pergunta é "o que falta neste projeto". As outras situações — fazendo,
+ * travado, revisão — se mexem no Quadro, que é a tela feita para isso.
  */
 
 import { useRouter } from "next/navigation";

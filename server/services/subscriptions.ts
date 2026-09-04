@@ -18,6 +18,7 @@
 
 import { and, desc, eq, isNull } from "drizzle-orm";
 
+import { assertValidSchedule } from "../../core/domain/recurrence/schedule.ts";
 import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
 import type { Cents } from "../../core/kernel/money.ts";
@@ -25,6 +26,7 @@ import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
 import { captureEvents, cards, recurrences, subscriptionLabels } from "../db/schema/index.ts";
+import { findAccount, findCard } from "../repositories/catalog.ts";
 
 /**
  * Classificações sugeridas na primeira vez.
@@ -205,6 +207,94 @@ export async function createSubscription(
   return id;
 }
 
+export type SubscriptionPatch = {
+  readonly description?: string | null;
+  readonly amount?: Cents | null;
+  readonly scheduleDay?: number | null;
+  readonly interval?: "monthly" | "yearly" | null;
+  readonly cardId?: string | null;
+  readonly accountId?: string | null;
+  readonly categoryId?: string | null;
+  readonly labelId?: string | null;
+  /** Enviado quando o usuário escolheu "sem classificação" de propósito. */
+  readonly clearLabel?: boolean;
+  readonly clearCategory?: boolean;
+};
+
+/**
+ * Ajusta uma assinatura já cadastrada.
+ *
+ * Reajuste de preço é a mudança mais comum e não pode exigir apagar e recriar:
+ * recriar perderia a classificação, o cartão e a data — e a assinatura nova
+ * apareceria no relatório como se fosse outro serviço.
+ *
+ * Trocar o cartão limpa a conta, e vice-versa: uma assinatura sai de um lugar
+ * só, e deixar os dois preenchidos faria a cobrança contar duas vezes na
+ * projeção.
+ */
+export async function updateSubscription(
+  userId: string,
+  recurrenceId: string,
+  patch: SubscriptionPatch,
+  now: Date = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+
+  const [existente] = await database
+    .select({ id: recurrences.id, role: recurrences.role })
+    .from(recurrences)
+    .where(and(eq(recurrences.userId, userId), eq(recurrences.id, recurrenceId)))
+    .limit(1);
+  if (!existente) throw notFound("Assinatura", recurrenceId);
+
+  if (patch.labelId) {
+    const rotulos = await listLabels(userId);
+    if (!rotulos.some((rotulo) => rotulo.id === patch.labelId)) {
+      throw notFound("Classificação", patch.labelId);
+    }
+  }
+
+  if (patch.cardId) {
+    const cartao = await findCard(userId, patch.cardId);
+    if (!cartao) throw notFound("Cartão", patch.cardId);
+    if (cartao.kind !== "credit") {
+      throw conflict("Assinatura no crédito exige um cartão de crédito");
+    }
+  }
+
+  if (patch.accountId) {
+    const conta = await findAccount(userId, patch.accountId);
+    if (!conta) throw notFound("Conta", patch.accountId);
+  }
+
+  if (patch.scheduleDay !== null && patch.scheduleDay !== undefined) {
+    assertValidSchedule({ scheduleMode: "day_of_month", scheduleDay: patch.scheduleDay });
+  }
+
+  const campos: Record<string, unknown> = { updatedAt: now.toISOString() };
+  if (patch.description) campos.description = patch.description.trim();
+  if (patch.amount !== null && patch.amount !== undefined) campos.amountCents = patch.amount;
+  if (patch.scheduleDay !== null && patch.scheduleDay !== undefined) campos.scheduleDay = patch.scheduleDay;
+  if (patch.interval) campos.interval = patch.interval;
+  if (patch.cardId) {
+    campos.cardId = patch.cardId;
+    campos.accountId = null;
+  }
+  if (patch.accountId) {
+    campos.accountId = patch.accountId;
+    campos.cardId = null;
+  }
+  if (patch.categoryId) campos.categoryId = patch.categoryId;
+  else if (patch.clearCategory) campos.categoryId = null;
+  if (patch.labelId) campos.subscriptionLabelId = patch.labelId;
+  else if (patch.clearLabel) campos.subscriptionLabelId = null;
+
+  await database
+    .update(recurrences)
+    .set(campos)
+    .where(and(eq(recurrences.userId, userId), eq(recurrences.id, recurrenceId)));
+}
+
 export async function setSubscriptionLabel(
   userId: string,
   recurrenceId: string,
@@ -241,6 +331,9 @@ export type SubscriptionRow = {
   readonly isActive: boolean;
   readonly cardId: string | null;
   readonly cardName: string | null;
+  /** Preenchida quando a cobrança é débito em conta, e não no cartão. */
+  readonly accountId: string | null;
+  readonly categoryId: string | null;
   readonly label: LabelView | null;
 };
 
@@ -319,6 +412,8 @@ export async function buildSubscriptionsReport(
         scheduleDay: recurrences.scheduleDay,
         isActive: recurrences.isActive,
         cardId: recurrences.cardId,
+        accountId: recurrences.accountId,
+        categoryId: recurrences.categoryId,
         labelId: recurrences.subscriptionLabelId,
       })
       .from(recurrences)
@@ -355,6 +450,8 @@ export async function buildSubscriptionsReport(
         isActive: linha.isActive,
         cardId: linha.cardId,
         cardName: linha.cardId ? (nomeDoCartao.get(linha.cardId) ?? null) : null,
+        accountId: linha.accountId,
+        categoryId: linha.categoryId,
         label: linha.labelId ? (porId.get(linha.labelId) ?? null) : null,
       };
     })
