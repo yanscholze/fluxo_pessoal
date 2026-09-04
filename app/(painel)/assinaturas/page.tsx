@@ -1,11 +1,14 @@
+import { listAccounts, listCards, listCategories } from "../../../server/repositories/catalog.ts";
 import { buildPlanningView } from "../../../server/services/planning.ts";
+import { buildSubscriptionsReport } from "../../../server/services/subscriptions.ts";
 import { currentUser } from "../../auth-context.ts";
 import { DonutChart, VIZ } from "../../ui/charts.tsx";
 import { DataTable, MetricStrip, Td, Timeline, type TimelineItem, Tr } from "../../ui/data-display.tsx";
 import { date, money, percent, relativeDay } from "../../ui/format.ts";
-import { Calendar, Layers, Repeat, Wallet } from "../../ui/icons.tsx";
+import { Calendar, Check, Layers, Repeat, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
+import { NewSubscription } from "./new-subscription.tsx";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
@@ -33,12 +36,22 @@ export default async function Assinaturas() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const view = await buildPlanningView(user.id);
+  const [view, relatorio, contas, cartoes, categorias] = await Promise.all([
+    buildPlanningView(user.id),
+    buildSubscriptionsReport(user.id),
+    listAccounts(user.id),
+    listCards(user.id),
+    listCategories(user.id),
+  ]);
   const { subscriptions } = view;
 
   const assinaturas = view.recurrences
     .filter((recorrencia) => recorrencia.role === "subscription")
     .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);
+
+  const classificacaoDe = new Map(
+    relatorio.subscriptions.map((assinatura) => [assinatura.id, assinatura.label]),
+  );
 
   const ativas = assinaturas.filter((assinatura) => assinatura.isActive);
   const total = ativas.reduce((soma, assinatura) => soma + assinatura.amountCents, 0);
@@ -58,6 +71,14 @@ export default async function Assinaturas() {
       <PageHeader
         title="Assinaturas"
         description="O que é cobrado todo mês sem você decidir nada. O custo anual está ao lado do mensal de propósito."
+        actions={
+          <NewSubscription
+            cards={cartoes}
+            accounts={contas.filter((conta) => conta.archivedAt === null)}
+            labels={relatorio.labels}
+            categories={categorias.filter((categoria) => categoria.kind === "expense")}
+          />
+        }
       />
 
       {assinaturas.length ? (
@@ -108,8 +129,9 @@ export default async function Assinaturas() {
                 caption="Assinaturas cadastradas"
                 columns={[
                   { key: "servico", header: "Serviço" },
-                  { key: "cobranca", header: "Cobrança", hideBelow: "md" },
-                  { key: "onde", header: "Sai de", hideBelow: "lg" },
+                  { key: "classificacao", header: "Classificação", hideBelow: "md" },
+                  { key: "cobranca", header: "Cobrança", hideBelow: "lg" },
+                  { key: "onde", header: "Sai de", hideBelow: "xl" },
                   { key: "proxima", header: "Próxima", align: "right", hideBelow: "sm" },
                   { key: "mensal", header: "Por mês", align: "right", width: "7rem" },
                   { key: "anual", header: "Por ano", align: "right", width: "8rem" },
@@ -133,11 +155,28 @@ export default async function Assinaturas() {
                       ) : null}
                     </Td>
 
-                    <Td hideBelow="md" className="text-body-sm text-ink-muted">
+                    <Td hideBelow="md">
+                      {classificacaoDe.get(assinatura.id) ? (
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: classificacaoDe.get(assinatura.id)?.color }}
+                            aria-hidden
+                          />
+                          <span className="truncate text-body-sm text-ink-muted">
+                            {classificacaoDe.get(assinatura.id)?.name}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-caption text-ink-subtle">sem classificação</span>
+                      )}
+                    </Td>
+
+                    <Td hideBelow="lg" className="text-body-sm text-ink-muted">
                       {assinatura.scheduleLabel}
                     </Td>
 
-                    <Td hideBelow="lg" className="truncate text-body-sm text-ink-muted">
+                    <Td hideBelow="xl" className="truncate text-body-sm text-ink-muted">
                       {assinatura.originName}
                     </Td>
 
@@ -225,6 +264,48 @@ export default async function Assinaturas() {
                   <Empty icon={Calendar} title="Nenhuma cobrança prevista" compact />
                 )}
               </Panel>
+
+              <Panel>
+                <PanelHeader
+                  title="Cobranças reconhecidas"
+                  icon={Check}
+                  hint="Não passam pela fila de captura"
+                />
+                {relatorio.recognized.length ? (
+                  <ul className="space-y-2.5">
+                    {relatorio.recognized.map((cobranca) => (
+                      <li key={cobranca.id} className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block truncate text-body-sm text-ink">
+                            {cobranca.subscriptionName ?? cobranca.description}
+                          </span>
+                          <span className="block text-caption text-ink-subtle">
+                            {date(cobranca.occurredOn)}
+                            {cobranca.expectedCents !== null
+                              ? ` · antes ${money(cobranca.expectedCents)}`
+                              : ""}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="tabular block text-body-sm text-ink">
+                            {money(cobranca.amountCents)}
+                          </span>
+                          {cobranca.expectedCents !== null ? (
+                            <Badge tone="caution">reajuste</Badge>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Empty
+                    icon={Check}
+                    title="Nenhuma cobrança reconhecida ainda"
+                    hint="Quando a captura identificar a cobrança de uma assinatura cadastrada, ela aparece aqui em vez de ir para a fila."
+                    compact
+                  />
+                )}
+              </Panel>
             </div>
           </div>
         </Stack>
@@ -233,7 +314,7 @@ export default async function Assinaturas() {
           <Empty
             icon={Repeat}
             title="Nenhuma assinatura cadastrada"
-            hint="Cadastre uma recorrência com o papel “assinatura” em Recorrências para ela aparecer aqui e entrar no custo mensal."
+            hint="Use “Nova assinatura” para cadastrar a primeira: o cartão escolhido é o que será debitado, e a classificação é o que separa streaming de IA no relatório do mês."
           />
         </Panel>
       )}

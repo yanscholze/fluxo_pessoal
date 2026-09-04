@@ -16,7 +16,7 @@
  * perder de vista.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
@@ -24,7 +24,7 @@ import type { Cents } from "../../core/kernel/money.ts";
 import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
-import { cards, recurrences, subscriptionLabels } from "../db/schema/index.ts";
+import { captureEvents, cards, recurrences, subscriptionLabels } from "../db/schema/index.ts";
 
 /**
  * Classificações sugeridas na primeira vez.
@@ -252,6 +252,25 @@ export type LabelTotal = {
   readonly sharePercent: number;
 };
 
+/**
+ * Uma cobrança que a captura reconheceu como sendo de assinatura conhecida.
+ *
+ * Não vai para a fila de revisão — a assinatura já está cadastrada, e pedir
+ * confirmação de uma cobrança esperada seria transformar rotina em tarefa. Mas
+ * ela também não pode sumir: é a prova de que a cobrança aconteceu, e é onde se
+ * enxerga um reajuste (o valor que chegou não bate com o cadastrado).
+ */
+export type RecognizedCharge = {
+  readonly id: string;
+  readonly description: string;
+  readonly amountCents: number;
+  readonly occurredOn: LocalDate;
+  readonly subscriptionId: string | null;
+  readonly subscriptionName: string | null;
+  /** Valor cadastrado, quando difere do cobrado — indício de reajuste. */
+  readonly expectedCents: number | null;
+};
+
 export type SubscriptionsReport = {
   readonly competence: Competence;
   readonly subscriptions: readonly SubscriptionRow[];
@@ -264,7 +283,12 @@ export type SubscriptionsReport = {
     readonly pausedCount: number;
   };
   readonly labels: readonly LabelView[];
+  /** Cobranças reconhecidas pela captura, da mais recente para a mais antiga. */
+  readonly recognized: readonly RecognizedCharge[];
 };
+
+/** Quantas cobranças reconhecidas a tela mostra. Além disso vira histórico. */
+const RECONHECIDAS = 12;
 
 /**
  * Custo mensal equivalente.
@@ -284,7 +308,7 @@ export async function buildSubscriptionsReport(
   const database = getDatabase();
   const hoje = todayIn(now);
 
-  const [rotulos, linhas, cartoes] = await Promise.all([
+  const [rotulos, linhas, cartoes, cobrancas] = await Promise.all([
     ensureLabels(userId, now),
     database
       .select({
@@ -300,6 +324,18 @@ export async function buildSubscriptionsReport(
       .from(recurrences)
       .where(and(eq(recurrences.userId, userId), eq(recurrences.role, "subscription"))),
     database.select({ id: cards.id, name: cards.name }).from(cards).where(eq(cards.userId, userId)),
+    database
+      .select({
+        id: captureEvents.id,
+        description: captureEvents.description,
+        amountCents: captureEvents.amountCents,
+        occurredOn: captureEvents.occurredOn,
+        subscriptionId: captureEvents.subscriptionId,
+      })
+      .from(captureEvents)
+      .where(and(eq(captureEvents.userId, userId), eq(captureEvents.status, "assinatura")))
+      .orderBy(desc(captureEvents.occurredOn))
+      .limit(RECONHECIDAS),
   ]);
 
   const nomeDoCartao = new Map(cartoes.map((cartao) => [cartao.id, cartao.name]));
@@ -351,6 +387,24 @@ export async function buildSubscriptionsReport(
     porCartao.set(assinatura.cardId, (porCartao.get(assinatura.cardId) ?? 0) + assinatura.monthlyCents);
   }
 
+  const porRecorrencia = new Map(subscriptions.map((assinatura) => [assinatura.id, assinatura]));
+  const recognized: RecognizedCharge[] = cobrancas.map((cobranca) => {
+    const assinatura = cobranca.subscriptionId
+      ? (porRecorrencia.get(cobranca.subscriptionId) ?? null)
+      : null;
+    return {
+      id: cobranca.id,
+      description: cobranca.description,
+      amountCents: cobranca.amountCents,
+      occurredOn: cobranca.occurredOn as LocalDate,
+      subscriptionId: cobranca.subscriptionId,
+      subscriptionName: assinatura?.description ?? null,
+      // Só é reajuste se houver o que comparar e os valores divergirem.
+      expectedCents:
+        assinatura && assinatura.amountCents !== cobranca.amountCents ? assinatura.amountCents : null,
+    };
+  });
+
   return {
     competence: competenceOf(hoje),
     subscriptions,
@@ -369,5 +423,6 @@ export async function buildSubscriptionsReport(
       pausedCount: subscriptions.length - ativas.length,
     },
     labels: rotulos,
+    recognized,
   };
 }

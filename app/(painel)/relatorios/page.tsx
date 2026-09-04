@@ -1,26 +1,16 @@
 import Link from "next/link";
-import { type ReportPeriod, buildReport } from "../../../server/services/reports.ts";
+import { buildReport } from "../../../server/services/reports.ts";
 import { currentUser } from "../../auth-context.ts";
 import { ChartFrame, DonutChart, LineChart, VIZ, chartColor } from "../../ui/charts.tsx";
 import { Breakdown, MetricStrip } from "../../ui/data-display.tsx";
 import { competenceShort, money, percent } from "../../ui/format.ts";
 import { ArrowDownRight, ArrowUpRight, Download, PiggyBank, Scale, Sparkles } from "../../ui/icons.tsx";
-import { Page, PageHeader, Stack, Toolbar } from "../../ui/page-frame.tsx";
+import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { PeriodFilter, parsePeriodo } from "./period-filter.tsx";
+import { ReportNav } from "./report-nav.tsx";
 import { Empty, Meter, Panel, PanelHeader } from "../../ui/primitives.tsx";
 
 export const dynamic = "force-dynamic";
-
-const PERIODOS: readonly [ReportPeriod, string][] = [
-  ["mes", "Mês"],
-  ["3m", "3 meses"],
-  ["6m", "6 meses"],
-  ["12m", "1 ano"],
-  ["todos", "Tudo"],
-];
-
-function periodoValido(valor: string | undefined): ReportPeriod {
-  return PERIODOS.some(([chave]) => chave === valor) ? (valor as ReportPeriod) : "6m";
-}
 
 /**
  * Relatórios.
@@ -44,7 +34,7 @@ export default async function Relatorios({
   if (!user) return null;
 
   const params = await searchParams;
-  const periodo = periodoValido(params.periodo);
+  const periodo = parsePeriodo(params.periodo);
   const report = await buildReport(user.id, periodo);
 
   const maiorCategoria = report.expensesByCategory[0]?.amountCents ?? 1;
@@ -57,22 +47,10 @@ export default async function Relatorios({
         title="Relatórios"
         description={`${report.indicators.transactionCount} lançamentos no período.`}
       >
-        <Toolbar>
-          {PERIODOS.map(([chave, rotulo]) => (
-            <Link
-              key={chave}
-              href={`/relatorios?periodo=${chave}`}
-              aria-current={periodo === chave ? "page" : undefined}
-              className={`inline-flex h-8 shrink-0 items-center rounded-md border px-3 text-body-sm font-medium transition-colors ${
-                periodo === chave
-                  ? "border-accent-edge bg-accent-wash text-accent"
-                  : "border-line-strong bg-surface text-ink-muted hover:bg-surface-inset hover:text-ink"
-              }`}
-            >
-              {rotulo}
-            </Link>
-          ))}
-        </Toolbar>
+        <ReportNav />
+        <div className="mt-3">
+          <PeriodFilter base="/relatorios" atual={periodo} />
+        </div>
       </PageHeader>
 
       <Stack gap="lg">

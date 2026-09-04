@@ -196,14 +196,15 @@ export type Column = {
   /** Valores numéricos alinham à direita — é o que permite comparar a coluna. */
   readonly align?: "left" | "right";
   readonly width?: string;
-  /** Some abaixo de `sm`. Use para coluna de contexto, nunca para a essencial. */
-  readonly hideBelow?: "sm" | "md" | "lg";
+  /** Some abaixo do ponto dado. Use para coluna de contexto, nunca para a essencial. */
+  readonly hideBelow?: "sm" | "md" | "lg" | "xl";
 };
 
 const ESCONDE: Record<string, string> = {
   sm: "hidden sm:table-cell",
   md: "hidden md:table-cell",
   lg: "hidden lg:table-cell",
+  xl: "hidden xl:table-cell",
 };
 
 /**
@@ -276,7 +277,7 @@ export function Td({
 }: {
   children: ReactNode;
   align?: "left" | "right";
-  hideBelow?: "sm" | "md" | "lg";
+  hideBelow?: "sm" | "md" | "lg" | "xl";
   className?: string;
   colSpan?: number;
 }) {

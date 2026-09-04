@@ -288,3 +288,209 @@ export function toCsv(report: Report, rows: readonly CategoryBreakdown[]): strin
     ),
   ].join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Relatórios detalhados
+//
+// O resumo geral responde "como foi o período". Estes respondem "por quê" — e
+// por isso descem ao lançamento, que o resumo não faz. São leituras sobre o
+// mesmo razão, com o mesmo recorte de período: se um número daqui discordasse
+// do resumo, um dos dois estaria errado.
+// ---------------------------------------------------------------------------
+
+export type DetailRow = {
+  readonly id: string;
+  readonly description: string;
+  readonly occurredOn: LocalDate;
+  readonly competence: Competence;
+  readonly amountCents: number;
+  readonly categoryName: string | null;
+  readonly categoryColor: string | null;
+  readonly originName: string;
+  readonly originKind: "account" | "card";
+};
+
+export type GroupTotal = {
+  readonly key: string;
+  readonly name: string;
+  readonly color: string | null;
+  readonly amountCents: number;
+  readonly percent: number;
+  readonly count: number;
+  /** Média por mês do período, para comparar recortes de tamanhos diferentes. */
+  readonly monthlyAverageCents: number;
+};
+
+export type DetailedReport = {
+  readonly period: ReportPeriod;
+  readonly from: Competence;
+  readonly to: Competence;
+  readonly today: LocalDate;
+  readonly months: number;
+  readonly totalCents: number;
+  readonly monthlyAverageCents: number;
+  readonly monthly: readonly MonthlyPoint[];
+  readonly byCategory: readonly GroupTotal[];
+  /** Onde o dinheiro passou: conta ou cartão. */
+  readonly byOrigin: readonly GroupTotal[];
+  /** Os maiores lançamentos do período. É onde a explicação costuma estar. */
+  readonly largest: readonly DetailRow[];
+  readonly transactionCount: number;
+};
+
+function agrupar(
+  linhas: readonly DetailRow[],
+  chave: (linha: DetailRow) => { key: string; name: string; color: string | null },
+  meses: number,
+): GroupTotal[] {
+  const total = linhas.reduce((soma, linha) => soma + linha.amountCents, 0);
+  const mapa = new Map<string, { name: string; color: string | null; amount: number; count: number }>();
+
+  for (const linha of linhas) {
+    const { key, name, color } = chave(linha);
+    const atual = mapa.get(key) ?? { name, color, amount: 0, count: 0 };
+    mapa.set(key, { ...atual, amount: atual.amount + linha.amountCents, count: atual.count + 1 });
+  }
+
+  return [...mapa]
+    .map(([key, valores]) => ({
+      key,
+      name: valores.name,
+      color: valores.color,
+      amountCents: valores.amount,
+      percent: total > 0 ? (valores.amount / total) * 100 : 0,
+      count: valores.count,
+      monthlyAverageCents: meses > 0 ? Math.round(valores.amount / meses) : valores.amount,
+    }))
+    .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);
+}
+
+/** Quantos lançamentos entram na lista dos maiores. */
+const MAIORES = 15;
+
+/**
+ * Despesas ou receitas do período, detalhadas.
+ *
+ * O mesmo cálculo serve aos dois: o que muda é o `kind` filtrado. Duplicar a
+ * função para "renda" faria os dois relatórios divergirem no primeiro ajuste de
+ * recorte.
+ */
+export async function buildDetailedReport(
+  userId: string,
+  kind: "expense" | "income",
+  period: ReportPeriod = "6m",
+  now: Date = new Date(),
+): Promise<DetailedReport> {
+  const today = todayIn(now);
+  const to = competenceOf(today);
+
+  const [accounts, cards, categories, entries, index] = await Promise.all([
+    listAccounts(userId),
+    listCards(userId),
+    listCategories(userId),
+    loadLedger(userId),
+    transactionIndex(userId),
+  ]);
+
+  const from = resolveStart(period, to, entries);
+  const competences = range(from, to);
+  const dentroDoPeriodo = new Set(competences);
+  const liquidIds = new Set(liquidAccounts(accounts).map((account) => account.id));
+  const openingByAccount = new Map(accounts.map((account) => [account.id, account.openingBalance]));
+
+  const nomeDaConta = new Map(accounts.map((conta) => [conta.id, conta.name]));
+  const nomeDoCartao = new Map(cards.map((cartao) => [cartao.id, cartao.name]));
+  const categoriaPorId = new Map(categories.map((categoria) => [categoria.id, categoria]));
+
+  const monthly: MonthlyPoint[] = competences.map((competence) => {
+    const totais = flow(entries, {
+      accountIds: liquidIds,
+      competence,
+      states: ["confirmed"],
+      kinds: CONSUMPTION,
+    });
+
+    const fimDoMes = lastDayOfMonth(`${competence}-01` as LocalDate);
+    const saldo = [...liquidIds].reduce(
+      (soma, accountId) =>
+        soma + accountBalance(entries, accountId, fimDoMes, (openingByAccount.get(accountId) ?? 0) as Cents),
+      0,
+    );
+
+    return {
+      competence,
+      incomeCents: totais.inflow,
+      expenseCents: totais.outflow,
+      netCents: totais.net,
+      balanceCents: saldo,
+    };
+  });
+
+  /**
+   * As linhas vêm do índice de lançamentos, não do razão.
+   *
+   * Categoria e descrição são propriedades do **fato**; a movimentação fala de
+   * dinheiro, não de significado. Um relatório montado sobre o razão precisaria
+   * voltar ao fato para cada linha, e a transferência entre contas próprias
+   * apareceria duas vezes.
+   */
+  const linhas: DetailRow[] = [];
+  for (const [transactionId, meta] of index) {
+    if (meta.kind !== kind) continue;
+
+    const movimentacoes = entries.filter((entry) => entry.transactionId === transactionId);
+    const primeira = movimentacoes[0];
+    if (!primeira || !dentroDoPeriodo.has(primeira.competence)) continue;
+    if (primeira.state !== "confirmed") continue;
+
+    const categoria = meta.categoryId ? categoriaPorId.get(meta.categoryId) : undefined;
+    const origem =
+      primeira.party.kind === "card"
+        ? { name: nomeDoCartao.get(primeira.party.cardId) ?? "Cartão", kind: "card" as const }
+        : { name: nomeDaConta.get(primeira.party.accountId) ?? "Conta", kind: "account" as const };
+
+    linhas.push({
+      id: transactionId,
+      description: meta.description,
+      occurredOn: primeira.effectiveOn,
+      competence: primeira.competence,
+      amountCents: Math.abs(primeira.amount),
+      categoryName: categoria?.name ?? null,
+      categoryColor: categoria?.color ?? null,
+      originName: origem.name,
+      originKind: origem.kind,
+    });
+  }
+
+  const total = linhas.reduce((soma, linha) => soma + linha.amountCents, 0);
+  const meses = competences.length;
+
+  return {
+    period,
+    from,
+    to,
+    today,
+    months: meses,
+    totalCents: total,
+    monthlyAverageCents: meses > 0 ? Math.round(total / meses) : total,
+    monthly,
+    byCategory: agrupar(
+      linhas,
+      (linha) => ({
+        key: linha.categoryName ?? "sem-categoria",
+        name: linha.categoryName ?? "Sem categoria",
+        color: linha.categoryColor,
+      }),
+      meses,
+    ),
+    byOrigin: agrupar(
+      linhas,
+      (linha) => ({ key: `${linha.originKind}:${linha.originName}`, name: linha.originName, color: null }),
+      meses,
+    ),
+    largest: [...linhas]
+      .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents)
+      .slice(0, MAIORES),
+    transactionCount: linhas.length,
+  };
+}
