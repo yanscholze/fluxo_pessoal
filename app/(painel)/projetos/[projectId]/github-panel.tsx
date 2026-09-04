@@ -10,14 +10,132 @@
  *
  * Quando não há token de leitura no ambiente, o painel diz isso em vez de
  * fingir que o repositório está vazio.
+ *
+ * Com token, vincular é escolher de uma lista em vez de colar uma URL. Colar
+ * erra — erra o dono, erra o hífen, erra o repositório parecido — e o erro só
+ * aparece depois, como "repositório não encontrado" numa tela que deveria
+ * mostrar commits.
  */
 
 import { useEffect, useState } from "react";
 
 import { parseGithubRepository, repositoryLinks } from "../../../../core/domain/work/repository.ts";
 import type { RepositoryActivity } from "../../../../server/services/github.ts";
-import { ExternalLink, Github } from "../../../ui/icons.tsx";
-import { Badge, Empty, Panel, PanelHeader } from "../../../ui/primitives.tsx";
+import { useRouter } from "next/navigation";
+
+import { Button, Select } from "../../../ui/controls.tsx";
+import { ExternalLink, Github, Link2 } from "../../../ui/icons.tsx";
+import { Badge, Empty, Notice, Panel, PanelHeader } from "../../../ui/primitives.tsx";
+
+type Disponivel = {
+  readonly slug: string;
+  readonly url: string;
+  readonly defaultBranch: string;
+  readonly isPrivate: boolean;
+};
+
+/**
+ * Escolher o repositório de uma lista.
+ *
+ * Só aparece com token: sem ele não há lista, e o campo de texto da ficha do
+ * projeto continua sendo o caminho — que é como sempre funcionou.
+ */
+function VincularRepositorio({
+  projectId,
+  atual,
+}: {
+  projectId: string;
+  atual: string | null;
+}) {
+  const router = useRouter();
+  const [lista, setLista] = useState<readonly Disponivel[] | null>(null);
+  const [escolhido, setEscolhido] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    fetch("/api/v1/github/repositories")
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((corpo) => {
+        if (cancelado) return;
+        const dados = corpo?.data as { repositories?: Disponivel[] } | undefined;
+        setLista(dados?.repositories ?? []);
+      })
+      .catch(() => {
+        if (!cancelado) setLista([]);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  async function vincular() {
+    const repo = lista?.find((item) => item.slug === escolhido);
+    if (!repo) return;
+
+    setEnviando(true);
+    setErro(null);
+
+    const resposta = await fetch(`/api/v1/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      // O ramo padrão vem junto: é o que a atividade consulta, e deixá-lo em
+      // branco faria a tela buscar commits de `main` num repositório que usa
+      // `master` — e mostrar vazio como se não houvesse trabalho.
+      body: JSON.stringify({ repositoryUrl: repo.url, mainBranch: repo.defaultBranch }),
+    });
+
+    setEnviando(false);
+
+    if (!resposta.ok) {
+      const corpo = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(corpo.error?.message ?? "Não foi possível vincular o repositório.");
+      return;
+    }
+
+    router.refresh();
+  }
+
+  if (lista === null) return <p className="text-caption text-ink-subtle">Carregando repositórios…</p>;
+  if (lista.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        <Select
+          aria-label="Repositório do GitHub"
+          value={escolhido}
+          onChange={(evento) => setEscolhido(evento.target.value)}
+        >
+          <option value="">
+            {atual ? "Trocar por…" : `Escolher entre ${lista.length} repositórios`}
+          </option>
+          {lista.map((repo) => (
+            <option key={repo.slug} value={repo.slug}>
+              {repo.slug}
+              {repo.isPrivate ? " (privado)" : ""}
+            </option>
+          ))}
+        </Select>
+
+        <Button
+          variant="secondary"
+          icon={Link2}
+          busy={enviando}
+          disabled={!escolhido}
+          onClick={vincular}
+        >
+          Vincular
+        </Button>
+      </div>
+
+      {erro ? <Notice tone="negative">{erro}</Notice> : null}
+    </div>
+  );
+}
 
 const MOTIVO: Record<string, string> = {
   "sem-token":
@@ -81,9 +199,12 @@ export function GithubPanel({
         <Empty
           icon={Github}
           title="Nenhum repositório do GitHub"
-          hint="Cadastre o endereço do repositório na ficha do projeto para ter os atalhos e a atividade aqui."
+          hint="Escolha um da lista abaixo, ou cadastre o endereço na ficha do projeto."
           compact
         />
+        <div className="mt-3">
+          <VincularRepositorio projectId={projectId} atual={null} />
+        </div>
       </Panel>
     );
   }
@@ -120,6 +241,10 @@ export function GithubPanel({
             {link.label}
           </a>
         ))}
+      </div>
+
+      <div className="mt-3">
+        <VincularRepositorio projectId={projectId} atual={repo.slug} />
       </div>
 
       {atividade === null ? (

@@ -1,3 +1,4 @@
+import { Integrations } from "./integrations.tsx";
 import { listCategories } from "../../../server/repositories/catalog.ts";
 import { listDeviceSessions } from "../../../server/auth/session.ts";
 import { currentUser } from "../../auth-context.ts";
@@ -69,6 +70,11 @@ export default async function Configuracoes() {
                 <Appearance />
               </Panel>
             ),
+          },
+          {
+            value: "integracoes",
+            label: "Integrações",
+            content: <Integrations />,
           },
           {
             value: "seguranca",

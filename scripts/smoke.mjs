@@ -664,6 +664,7 @@ async function main() {
     "/projetos",
     "/projetos/quadro",
     "/projetos/agenda",
+    "/projetos/horas",
     "/importar",
     "/automaticos",
     "/conectar",

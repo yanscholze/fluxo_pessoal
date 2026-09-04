@@ -65,7 +65,16 @@ npx wrangler secret put GITHUB_TOKEN --config dist/server/wrangler.json
 | Segredo | Liga | Permissão mínima |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | Assistente e leitura de comprovante | — |
-| `GITHUB_TOKEN` | Commits, PRs e issues na tela do projeto | leitura de repositórios (`repo` só se forem privados) |
+| `GITHUB_TOKEN` | Lista de repositórios para vincular, commits, PRs e issues | leitura: Contents, Issues, Pull requests |
+
+No desenvolvimento local os mesmos segredos vão em `.dev.vars` na raiz — o
+Wrangler o lê e expõe cada linha como `env.NOME`, o mesmo caminho do
+`wrangler secret put`. Há um `.dev.vars.example` para copiar; `.dev.vars` é
+ignorado pelo git.
+
+A aba **Integrações**, em Configurações, mostra se cada segredo pegou. Sem ela,
+quem acabou de configurar descobre pelo silêncio — e não sabe se o token está
+errado, ausente ou sem permissão.
 
 Segredo do Worker, **nunca** coluna no banco. O Fluxo guarda dado financeiro de
 uma pessoa; um vazamento dele não pode virar acesso de escrita ao código de

@@ -21,7 +21,10 @@
  */
 
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+import { ACTIVITIES } from "../../../core/domain/work/activity.ts";
+import { PROJECT_STATUSES } from "../../../core/domain/work/status.ts";
 
 import { users } from "./identity.ts";
 import { transactions } from "./ledger.ts";
@@ -72,14 +75,20 @@ export const projects = sqliteTable(
     name: text("name").notNull(),
     description: text("description"),
     /**
-     * Situação. `support` é o projeto entregue que segue recebendo correção;
+     * Situação.
+     *
+     * O miolo é a fase do trabalho: `active` (em desenvolvimento), `testing`,
+     * `adjustments` e `delivered`. Separar testes de ajustes importa porque são
+     * esperas diferentes — em testes o trabalho está com você, em ajustes ele
+     * voltou depois de alguém olhar.
+     *
+     * Ao redor dele: `support` é o entregue que segue recebendo correção;
      * `paused` é o que parou por decisão; `waiting_client` é o que parou
      * esperando resposta — separá-los é o que permite saber se o gargalo é seu
-     * ou do cliente.
+     * ou do cliente. `done` é o encerrado, que sai da lista de abertos e vira
+     * histórico.
      */
-    status: text("status", {
-      enum: ["lead", "proposal", "active", "waiting_client", "paused", "delivered", "support", "done", "cancelled"],
-    })
+    status: text("status", { enum: PROJECT_STATUSES })
       .notNull()
       .default("active"),
     priority: text("priority", { enum: ["low", "normal", "high", "urgent"] })
@@ -192,19 +201,79 @@ export const timeEntries = sqliteTable(
     durationMilli: integer("duration_milli").notNull(),
     description: text("description").notNull(),
     /**
+     * Em que o tempo foi gasto.
+     *
+     * É o que transforma "80 horas neste projeto" em informação sobre a qual dá
+     * para decidir: oitenta de desenvolvimento é um projeto que rendeu; oitenta
+     * com trinta de correção de bug é um projeto mal orçado.
+     */
+    activity: text("activity", { enum: ACTIVITIES })
+      .notNull()
+      .default("development"),
+    /**
      * Cobrável. Independente da tarefa: uma sessão de retrabalho numa tarefa
      * cobrável pode não ser cobrada, e a decisão é por sessão.
      */
     billable: integer("billable", { mode: "boolean" }).notNull().default(true),
-    /** Valor/hora do momento. Congelado: reajuste não reescreve o passado. */
-    rateCents: integer("rate_cents").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
     index("time_entries_user_project_idx").on(table.userId, table.projectId),
     index("time_entries_user_date_idx").on(table.userId, table.workedOn),
+    index("time_entries_user_activity_idx").on(table.userId, table.activity),
   ],
 );
+
+/**
+ * Proposta e contrato do projeto, guardados de verdade.
+ *
+ * Guardar o arquivo, e não só um link, porque o link some: a proposta que
+ * mora no Drive de alguém deixa de abrir quando a pasta é reorganizada, e é
+ * justamente no dia da discussão sobre escopo que ela precisa abrir.
+ *
+ * O conteúdo binário fica numa tabela à parte da linha de metadados porque
+ * listar os documentos de um projeto não pode arrastar os megabytes de todos
+ * eles junto — a listagem lê só esta tabela.
+ */
+export const projectDocuments = sqliteTable(
+  "project_documents",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Proposta, contrato, ou qualquer outro papel do projeto. */
+    kind: text("kind", { enum: ["proposal", "contract", "other"] })
+      .notNull()
+      .default("other"),
+    /** Nome original do arquivo, como o usuário o reconhece. */
+    name: text("name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    notes: text("notes"),
+    uploadedAt: text("uploaded_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("project_documents_user_project_idx").on(table.userId, table.projectId),
+  ],
+);
+
+/**
+ * O conteúdo do documento.
+ *
+ * Separado dos metadados de propósito: a tela do projeto lista nome, tipo e
+ * tamanho de cada papel sem tocar em um único byte de conteúdo.
+ */
+export const projectDocumentBlobs = sqliteTable("project_document_blobs", {
+  documentId: text("document_id")
+    .primaryKey()
+    .references(() => projectDocuments.id, { onDelete: "cascade" }),
+  content: blob("content").notNull(),
+});
 
 /** Proposta enviada ao cliente. */
 export const proposals = sqliteTable(

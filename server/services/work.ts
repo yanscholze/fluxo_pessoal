@@ -15,7 +15,19 @@
 import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
 import { type Cents, cents } from "../../core/kernel/money.ts";
 import { newId } from "../../core/kernel/id.ts";
-import { type Milli, milli } from "../../core/domain/work/hours.ts";
+import { type Activity, toActivity } from "../../core/domain/work/activity.ts";
+import { isOpenStatus } from "../../core/domain/work/status.ts";
+
+/** Fases em que o trabalho está acontecendo — ou seja, ainda não foi entregue. */
+const VOLTOU_AO_TRABALHO: readonly string[] = ["active", "testing", "adjustments"];
+import { type Milli, milli, sumMilli } from "../../core/domain/work/hours.ts";
+import {
+  type ActivityTotal,
+  averageHoursPerProject,
+  buildTimesheet,
+  type SessionLike,
+  type Timesheet,
+} from "../../core/domain/work/timesheet.ts";
 import {
   type ProjectHealth,
   evaluateProject,
@@ -49,10 +61,10 @@ import {
   listTimeEntries,
   recordEvent,
 } from "../repositories/work.ts";
+import { listDocuments } from "./documents.ts";
 import { recordTransaction } from "./transactions.ts";
 
-/** As situações que contam como "projeto de pé". */
-const EM_ANDAMENTO: readonly ProjectRow["status"][] = ["active", "waiting_client", "support"];
+
 
 function paraDominio(rows: readonly PaymentRow[]): PaymentLike[] {
   return rows.map((row) => ({
@@ -67,7 +79,18 @@ function esforcoParaDominio(rows: readonly TimeEntryRow[]): TimeEntryLike[] {
   return rows.map((row) => ({
     duration: row.durationMilli as Milli,
     billable: row.billable,
-    rate: cents(row.rateCents),
+  }));
+}
+
+/** As sessões do jeito que o relatório de horas precisa delas. */
+function sessoesParaDominio(rows: readonly TimeEntryRow[]): SessionLike[] {
+  return rows.map((row) => ({
+    id: row.id,
+    workedOn: row.workedOn as LocalDate,
+    duration: row.durationMilli as Milli,
+    activity: toActivity(row.activity),
+    billable: row.billable,
+    description: row.description,
   }));
 }
 
@@ -284,8 +307,18 @@ export async function updateProjectStatus(
     .set({
       status,
       // Entregar carimba a data: é ela que decide se o prazo foi cumprido, e
-      // deduzi-la depois pelo histórico seria adivinhação.
-      ...(status === "delivered" && !projeto.deliveredOn ? { deliveredOn: todayIn(now) } : {}),
+      // deduzi-la depois pelo histórico seria adivinhação. Concluir carimba
+      // também, quando ninguém marcou a entrega antes — encerrar um projeto
+      // que nunca foi entregue deixaria o prazo em aberto para sempre.
+      // Cancelar não carimba: cancelado não é entregue.
+      ...((status === "delivered" || status === "done") && !projeto.deliveredOn
+        ? { deliveredOn: todayIn(now) }
+        : {}),
+      // Voltar para uma fase de trabalho limpa a data: um projeto que voltou
+      // para ajustes **não está** entregue agora, e manter o carimbo o tiraria
+      // do radar de atraso — o prazo pararia de ser cobrado justamente quando
+      // voltou a existir. O histórico da entrega fica no registro de eventos.
+      ...(VOLTOU_AO_TRABALHO.includes(status) && projeto.deliveredOn ? { deliveredOn: null } : {}),
       updatedAt: now.toISOString(),
     })
     .where(and(eq(projects.userId, userId), eq(projects.id, projectId)));
@@ -387,9 +420,8 @@ export type TimeEntryInput = {
   readonly workedOn: LocalDate;
   readonly duration: Milli;
   readonly description: string;
+  readonly activity?: Activity;
   readonly billable?: boolean;
-  /** Sem valor informado, herda o do projeto. */
-  readonly rate?: Cents | null;
 };
 
 export async function logTime(
@@ -424,17 +456,87 @@ export async function logTime(
       workedOn: input.workedOn,
       durationMilli: duracao,
       description: input.description.trim(),
+      activity: input.activity ?? "development",
       billable: input.billable ?? true,
-      // Congelado no registro: reajustar o valor/hora do projeto não pode
-      // reescrever o que já foi trabalhado por outro preço.
-      rateCents: input.rate ?? projeto.hourlyRateCents,
     });
 
   return id;
 }
 
+/**
+ * Corrige uma sessão já lançada.
+ *
+ * Lançar hora errada é a regra, não a exceção: registra-se no fim do dia, de
+ * memória, e no dia seguinte se percebe que foram três horas e não duas. Sem
+ * correção, o jeito de consertar seria apagar e relançar — e aí o relatório de
+ * um projeto entregue nunca fecha com o que aconteceu.
+ *
+ * Só o que vem preenchido muda. Passar o objeto inteiro obrigaria a tela a
+ * reenviar campos que ninguém tocou, e um deles chegaria errado.
+ */
+export async function updateTimeEntry(
+  userId: string,
+  entryId: string,
+  patch: {
+    readonly workedOn?: LocalDate | null;
+    readonly duration?: Milli | null;
+    readonly description?: string | null;
+    readonly activity?: Activity | null;
+    readonly billable?: boolean | null;
+    readonly taskId?: string | null;
+    readonly clearTask?: boolean;
+  },
+  now: Date = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+
+  const [existente] = await database
+    .select({ id: timeEntries.id })
+    .from(timeEntries)
+    .where(and(eq(timeEntries.userId, userId), eq(timeEntries.id, entryId)))
+    .limit(1);
+  if (!existente) throw notFound("Sessão de trabalho", entryId);
+
+  if (patch.workedOn && patch.workedOn > todayIn(now)) {
+    throw validationError("Não dá para registrar trabalho no futuro", [
+      { path: "workedOn", message: "Informe a data em que o trabalho aconteceu" },
+    ]);
+  }
+
+  const campos: Record<string, unknown> = { updatedAt: now.toISOString() };
+  if (patch.workedOn) campos.workedOn = patch.workedOn;
+  if (patch.duration !== null && patch.duration !== undefined) {
+    const duracao = milli(patch.duration);
+    if (duracao === 0) {
+      throw validationError("Informe quanto tempo levou", [
+        { path: "duration", message: "A duração precisa ser maior que zero" },
+      ]);
+    }
+    campos.durationMilli = duracao;
+  }
+  if (patch.description) campos.description = patch.description.trim();
+  if (patch.activity) campos.activity = patch.activity;
+  if (patch.billable !== null && patch.billable !== undefined) campos.billable = patch.billable;
+  if (patch.taskId) campos.taskId = patch.taskId;
+  else if (patch.clearTask) campos.taskId = null;
+
+  await database
+    .update(timeEntries)
+    .set(campos)
+    .where(and(eq(timeEntries.userId, userId), eq(timeEntries.id, entryId)));
+}
+
+/**
+ * Apaga uma sessão.
+ *
+ * Apaga de verdade, sem histórico: hora lançada por engano não é fato do
+ * projeto, é digitação errada. Guardá-la marcada como excluída faria toda
+ * soma precisar lembrar de filtrar — e uma que esquecesse cobraria o cliente
+ * por um tempo que nunca existiu.
+ */
 export async function removeTimeEntry(userId: string, entryId: string): Promise<boolean> {
   const database = getDatabase();
+
   const [existente] = await database
     .select({ id: timeEntries.id })
     .from(timeEntries)
@@ -447,6 +549,7 @@ export async function removeTimeEntry(userId: string, entryId: string): Promise<
     .where(and(eq(timeEntries.userId, userId), eq(timeEntries.id, entryId)));
   return true;
 }
+
 
 // ---------------------------------------------------------------------------
 // Cobrança
@@ -752,7 +855,7 @@ export async function buildWorkOverview(userId: string, now: Date = new Date()):
     today,
     projects: projectSummaries,
     totals: {
-      activeProjects: projectSummaries.filter((projeto) => EM_ANDAMENTO.includes(projeto.status)).length,
+      activeProjects: projectSummaries.filter((projeto) => isOpenStatus(projeto.status)).length,
       contractedCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.contracted, 0),
       receivedCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.received, 0),
       pendingCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.pending, 0),
@@ -772,6 +875,7 @@ export type ProjectDetail = {
   readonly entries: Awaited<ReturnType<typeof listTimeEntries>>;
   readonly payments: Awaited<ReturnType<typeof listPayments>>;
   readonly proposals: Awaited<ReturnType<typeof listProposals>>;
+  readonly documents: Awaited<ReturnType<typeof listDocuments>>;
   readonly deployments: Awaited<ReturnType<typeof listDeployments>>;
   readonly events: Awaited<ReturnType<typeof listEvents>>;
 };
@@ -785,7 +889,7 @@ export async function buildProjectDetail(
   if (!projeto) throw notFound("Projeto", projectId);
 
   const today = todayIn(now);
-  const [tasks, entries, payments, propostas, deployments, events, listaClientes] = await Promise.all([
+  const [tasks, entries, payments, propostas, deployments, events, listaClientes, documents] = await Promise.all([
     listTasks(userId, projectId),
     listTimeEntries(userId, projectId),
     listPayments(userId, projectId),
@@ -793,6 +897,7 @@ export async function buildProjectDetail(
     listDeployments(userId, projectId),
     listEvents(userId, projectId),
     listClients(userId, true),
+    listDocuments(userId, projectId),
   ]);
 
   return {
@@ -815,6 +920,7 @@ export async function buildProjectDetail(
     entries,
     payments,
     proposals: propostas,
+    documents,
     deployments,
     events,
   };
@@ -1052,5 +1158,154 @@ export async function buildAgenda(userId: string, now: Date = new Date()): Promi
   return {
     today,
     items: itens.sort((esquerda, direita) => esquerda.on.localeCompare(direita.on)),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Relatório de horas
+// ---------------------------------------------------------------------------
+
+export type SessionRow = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly clientName: string | null;
+  readonly workedOn: LocalDate;
+  readonly durationMilli: number;
+  readonly activity: Activity;
+  readonly billable: boolean;
+  readonly description: string;
+  readonly taskId: string | null;
+  readonly taskTitle: string | null;
+};
+
+export type ProjectTimesheet = {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly clientName: string | null;
+  readonly status: ProjectRow["status"];
+  readonly isOpen: boolean;
+  readonly contractedCents: number;
+  readonly plannedRateCents: number;
+  readonly estimatedMilli: number;
+  readonly summary: Timesheet;
+};
+
+export type TimesheetReport = {
+  readonly today: LocalDate;
+  /** Um relatório por projeto que teve tempo lançado, do maior para o menor. */
+  readonly projects: readonly ProjectTimesheet[];
+  readonly sessions: readonly SessionRow[];
+  readonly totals: {
+    readonly worked: Milli;
+    readonly billableWorked: Milli;
+    readonly sessions: number;
+    readonly revenueCents: number;
+    /** Receita total ÷ horas totais. `null` sem horas. */
+    readonly effectiveRateCents: number | null;
+    /** Média de horas entre os projetos que tiveram tempo lançado. */
+    readonly averageHoursPerProject: number;
+    readonly byActivity: readonly ActivityTotal[];
+  };
+};
+
+/**
+ * O relatório de horas, de um projeto ou de todos.
+ *
+ * Passar `projectId` recorta num projeto — é o relatório de fechamento, o que
+ * se olha quando o trabalho acaba e a pergunta é se valeu a pena. Sem ele, o
+ * recorte é a carteira inteira, e aí a média de horas por projeto passa a
+ * significar alguma coisa.
+ *
+ * A receita de cada projeto é o que **entrou** (parcelas recebidas), não o
+ * contratado: um contrato de dez mil com três mil recebidos rendeu três mil, e
+ * o valor/hora efetivo tem de dizer isso enquanto o resto não chega.
+ */
+export async function buildTimesheetReport(
+  userId: string,
+  projectId?: string,
+  now: Date = new Date(),
+): Promise<TimesheetReport> {
+  const today = todayIn(now);
+
+  const [listaProjetos, listaClientes, horas, parcelas, tarefas] = await Promise.all([
+    listProjects(userId),
+    listClients(userId, true),
+    listTimeEntries(userId, projectId),
+    listPayments(userId, projectId),
+    listTasks(userId, projectId),
+  ]);
+
+  const nomeCliente = new Map(listaClientes.map((cliente) => [cliente.id, cliente.name]));
+  const porId = new Map(listaProjetos.map((projeto) => [projeto.id, projeto]));
+  const tituloDaTarefa = new Map(tarefas.map((tarefa) => [tarefa.id, tarefa.title]));
+
+  const doRecorte = projectId ? horas.filter((hora) => hora.projectId === projectId) : horas;
+
+  const sessions: SessionRow[] = doRecorte
+    .map((hora) => {
+      const projeto = porId.get(hora.projectId);
+      return {
+        id: hora.id,
+        projectId: hora.projectId,
+        projectName: projeto?.name ?? "Projeto removido",
+        clientName: projeto?.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+        workedOn: hora.workedOn as LocalDate,
+        durationMilli: hora.durationMilli,
+        activity: toActivity(hora.activity),
+        billable: hora.billable,
+        description: hora.description,
+        taskId: hora.taskId,
+        taskTitle: hora.taskId ? (tituloDaTarefa.get(hora.taskId) ?? null) : null,
+      };
+    })
+    // Da mais recente para a mais antiga: quem abre o detalhamento quer
+    // conferir o que lançou hoje, não arqueologia do primeiro dia.
+    .sort((esquerda, direita) => direita.workedOn.localeCompare(esquerda.workedOn));
+
+  const comTempo = [...new Set(doRecorte.map((hora) => hora.projectId))];
+
+  const projects: ProjectTimesheet[] = comTempo
+    .map((id) => {
+      const projeto = porId.get(id);
+      const doProjeto = doRecorte.filter((hora) => hora.projectId === id);
+      const recebido = parcelas
+        .filter((parcela) => parcela.projectId === id && parcela.receivedOn !== null)
+        .reduce((soma, parcela) => soma + (parcela.receivedAmountCents ?? parcela.amountCents), 0);
+
+      return {
+        projectId: id,
+        projectName: projeto?.name ?? "Projeto removido",
+        clientName: projeto?.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+        status: projeto?.status ?? "done",
+        isOpen: projeto ? isOpenStatus(projeto.status) : false,
+        contractedCents: projeto?.contractCents ?? 0,
+        plannedRateCents: projeto?.hourlyRateCents ?? 0,
+        estimatedMilli: projeto?.estimatedHoursMilli ?? 0,
+        summary: buildTimesheet(sessoesParaDominio(doProjeto), cents(recebido)),
+      };
+    })
+    .sort((esquerda, direita) => direita.summary.worked - esquerda.summary.worked);
+
+  const worked = sumMilli(projects.map((linha) => linha.summary.worked));
+  const revenueCents = projects.reduce((soma, linha) => soma + linha.summary.revenue, 0);
+
+  // O total por categoria atravessa os projetos: a pergunta "quanto do meu
+  // tempo é retrabalho" não é sobre um projeto, é sobre o jeito de trabalhar.
+  const geral = buildTimesheet(sessoesParaDominio(doRecorte), cents(revenueCents));
+
+  return {
+    today,
+    projects,
+    sessions,
+    totals: {
+      worked,
+      billableWorked: geral.billableWorked,
+      sessions: doRecorte.length,
+      revenueCents,
+      effectiveRateCents: geral.effectiveRate,
+      averageHoursPerProject: averageHoursPerProject(projects.map((linha) => linha.summary.worked)),
+      byActivity: geral.byActivity,
+    },
   };
 }

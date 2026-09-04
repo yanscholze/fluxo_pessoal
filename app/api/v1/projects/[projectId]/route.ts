@@ -10,6 +10,7 @@
  * transformaria um vazamento do Fluxo num vazamento de todos os projetos.
  */
 
+import { PROJECT_STATUSES } from "../../../../../core/domain/work/status.ts";
 import { fromHours, type Milli } from "../../../../../core/domain/work/hours.ts";
 import { requireUser } from "../../../../../server/auth/session.ts";
 import { read } from "../../../../../server/http/input.ts";
@@ -19,17 +20,6 @@ import { updateProject, updateProjectStatus } from "../../../../../server/servic
 
 export const dynamic = "force-dynamic";
 
-const SITUACOES = [
-  "lead",
-  "proposal",
-  "active",
-  "waiting_client",
-  "paused",
-  "delivered",
-  "support",
-  "done",
-  "cancelled",
-] as const;
 
 const PRIORIDADES = ["low", "normal", "high", "urgent"] as const;
 
@@ -61,7 +51,7 @@ export const PATCH = handle(async (request: Request) => {
   }
 
   const horas = input.optionalInteger("estimatedHours", { min: 0, max: 100_000 });
-  const status = input.optionalChoice("status", SITUACOES);
+  const status = input.optionalChoice("status", PROJECT_STATUSES);
 
   const payload = {
     ...campos,

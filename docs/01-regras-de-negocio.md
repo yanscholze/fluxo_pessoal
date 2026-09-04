@@ -559,6 +559,39 @@ deles seja possível.
 
 ## Trabalho
 
+### Situações do projeto
+
+Onze, das quais quatro são a fase do trabalho, na ordem em que acontece:
+
+    em desenvolvimento → testes → ajustes → entregue
+
+Separar **testes** de **ajustes** importa porque são esperas diferentes. Em
+testes o trabalho está com você e depende do seu tempo; em ajustes ele já
+voltou de alguém, e o que falta é uma lista finita de correções. Chamar os dois
+de "em desenvolvimento" esconde a fase em que os projetos costumam encalhar.
+
+Ao redor: `prospecção` e `proposta` são de antes do projeto existir;
+`aguardando cliente` e `pausado` são paradas com culpados diferentes;
+`suporte` é o entregue que segue recebendo correção.
+
+**Concluído** é o fim, e é uma decisão — não a consequência de entregar. Entre
+entregar e encerrar existe o período em que ainda se conserta o que o cliente
+encontrou, e é ele que consome as horas que ninguém orçou. Por isso `entregue`
+ainda conta como projeto **aberto**, e só `concluído` e `cancelado` saem da
+lista de abertos e do painel inicial.
+
+A régua de aberto/encerrado é uma só, no domínio, e é a mesma que o painel, o
+indicador e a lista usam. Antes eram três listas: o indicador dizia três em
+andamento e a lista mostrava cinco.
+
+Entregar carimba a data da entrega — é ela que decide se o prazo foi cumprido.
+Concluir carimba também, quando ninguém marcou a entrega antes: encerrar um
+projeto que nunca foi entregue deixaria o prazo em aberto para sempre. Cancelar
+não carimba, porque cancelado não é entregue. E **voltar** para uma fase de
+trabalho apaga a data: um projeto que voltou para ajustes não está entregue
+agora, e manter o carimbo o tiraria do radar de atraso justamente quando o
+prazo voltou a existir.
+
 ### Horas
 
 A unidade é o **milésimo de hora**, inteiro: meia hora é 500, um quarto é 250,
@@ -572,6 +605,38 @@ borda.
 O valor/hora é **congelado no registro** da sessão. Reajustar o valor do
 projeto não reescreve o que já foi trabalhado por outro preço.
 
+### Categoria da sessão
+
+Dez, fechadas: desenvolvimento, correção de bugs, melhorias, integração,
+deploy, suporte, reunião, pesquisa, documentação, outros.
+
+Fechada, e não texto livre: categoria digitada à mão vira "reunião", "reuniao",
+"Reunião com cliente" e "call" — quatro linhas no relatório para a mesma coisa,
+e o percentual por categoria deixa de somar cem por cento de nada.
+
+É a categoria que transforma "80 horas neste projeto" em informação sobre a
+qual dá para decidir: oitenta de desenvolvimento é um projeto que rendeu;
+oitenta com trinta de correção de bug é um projeto mal orçado.
+
+**Retrabalho** é bug e suporte — consertar o que já deveria funcionar não é
+avanço, é custo de algo que passou. O relatório mostra a fatia dele no total.
+
+### Correção e exclusão
+
+Sessão lançada é editável e apagável. Lançar hora errada é a regra, não a
+exceção: registra-se no fim do dia, de memória, e no dia seguinte se percebe
+que foram três horas e não duas. Sem correção, consertar exigiria apagar e
+relançar, e o relatório de um projeto entregue nunca fecharia com o que
+aconteceu.
+
+Apagar apaga de verdade, sem histórico: hora lançada por engano não é fato do
+projeto, é digitação errada. Guardá-la marcada como excluída faria toda soma
+precisar lembrar de filtrar — e uma que esquecesse cobraria o cliente por um
+tempo que nunca existiu.
+
+Todos os cálculos são refeitos a cada leitura, das sessões e das parcelas
+recebidas. Nenhum total é guardado.
+
 ### Valor/hora efetivo
 
 ```
@@ -583,6 +648,40 @@ inflaria o número justamente nos projetos que deram mais retrabalho —
 escondendo o prejuízo que se quer enxergar.
 
 Sem tempo registrado o resultado é **nulo**, não zero nem infinito.
+
+O valor/hora **não é guardado no lançamento**. É sempre um cálculo, feito na
+leitura do relatório. Congelar o preço em cada sessão faria este número
+depender de quando cada hora foi digitada em vez do que o projeto rendeu — e
+receber uma parcela a mais não mudaria um número que deveria mudar.
+
+### Relatório de horas
+
+Por projeto, ou da carteira inteira. Traz total de horas, horas e percentual
+por categoria, receita, valor/hora efetivo, média de horas por projeto e o
+detalhamento de cada sessão.
+
+A média por projeto divide pelos projetos **com tempo lançado**. Incluir no
+divisor os projetos em que ninguém lançou nada diria que se trabalha menos do
+que se trabalha.
+
+A receita é o que **entrou** — parcelas recebidas —, não o contratado: um
+contrato de dez mil com três mil recebidos rendeu três mil, e o valor/hora
+efetivo tem de dizer isso enquanto o resto não chega.
+
+### Proposta e contrato
+
+Ficam guardados no Fluxo, e não como link. Link some: a proposta que mora no
+Drive de alguém deixa de abrir quando a pasta é reorganizada, e é justamente no
+dia da discussão sobre escopo que ela precisa abrir. O que se combinou por
+escrito é a única defesa contra "mas isso estava incluído".
+
+Proposta e contrato são rotulados separadamente, porque são papéis diferentes:
+a proposta é o que se ofereceu, o contrato é o que se assinou, e quando eles
+divergem é a diferença que importa.
+
+Aceita PDF, Word, imagem e texto, até 2 MB — lista fechada de tipos, porque
+servir arquivo arbitrário de volta no domínio da aplicação é porta de XSS. O
+download vai sempre como anexo, nunca inline, pelo mesmo motivo.
 
 ### Cobrança de projeto
 

@@ -3,9 +3,10 @@
 /**
  * Navegação da área de trabalho.
  *
- * Projetos, quadro e agenda respondem perguntas diferentes sobre o mesmo
- * trabalho — quanto vale, o que está travado, o que vence quando — e por isso
- * ficam lado a lado em vez de virarem três itens soltos no menu lateral.
+ * Projetos, quadro, agenda e horas respondem perguntas diferentes sobre o mesmo
+ * trabalho — quanto vale, o que está travado, o que vence quando, quanto custou
+ * de tempo — e por isso ficam lado a lado em vez de virarem quatro itens soltos
+ * no menu lateral.
  */
 
 import Link from "next/link";
@@ -17,6 +18,7 @@ const ABAS = [
   { href: "/projetos", label: "Projetos" },
   { href: "/projetos/quadro", label: "Quadro" },
   { href: "/projetos/agenda", label: "Agenda" },
+  { href: "/projetos/horas", label: "Horas" },
 ] as const;
 
 export function WorkNav() {

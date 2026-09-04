@@ -11,9 +11,12 @@ import { Clock, Wallet } from "../../../ui/icons.tsx";
 import { Page, PageHeader, SectionTitle, Stack } from "../../../ui/page-frame.tsx";
 import { Badge, Empty, Meter, Notice, Panel, PanelHeader } from "../../../ui/primitives.tsx";
 import { LogTime } from "./log-time.tsx";
+import { SessionsPanel } from "./sessions-panel.tsx";
 import { PaymentActions } from "./payment-actions.tsx";
+import { DocumentsPanel } from "./documents-panel.tsx";
 import { GithubPanel } from "./github-panel.tsx";
 import { ProjectInfoCard } from "./project-info.tsx";
+import { StatusControl } from "./status-control.tsx";
 import { ProposalsPanel } from "./proposals-panel.tsx";
 import { TasksPanel } from "./tasks-panel.tsx";
 
@@ -39,7 +42,7 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
   const detalhe = await buildProjectDetail(user.id, projectId).catch(() => null);
   if (!detalhe) notFound();
 
-  const { project, health, tasks, entries, payments, events } = detalhe;
+  const { project, health, tasks, entries, payments, events, documents } = detalhe;
   const abertas = tasks.filter((tarefa) => tarefa.status !== "done");
   const naoAgendado = health.finance.unscheduled;
 
@@ -50,7 +53,16 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
         eyebrow={detalhe.clientName ?? "Projeto próprio"}
         title={project.name}
         description={project.description ?? undefined}
-        actions={<LogTime projectId={project.id} tasks={abertas.map((t) => ({ id: t.id, title: t.title }))} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusControl
+              projectId={project.id}
+              status={project.status}
+              hasOpenPayments={payments.some((parcela) => parcela.receivedOn === null)}
+            />
+            <LogTime projectId={project.id} tasks={abertas.map((t) => ({ id: t.id, title: t.title }))} />
+          </div>
+        }
       />
 
       <Stack gap="lg">
@@ -124,11 +136,15 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
           }}
         />
 
-        <GithubPanel
-          projectId={project.id}
-          repositoryUrl={project.repositoryUrl}
-          mainBranch={project.mainBranch}
-        />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <DocumentsPanel projectId={project.id} documents={documents} />
+
+          <GithubPanel
+            projectId={project.id}
+            repositoryUrl={project.repositoryUrl}
+            mainBranch={project.mainBranch}
+          />
+        </div>
 
         <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
           <Panel>
@@ -256,26 +272,19 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
             }))}
           />
 
-          <section>
-            <SectionTitle title="Horas registradas" hint={`${entries.length} sessões`} />
-            <Panel>
-              {entries.length ? (
-                <div>
-                  {entries.slice(0, 8).map((sessao) => (
-                    <ListRow
-                      key={sessao.id}
-                      title={sessao.description}
-                      subtitle={dateShort(sessao.workedOn as LocalDate)}
-                      value={`${decimal(toHours(sessao.durationMilli as Milli), 2)} h`}
-                      badge={!sessao.billable ? <Badge tone="neutral">não cobrável</Badge> : null}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Empty icon={Clock} title="Nenhuma hora registrada" hint="Registre o tempo para comparar com o estimado." />
-              )}
-            </Panel>
-          </section>
+          <SessionsPanel
+            projectId={project.id}
+            tasks={abertas.map((tarefa) => ({ id: tarefa.id, title: tarefa.title }))}
+            sessions={entries.map((sessao) => ({
+              id: sessao.id,
+              workedOn: sessao.workedOn,
+              durationMilli: sessao.durationMilli,
+              activity: sessao.activity,
+              billable: sessao.billable,
+              description: sessao.description,
+              taskId: sessao.taskId,
+            }))}
+          />
         </div>
 
         <ProposalsPanel

@@ -6,21 +6,32 @@ import { dateShort, decimal, money } from "../../ui/format.ts";
 import { Briefcase, CircleAlert, Clock, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, SectionTitle, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
+import {
+  isOpenStatus,
+  PROJECT_STATUS_LABEL,
+  type ProjectStatus,
+} from "../../../core/domain/work/status.ts";
 import { NewProject } from "./new-project.tsx";
 import { WorkNav } from "./work-nav.tsx";
 
 export const dynamic = "force-dynamic";
 
-const SITUACAO: Record<string, { label: string; tone: Tone }> = {
-  lead: { label: "Prospecção", tone: "neutral" },
-  proposal: { label: "Proposta", tone: "info" },
-  active: { label: "Em desenvolvimento", tone: "accent" },
-  waiting_client: { label: "Aguardando cliente", tone: "caution" },
-  paused: { label: "Pausado", tone: "neutral" },
-  delivered: { label: "Entregue", tone: "positive" },
-  support: { label: "Suporte", tone: "info" },
-  done: { label: "Concluído", tone: "positive" },
-  cancelled: { label: "Cancelado", tone: "negative" },
+/**
+ * O tom de cada situação. O rótulo vem do domínio, que é a lista única — havia
+ * três cópias divergentes, e o KPI contava um número que a lista não mostrava.
+ */
+const TOM: Record<ProjectStatus, Tone> = {
+  lead: "neutral",
+  proposal: "info",
+  active: "accent",
+  testing: "info",
+  adjustments: "caution",
+  waiting_client: "caution",
+  paused: "neutral",
+  delivered: "positive",
+  support: "info",
+  done: "positive",
+  cancelled: "negative",
 };
 
 const PRAZO: Record<string, { label: string; tone: Tone }> = {
@@ -54,10 +65,10 @@ export default async function Projetos() {
       (peso[esquerda.health.deadline.status] ?? 9) - (peso[direita.health.deadline.status] ?? 9),
   );
 
-  const emAndamento = ordenados.filter((projeto) =>
-    ["active", "waiting_client", "support", "proposal", "lead"].includes(projeto.status),
-  );
-  const encerrados = ordenados.filter((projeto) => !emAndamento.includes(projeto));
+  // A régua de "aberto" é a do domínio, a mesma que o painel inicial e o KPI
+  // usam. Antes eram três listas diferentes e elas discordavam.
+  const emAndamento = ordenados.filter((projeto) => isOpenStatus(projeto.status));
+  const encerrados = ordenados.filter((projeto) => !isOpenStatus(projeto.status));
 
   return (
     <Page>
@@ -141,7 +152,10 @@ export default async function Projetos() {
 type Projeto = Awaited<ReturnType<typeof buildWorkOverview>>["projects"][number];
 
 function CartaoDeProjeto({ projeto }: { projeto: Projeto }) {
-  const situacao = SITUACAO[projeto.status] ?? { label: projeto.status, tone: "neutral" as Tone };
+  const situacao = {
+    label: PROJECT_STATUS_LABEL[projeto.status] ?? projeto.status,
+    tone: TOM[projeto.status] ?? ("neutral" as Tone),
+  };
   const prazo = PRAZO[projeto.health.deadline.status] ?? { label: "", tone: "neutral" as Tone };
   const { finance, effort, deadline } = projeto.health;
 

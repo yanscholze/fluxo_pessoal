@@ -18,6 +18,9 @@ import {
   overdueCompetences,
 } from "../../core/domain/ledger/balance.ts";
 import { projectRecurrences } from "../../core/domain/recurrence/projection.ts";
+import { type Milli, sumMilli } from "../../core/domain/work/hours.ts";
+import { type DeadlineStatus, evaluateDeadline } from "../../core/domain/work/project.ts";
+import { isOpenStatus, type ProjectStatus } from "../../core/domain/work/status.ts";
 import type { LedgerEntry } from "../../core/domain/ledger/types.ts";
 import {
   computeFinancialPosition,
@@ -42,6 +45,13 @@ import {
   transactionIndex,
 } from "../repositories/ledger.ts";
 import { confirmedOccurrenceKeys, listRecurrences } from "../repositories/recurrences.ts";
+import {
+  listClients,
+  listPayments,
+  listProjects,
+  listTasks,
+  listTimeEntries,
+} from "../repositories/work.ts";
 
 export type AccountSummary = {
   readonly id: string;
@@ -144,7 +154,103 @@ export type Dashboard = {
     kind: string;
     categoryId: string | null;
   }[];
+  /** Só os projetos abertos. Os encerrados são histórico, e histórico não é painel. */
+  readonly openProjects: readonly OpenProject[];
 };
+
+/**
+ * Um projeto em aberto, do jeito que o painel inicial precisa dele.
+ *
+ * O painel responde "como está o trabalho", e a resposta é sempre a mesma
+ * combinação: em que fase está, quanto falta de prazo e quanto do dinheiro já
+ * entrou. Os três juntos, porque um sozinho engana — um projeto no prazo com
+ * zero recebido é um problema, e um atrasado já pago é outro.
+ */
+export type OpenProject = {
+  readonly id: string;
+  readonly name: string;
+  readonly clientName: string | null;
+  readonly status: ProjectStatus;
+  readonly color: string;
+  readonly dueOn: LocalDate | null;
+  readonly deadlineStatus: DeadlineStatus;
+  /** Dias até o prazo. Negativo quando já passou. `null` sem prazo. */
+  readonly daysLeft: number | null;
+  readonly contractedCents: number;
+  readonly receivedCents: number;
+  readonly percentReceived: number;
+  readonly workedMilli: Milli;
+  readonly openTasks: number;
+};
+
+/** Quantos projetos cabem no painel antes de ele virar uma segunda tela de projetos. */
+const OPEN_PROJECTS_LIMIT = 6;
+
+/**
+ * Os projetos abertos, ordenados por quem precisa de atenção.
+ *
+ * Atrasado primeiro, depois o que vence perto, depois o resto — a mesma ordem
+ * da tela de projetos, porque duas ordens diferentes para a mesma lista fazem o
+ * usuário desconfiar das duas. Encerrado e cancelado não aparecem: histórico
+ * não é painel.
+ */
+async function loadOpenProjects(userId: string, today: LocalDate): Promise<OpenProject[]> {
+  const [projetos, clientes, parcelas, horas, tarefas] = await Promise.all([
+    listProjects(userId),
+    listClients(userId, true),
+    listPayments(userId),
+    listTimeEntries(userId),
+    listTasks(userId),
+  ]);
+
+  const nomeCliente = new Map(clientes.map((cliente) => [cliente.id, cliente.name]));
+  const peso: Record<DeadlineStatus, number> = {
+    atrasado: 0,
+    perto: 1,
+    "no-prazo": 2,
+    "sem-prazo": 3,
+    entregue: 4,
+  };
+
+  return projetos
+    .filter((projeto) => isOpenStatus(projeto.status))
+    .map((projeto) => {
+      const doProjeto = parcelas.filter((parcela) => parcela.projectId === projeto.id);
+      const recebido = doProjeto
+        .filter((parcela) => parcela.receivedOn !== null)
+        .reduce((soma, parcela) => soma + (parcela.receivedAmountCents ?? parcela.amountCents), 0);
+      const prazo = evaluateDeadline(
+        (projeto.dueOn as LocalDate | null) ?? null,
+        (projeto.deliveredOn as LocalDate | null) ?? null,
+        today,
+      );
+
+      return {
+        id: projeto.id,
+        name: projeto.name,
+        clientName: projeto.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+        status: projeto.status,
+        color: projeto.color,
+        dueOn: prazo.dueOn,
+        deadlineStatus: prazo.status,
+        daysLeft: prazo.daysLeft,
+        contractedCents: projeto.contractCents,
+        receivedCents: recebido,
+        percentReceived:
+          projeto.contractCents > 0 ? Math.min(100, (recebido / projeto.contractCents) * 100) : 0,
+        workedMilli: sumMilli(
+          horas
+            .filter((hora) => hora.projectId === projeto.id)
+            .map((hora) => hora.durationMilli as Milli),
+        ),
+        openTasks: tarefas.filter(
+          (tarefa) => tarefa.projectId === projeto.id && tarefa.status !== "done",
+        ).length,
+      } satisfies OpenProject;
+    })
+    .sort((esquerda, direita) => peso[esquerda.deadlineStatus] - peso[direita.deadlineStatus])
+    .slice(0, OPEN_PROJECTS_LIMIT);
+}
 
 const UPCOMING_DAYS = 30;
 const UPCOMING_LIMIT = 8;
@@ -173,6 +279,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     ]);
 
   const competence = competenceOf(today);
+  const openProjects = await loadOpenProjects(userId, today);
 
   /**
    * As recorrências entram como lançamentos virtuais, calculados agora a
@@ -255,6 +362,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       outflowCents: point.outflow,
       projectedBalanceCents: point.projectedBalance,
     })),
+    openProjects,
     recentTransactions: recent.map((transaction) => ({
       id: transaction.id,
       description: transaction.description,

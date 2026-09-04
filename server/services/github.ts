@@ -46,6 +46,17 @@ export type Issue = {
   readonly url: string;
 };
 
+/** Um repositório da conta, do jeito que o seletor precisa dele. */
+export type RepositoryOption = {
+  readonly slug: string;
+  readonly url: string;
+  readonly defaultBranch: string;
+  readonly isPrivate: boolean;
+  readonly description: string | null;
+  /** ISO do último push. É por ele que a lista vem ordenada. */
+  readonly pushedAt: string | null;
+};
+
 export type RepositoryActivity =
   | { readonly available: false; readonly reason: "sem-repositorio" | "sem-token" | "sem-acesso" | "falhou" }
   | {
@@ -86,6 +97,14 @@ async function pedir<T>(caminho: string): Promise<T | null> {
 }
 
 type RepoResposta = { default_branch?: string; private?: boolean; open_issues_count?: number };
+type ListaResposta = {
+  full_name?: string;
+  html_url?: string;
+  default_branch?: string;
+  private?: boolean;
+  description?: string | null;
+  pushed_at?: string | null;
+};
 type CommitResposta = {
   sha: string;
   html_url: string;
@@ -94,6 +113,54 @@ type CommitResposta = {
 };
 type PullResposta = { number: number; title: string; draft?: boolean; html_url: string; user?: { login?: string } };
 type IssueResposta = { number: number; title: string; html_url: string; pull_request?: unknown };
+
+/** Quantos repositórios a lista traz. Duas páginas cobrem qualquer conta real. */
+const POR_PAGINA = 100;
+const PAGINAS = 2;
+
+/**
+ * Os repositórios que o token alcança.
+ *
+ * Existe para que vincular um projeto ao repositório seja escolher de uma
+ * lista, e não colar uma URL. Colar URL erra: erra o dono, erra o hífen,
+ * erra o repositório parecido — e o erro só aparece depois, como "repositório
+ * não encontrado" numa tela que deveria mostrar commits.
+ *
+ * Ordenados pelo último push, porque o repositório que se quer vincular é
+ * quase sempre aquele em que se mexeu por último.
+ */
+export async function listRepositories(): Promise<RepositoryOption[] | null> {
+  if (!isConfigured()) return null;
+
+  const paginas = await Promise.all(
+    Array.from({ length: PAGINAS }, (_, indice) =>
+      pedir<ListaResposta[]>(
+        `/user/repos?per_page=${POR_PAGINA}&page=${indice + 1}&sort=pushed&affiliation=owner,collaborator,organization_member`,
+      ),
+    ),
+  );
+
+  // A primeira página falhar é falha de verdade; a segunda vir vazia é o caso
+  // normal de quem tem menos de cem repositórios.
+  if (!paginas[0]) return null;
+
+  return paginas
+    .flatMap((pagina) => pagina ?? [])
+    .flatMap((repo) =>
+      repo.full_name && repo.html_url
+        ? [
+            {
+              slug: repo.full_name,
+              url: repo.html_url,
+              defaultBranch: repo.default_branch ?? "main",
+              isPrivate: repo.private === true,
+              description: repo.description ?? null,
+              pushedAt: repo.pushed_at ?? null,
+            },
+          ]
+        : [],
+    );
+}
 
 /**
  * O que está acontecendo no repositório do projeto.

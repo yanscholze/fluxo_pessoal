@@ -98,10 +98,10 @@ describe("financeiro do projeto", () => {
 
 describe("esforço do projeto", () => {
   const sessoes: TimeEntryLike[] = [
-    { duration: fromHours(8), billable: true, rate: cents(12_000) },
-    { duration: fromHours(6), billable: true, rate: cents(12_000) },
+    { duration: fromHours(8), billable: true },
+    { duration: fromHours(6), billable: true },
     // Retrabalho não cobrado: consome tempo e não gera receita.
-    { duration: fromHours(4), billable: false, rate: cents(12_000) },
+    { duration: fromHours(4), billable: false },
   ];
 
   it("separa tempo total de tempo cobrável", () => {
@@ -109,7 +109,7 @@ describe("esforço do projeto", () => {
 
     assert.equal(esforco.worked, 18_000);
     assert.equal(esforco.billableWorked, 14_000);
-    assert.equal(esforco.billableAmount, 168_000, "14h a R$ 120,00");
+    assert.equal(esforco.billableAmount, 168_000, "14h ao valor/hora combinado de R$ 120,00");
   });
 
   it("acusa estouro da estimativa", () => {
@@ -164,7 +164,7 @@ describe("avaliação completa", () => {
       estimated: fromHours(20),
       plannedRate: cents(12_000),
       payments: [{ amount: cents(600_000), dueOn: localDate("2026-07-10"), receivedOn: localDate("2026-07-10") }],
-      entries: [{ duration: fromHours(40), billable: true, rate: cents(12_000) }],
+      entries: [{ duration: fromHours(40), billable: true }],
       dueOn: localDate("2026-09-30"),
       deliveredOn: null,
       today: HOJE,
@@ -183,7 +183,7 @@ describe("avaliação completa", () => {
       estimated: fromHours(10),
       plannedRate: cents(0),
       payments: [],
-      entries: [{ duration: fromHours(5), billable: true, rate: cents(0) }],
+      entries: [{ duration: fromHours(5), billable: true }],
       dueOn: null,
       deliveredOn: null,
       today: HOJE,

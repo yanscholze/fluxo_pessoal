@@ -6,6 +6,7 @@
  * cliente exibe — não recalcula prazo, recebido nem valor/hora efetivo.
  */
 
+import { PROJECT_STATUSES } from "../../../../core/domain/work/status.ts";
 import { requireUser } from "../../../../server/auth/session.ts";
 import { read } from "../../../../server/http/input.ts";
 import { handle, json, readJson } from "../../../../server/http/respond.ts";
@@ -14,17 +15,6 @@ import { buildWorkOverview, createProject } from "../../../../server/services/wo
 
 export const dynamic = "force-dynamic";
 
-const SITUACOES = [
-  "lead",
-  "proposal",
-  "active",
-  "waiting_client",
-  "paused",
-  "delivered",
-  "support",
-  "done",
-  "cancelled",
-] as const;
 
 const PRIORIDADES = ["low", "normal", "high", "urgent"] as const;
 
@@ -71,7 +61,7 @@ export const POST = handle(async (request: Request) => {
     name: input.string("name", { max: 120 }),
     clientId: input.optionalReference("clientId"),
     description: input.optionalString("description", { max: 2000 }),
-    status: input.optionalChoice("status", SITUACOES) ?? undefined,
+    status: input.optionalChoice("status", PROJECT_STATUSES) ?? undefined,
     priority: input.optionalChoice("priority", PRIORIDADES) ?? undefined,
     startsOn: input.optionalDate("startsOn"),
     dueOn: input.optionalDate("dueOn"),

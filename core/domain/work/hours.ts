@@ -88,6 +88,12 @@ export function amountFor(duration: Milli, rate: Cents): Cents {
 /**
  * Valor/hora efetivo: o que de fato se ganhou por hora.
  *
+ * É sempre um **cálculo**, nunca um dado guardado: a receita do projeto
+ * dividida pelo tempo que ele custou. Congelar o preço em cada sessão faria
+ * este número depender de quando cada hora foi lançada em vez do que o projeto
+ * rendeu — e receber uma parcela a mais não mudaria um número que deveria
+ * mudar.
+ *
  * Devolve `null` quando não houve tempo registrado — dividir por zero daria
  * infinito, e "infinito por hora" não é uma informação, é um bug na tela.
  */

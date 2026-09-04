@@ -7,6 +7,7 @@
  * a acertar o próprio arredondamento, e dois clientes arredondariam diferente.
  */
 
+import { ACTIVITIES } from "../../../../../../core/domain/work/activity.ts";
 import { fromMinutes } from "../../../../../../core/domain/work/hours.ts";
 import { requireUser } from "../../../../../../server/auth/session.ts";
 import { read } from "../../../../../../server/http/input.ts";
@@ -30,8 +31,8 @@ export const POST = handle(async (request: Request) => {
     workedOn: input.date("workedOn"),
     duration: fromMinutes(input.integer("minutes", { min: 1, max: MAX_MINUTOS })),
     description: input.string("description", { max: 300 }),
+    activity: input.optionalChoice("activity", ACTIVITIES) ?? "development",
     billable: input.boolean("billable", true),
-    rate: input.optionalMoney("rate"),
   };
   input.done();
 

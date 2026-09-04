@@ -8,7 +8,7 @@
  * um número mantido à mão desanda e ninguém sabe quando.
  */
 
-import { type Cents, ZERO, clampToZero, sum } from "../../kernel/money.ts";
+import { type Cents, ZERO, clampToZero } from "../../kernel/money.ts";
 import { type LocalDate, daysBetween } from "../../time/local-date.ts";
 import { type Milli, ZERO_MILLI, amountFor, effectiveRate, sumMilli } from "./hours.ts";
 
@@ -28,12 +28,16 @@ export type PaymentLike = {
   readonly receivedAmount?: Cents | null;
 };
 
-/** Uma sessão de trabalho. */
+/**
+ * Uma sessão de trabalho.
+ *
+ * Não carrega valor/hora. O que uma sessão sabe é que três horas aconteceram
+ * numa terça-feira; quanto elas valeram é conta do relatório, feita sobre a
+ * receita do projeto — ver `timesheet.ts`.
+ */
 export type TimeEntryLike = {
   readonly duration: Milli;
   readonly billable: boolean;
-  /** Valor/hora congelado no momento do registro. */
-  readonly rate: Cents;
 };
 
 export type ProjectFinance = {
@@ -106,7 +110,13 @@ export type ProjectEffort = {
   /** Quanto do estimado já foi consumido, em pontos percentuais. */
   readonly percentUsed: number;
   readonly overrun: boolean;
-  /** O que o tempo cobrável vale, aos valores/hora congelados. */
+  /**
+   * O que o tempo cobrável vale ao valor/hora combinado do projeto.
+   *
+   * É uma projeção — "se eu cobrar estas horas ao preço combinado, dá isto" —
+   * e não o que se ganhou. O que se ganhou está em `effectiveRate`, que divide
+   * a receita real pelo tempo real.
+   */
   readonly billableAmount: Cents;
   /** O que se combinou por hora. */
   readonly plannedRate: Cents;
@@ -129,7 +139,9 @@ export function summarizeEffort(
   const worked = sumMilli(entries.map((entry) => entry.duration));
   const cobravel = entries.filter((entry) => entry.billable);
   const billableWorked = sumMilli(cobravel.map((entry) => entry.duration));
-  const billableAmount = sum(cobravel.map((entry) => amountFor(entry.duration, entry.rate)));
+  // Ao preço combinado hoje, e não a um preço por linha: o valor/hora deixou de
+  // existir na sessão justamente para que reajustar o projeto reajuste tudo.
+  const billableAmount = amountFor(billableWorked, plannedRate);
 
   return {
     estimated,

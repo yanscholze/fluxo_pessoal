@@ -140,3 +140,75 @@ describe("atividade do repositório", () => {
     assert.equal(resultado.available === true && resultado.defaultBranch, "producao");
   });
 });
+
+describe("lista de repositórios", () => {
+  beforeEach(() => {
+    definirSegredo("GITHUB_TOKEN", "token-de-teste");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+    definirSegredo("GITHUB_TOKEN", undefined);
+  });
+
+  it("sem token não consulta e devolve null", async () => {
+    const { listRepositories } = await import("./github.ts");
+    definirSegredo("GITHUB_TOKEN", undefined);
+
+    let chamou = false;
+    globalThis.fetch = (async () => {
+      chamou = true;
+      return new Response("[]", { status: 200 });
+    }) as typeof fetch;
+
+    assert.equal(await listRepositories(), null);
+    assert.equal(chamou, false);
+  });
+
+  it("junta as páginas e descarta o que não tem nome nem endereço", async () => {
+    const { listRepositories } = await import("./github.ts");
+
+    responderCom({
+      "/user/repos?per_page=100&page=1&sort=pushed&affiliation=owner,collaborator,organization_member": [
+        {
+          full_name: "dono/alpha",
+          html_url: "https://github.com/dono/alpha",
+          default_branch: "main",
+          private: true,
+          description: "O primeiro",
+          pushed_at: "2026-09-01T10:00:00Z",
+        },
+        // Sem `full_name`: não dá para montar o slug, então não entra.
+        { html_url: "https://github.com/dono/sem-nome" },
+      ],
+      "/user/repos?per_page=100&page=2&sort=pushed&affiliation=owner,collaborator,organization_member": [
+        { full_name: "dono/beta", html_url: "https://github.com/dono/beta" },
+      ],
+    });
+
+    const lista = await listRepositories();
+
+    assert.deepEqual(
+      lista?.map((repo) => repo.slug),
+      ["dono/alpha", "dono/beta"],
+    );
+    assert.equal(lista?.[0].isPrivate, true);
+    assert.equal(lista?.[1].defaultBranch, "main", "sem ramo declarado, o padrão do GitHub");
+  });
+
+  it("a segunda página vazia é normal; a primeira falhar não é", async () => {
+    const { listRepositories } = await import("./github.ts");
+
+    // Só a página 1 responde: quem tem menos de cem repositórios cai aqui.
+    responderCom({
+      "/user/repos?per_page=100&page=1&sort=pushed&affiliation=owner,collaborator,organization_member": [
+        { full_name: "dono/unico", html_url: "https://github.com/dono/unico" },
+      ],
+    });
+    assert.equal((await listRepositories())?.length, 1);
+
+    // Nenhuma responde: token recusado, e a tela precisa saber disso.
+    responderCom({});
+    assert.equal(await listRepositories(), null);
+  });
+});

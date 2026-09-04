@@ -6,6 +6,7 @@ import { CardsPanel } from "../ui/dashboard/cards-panel.tsx";
 import { CashflowPanel } from "../ui/dashboard/cashflow-panel.tsx";
 import { CategoryPanel } from "../ui/dashboard/category-panel.tsx";
 import { FreeToSpend } from "../ui/dashboard/free-to-spend.tsx";
+import { ProjectsPanel } from "../ui/dashboard/projects-panel.tsx";
 import { PositionStrip } from "../ui/dashboard/position-strip.tsx";
 import { RecentPanel } from "../ui/dashboard/recent-panel.tsx";
 import { UpcomingPanel } from "../ui/dashboard/upcoming-panel.tsx";
@@ -73,6 +74,10 @@ export default async function VisaoGeral() {
           <CardsPanel cards={dashboard.cards} today={dashboard.today} />
           <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
         </div>
+
+        {/* O trabalho depois do dinheiro: é de onde ele vem, mas a pergunta do
+            painel é sobre a conta, e o projeto responde por que ela vai mudar. */}
+        <ProjectsPanel projects={dashboard.openProjects} />
 
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">

@@ -87,7 +87,7 @@ describe("projetos", () => {
 describe("horas", () => {
   beforeEach(() => zerar());
 
-  it("herda o valor/hora do projeto e o congela", async () => {
+  it("a sessão guarda o tempo, e o valor sai do preço combinado do projeto", async () => {
     const { logTime, buildProjectDetail } = await import("./work.ts");
     const alvo = await ambiente();
     const { projetoId } = await projetoComCliente(alvo.userId);
@@ -104,7 +104,9 @@ describe("horas", () => {
     );
 
     const detalhe = await buildProjectDetail(alvo.userId, projetoId, AGORA);
-    assert.equal(detalhe.entries[0]?.rateCents, 12_000);
+    // A sessão não carrega preço nenhum: o que ela sabe é que três horas
+    // aconteceram. O valor sai do valor/hora combinado no projeto.
+    assert.equal(Object.hasOwn(detalhe.entries[0] ?? {}, "rateCents"), false);
     assert.equal(detalhe.health.effort.worked, 3_000);
     assert.equal(detalhe.health.effort.billableAmount, 36_000, "3h a R$ 120,00");
   });
