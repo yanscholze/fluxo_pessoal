@@ -13,6 +13,31 @@ import { accounts, cards, categories } from "./catalog.ts";
 import { users } from "./identity.ts";
 import { transactions } from "./ledger.ts";
 
+/**
+ * Classificações de assinatura.
+ *
+ * Criadas pelo usuário: streaming, IA, anuidade, academia — o recorte que faz
+ * sentido para ele. Vêm com um conjunto inicial sugerido, porque uma lista
+ * vazia obriga a inventar a taxonomia antes de registrar a primeira assinatura,
+ * e aí ninguém classifica nada.
+ */
+export const subscriptionLabels = sqliteTable(
+  "subscription_labels",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#6366f1"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archivedAt: text("archived_at"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [uniqueIndex("subscription_labels_user_name_unq").on(table.userId, table.name)],
+);
+
 export const recurrences = sqliteTable(
   "recurrences",
   {
@@ -32,6 +57,18 @@ export const recurrences = sqliteTable(
 
     description: text("description").notNull(),
     categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
+    /**
+     * Classificação da assinatura: streaming, IA, anuidade do cartão.
+     *
+     * É um **eixo diferente** da categoria. A categoria responde "que tipo de
+     * gasto é" para o orçamento inteiro; a classificação responde "que tipo de
+     * assinatura é" dentro do bolo de assinaturas. Usar categoria para os dois
+     * misturaria os eixos: ou o orçamento ganha seis categorias de assinatura,
+     * ou o relatório de assinaturas fica sem detalhe.
+     */
+    subscriptionLabelId: text("subscription_label_id").references(() => subscriptionLabels.id, {
+      onDelete: "set null",
+    }),
     accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
     cardId: text("card_id").references(() => cards.id, { onDelete: "cascade" }),
     destinationAccountId: text("destination_account_id").references(() => accounts.id, { onDelete: "cascade" }),

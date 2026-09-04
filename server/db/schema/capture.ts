@@ -8,6 +8,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+import { recurrences } from "./automation.ts";
 import { accounts, cards, categories } from "./catalog.ts";
 import { projectPayments, projects } from "./dev.ts";
 import { users } from "./identity.ts";
@@ -81,9 +82,22 @@ export const captureEvents = sqliteTable(
     postedAt: integer("posted_at").notNull(),
     occurredOn: text("occurred_on").notNull(),
 
-    status: text("status", { enum: ["pendente", "confirmado", "ignorado", "duplicado"] })
+    /**
+     * `assinatura` tira a cobrança da fila de revisão.
+     *
+     * Uma cobrança de assinatura já cadastrada não tem o que ser revisado: o
+     * valor é conhecido, a data é conhecida, e pedir confirmação todo mês do
+     * que o próprio usuário agendou transforma a fila num ritual. Ela passa a
+     * viver na aba de Assinaturas, que é onde a pergunta sobre ela é feita.
+     */
+    status: text("status", {
+      enum: ["pendente", "confirmado", "ignorado", "duplicado", "assinatura"],
+    })
       .notNull()
       .default("pendente"),
+
+    /** A assinatura reconhecida, quando `status` é `assinatura`. */
+    subscriptionId: text("subscription_id").references(() => recurrences.id, { onDelete: "set null" }),
     /** Preenchido quando o usuário confirma e a sugestão vira lançamento. */
     transactionId: text("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
 

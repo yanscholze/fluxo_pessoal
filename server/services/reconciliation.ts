@@ -19,8 +19,10 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import {
   type IncomingReceipt,
+  type KnownSubscription,
   type ReceiptCandidate,
   matchReceipt,
+  matchSubscription,
 } from "../../core/domain/capture/reconcile.ts";
 import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
@@ -34,6 +36,7 @@ import {
   projectPayments,
   projects,
   receiptRules,
+  recurrences,
 } from "../db/schema/index.ts";
 import { recordTransaction } from "./transactions.ts";
 import { receivePayment } from "./work.ts";
@@ -159,6 +162,8 @@ export type ReconcileResult = {
   readonly settled: number;
   /** Quantas ganharam sugestão e esperam decisão. */
   readonly suggested: number;
+  /** Quantas foram reconhecidas como assinatura e saíram da fila. */
+  readonly subscriptions: number;
 };
 
 /**
@@ -249,11 +254,17 @@ export async function reconcileCaptures(
   capturas: readonly CaptureToReconcile[],
   now: Date = new Date(),
 ): Promise<ReconcileResult> {
+  // Despesas: o que interessa é reconhecer assinatura, para tirá-la da fila.
+  const subscriptions = await routeSubscriptionCharges(
+    userId,
+    capturas.filter((captura) => captura.kind === "expense"),
+  );
+
   const receitas = capturas.filter((captura) => captura.kind === "income");
-  if (!receitas.length) return { settled: 0, suggested: 0 };
+  if (!receitas.length) return { settled: 0, suggested: 0, subscriptions };
 
   const candidatos = await candidatesFor(userId);
-  if (!candidatos.length) return { settled: 0, suggested: 0 };
+  if (!candidatos.length) return { settled: 0, suggested: 0, subscriptions };
 
   const database = getDatabase();
   let settled = 0;
@@ -316,7 +327,67 @@ export async function reconcileCaptures(
       .where(and(eq(receiptRules.userId, userId), eq(receiptRules.isActive, true)));
   }
 
-  return { settled, suggested };
+  return { settled, suggested, subscriptions };
+}
+
+/**
+ * Tira da fila as cobranças que são de assinatura conhecida.
+ *
+ * Não cria lançamento nem confirma nada: só reclassifica a captura, para que
+ * ela apareça na aba de Assinaturas em vez da fila de revisão. Nenhuma decisão
+ * sobre dinheiro é tomada aqui — é por isso que a régua de reconhecimento pode
+ * ser mais frouxa que a da baixa automática.
+ */
+async function routeSubscriptionCharges(
+  userId: string,
+  despesas: readonly CaptureToReconcile[],
+): Promise<number> {
+  if (!despesas.length) return 0;
+
+  const database = getDatabase();
+  const linhas = await database
+    .select({
+      recurrenceId: recurrences.id,
+      description: recurrences.description,
+      amountCents: recurrences.amountCents,
+      cardId: recurrences.cardId,
+    })
+    .from(recurrences)
+    .where(
+      and(
+        eq(recurrences.userId, userId),
+        eq(recurrences.role, "subscription"),
+        eq(recurrences.isActive, true),
+      ),
+    );
+
+  if (!linhas.length) return 0;
+
+  const assinaturas: KnownSubscription[] = linhas.map((linha) => ({
+    recurrenceId: linha.recurrenceId,
+    description: linha.description,
+    amount: cents(linha.amountCents),
+    cardId: linha.cardId,
+  }));
+
+  let reconhecidas = 0;
+
+  for (const captura of despesas) {
+    const assinatura = matchSubscription(
+      { merchant: captura.merchant, amount: cents(captura.amountCents) },
+      assinaturas,
+    );
+    if (!assinatura) continue;
+
+    await database
+      .update(captureEvents)
+      .set({ status: "assinatura", subscriptionId: assinatura.recurrenceId })
+      .where(and(eq(captureEvents.userId, userId), eq(captureEvents.id, captura.id)));
+
+    reconhecidas += 1;
+  }
+
+  return reconhecidas;
 }
 
 async function registrar(

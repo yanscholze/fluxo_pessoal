@@ -175,3 +175,52 @@ function maisUrgente(candidatos: readonly ReceiptCandidate[]): ReceiptCandidate 
     return esquerda.dueOn < direita.dueOn ? -1 : 1;
   })[0];
 }
+
+// ---------------------------------------------------------------------------
+// Assinatura reconhecida
+// ---------------------------------------------------------------------------
+
+/** Uma assinatura ativa, do jeito que o reconhecimento precisa dela. */
+export type KnownSubscription = {
+  readonly recurrenceId: string;
+  readonly description: string;
+  readonly amount: Cents;
+  /** Cartão em que ela é cobrada, quando há. */
+  readonly cardId: string | null;
+};
+
+/**
+ * A cobrança da notificação é de uma assinatura conhecida?
+ *
+ * Serve a um propósito diferente da conciliação de recebimento: aqui não se
+ * decide dar baixa, decide-se **onde a informação mora**. Uma cobrança da
+ * Netflix não tem o que ser revisado — ela já foi cadastrada, o valor já é
+ * conhecido, e a única coisa que a fila de revisão acrescentaria é um item
+ * repetido todo mês para o usuário confirmar o que ele mesmo agendou.
+ *
+ * A régua é mais frouxa que a da baixa automática, e de propósito: o dano de
+ * errar aqui é uma cobrança aparecer na aba de assinaturas em vez da fila de
+ * captura — nada de dinheiro é registrado por esta decisão. Basta o nome
+ * bater.
+ */
+export function matchSubscription(
+  charge: { readonly merchant: string | null; readonly amount: Cents; readonly cardId?: string | null },
+  subscriptions: readonly KnownSubscription[],
+): KnownSubscription | null {
+  if (!charge.merchant) return null;
+
+  const candidatas = subscriptions.filter((assinatura) =>
+    samePayer(assinatura.description, charge.merchant!),
+  );
+  if (!candidatas.length) return null;
+  if (candidatas.length === 1) return candidatas[0];
+
+  // Duas assinaturas com nome equivalente: desempata pelo valor, e só depois
+  // pelo cartão. Sem desempate, a primeira serve — nenhuma das duas move
+  // dinheiro por esta escolha.
+  return (
+    candidatas.find((assinatura) => assinatura.amount === charge.amount) ??
+    candidatas.find((assinatura) => assinatura.cardId === charge.cardId) ??
+    candidatas[0]
+  );
+}

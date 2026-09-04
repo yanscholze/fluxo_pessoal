@@ -48,6 +48,8 @@ export type IngestResult = {
   readonly settled?: number;
   /** Recebimentos com sugestão esperando decisão na fila. */
   readonly suggested?: number;
+  /** Cobranças reconhecidas como assinatura, que não entram na fila. */
+  readonly subscriptions?: number;
   readonly captured: number;
   readonly ignored: number;
   readonly duplicated: number;
@@ -157,12 +159,13 @@ export async function ingest(
       occurredOn: linha.occurredOn as LocalDate,
     })),
     now,
-  ).catch(() => ({ settled: 0, suggested: 0 }));
+  ).catch(() => ({ settled: 0, suggested: 0, subscriptions: 0 }));
 
   return {
     captured: inseridos.length,
     settled: conciliacao.settled,
     suggested: conciliacao.suggested,
+    subscriptions: conciliacao.subscriptions,
     ignored: Object.values(motivos).reduce((soma, valor) => soma + valor, 0),
     duplicated: duplicadas,
     reasons: motivos,
@@ -222,7 +225,7 @@ export type CaptureView = {
   /** Palpite de categoria. `null` quando nada casou — e isso é comum. */
   readonly suggestedCategory: { id: string; name: string; confidencePercent: number } | null;
   readonly occurredOn: LocalDate;
-  readonly status: "pendente" | "confirmado" | "ignorado" | "duplicado";
+  readonly status: "pendente" | "confirmado" | "ignorado" | "duplicado" | "assinatura";
 };
 
 export type CapturesView = {

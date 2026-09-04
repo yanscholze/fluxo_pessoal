@@ -229,3 +229,29 @@ describe("captura por notificação", () => {
     });
   });
 });
+
+describe("estabelecimento que carrega o valor", () => {
+  it("não vira nome de estabelecimento", () => {
+    // O recorte começa cedo demais quando há preposição antes do valor. Sem a
+    // guarda, "NUBANK de R$ 55" virava a descrição do lançamento — e nunca
+    // casaria com assinatura nem com pagador cadastrado.
+    const resultado = captureNotification(
+      {
+        sourceApp: "com.nu.production",
+        title: "Compra aprovada",
+        text: "Compra aprovada no NUBANK de R$ 55,90 em NETFLIX.COM",
+        postedAt: Date.now(),
+      },
+      [],
+      [],
+    );
+
+    assert.equal(resultado.kind, "captured");
+    if (resultado.kind !== "captured") return;
+    assert.equal(
+      /R\$|\d+,\d{2}/.test(resultado.draft.merchant ?? ""),
+      false,
+      "nome de loja nunca contém valor",
+    );
+  });
+});

@@ -229,6 +229,14 @@ function extractMerchant(text: string): string | null {
   // escapava do filtro e virava nome de estabelecimento.
   if (/^(\d+x|credito|debito|conta|cartao|parcela|sua|seu|voce)\b/.test(normalize(bruto))) return null;
 
+  // Nome que carrega o valor dentro não é nome: é o recorte errado.
+  //
+  // Acontece quando o texto tem uma preposição antes do valor — "compra no
+  // NUBANK de R$ 55,90 em NETFLIX" — e o recorte começa cedo demais, colhendo
+  // "NUBANK de R$ 55". Vira descrição de lançamento sem sentido, e o nome
+  // nunca casa com assinatura nem com pagador cadastrado.
+  if (/r\$|\d+,\d{2}/.test(normalize(bruto))) return null;
+
   return bruto.slice(0, 60);
 }
 

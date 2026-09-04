@@ -213,3 +213,200 @@ describe("conciliação de recebimento", () => {
     assert.equal(resultado.suggested, 0);
   });
 });
+
+describe("cobrança de assinatura", () => {
+  beforeEach(() => zerar());
+
+  /** Uma notificação de compra no cartão, como o Android a envia. */
+  function compra(estabelecimento: string, valor: string, id: string) {
+    return {
+      sourceApp: "com.nu.production",
+      title: "Compra aprovada",
+      text: `Compra aprovada: R$ ${valor} em ${estabelecimento}`,
+      postedAt: AGORA.getTime(),
+      deviceEventId: id,
+    };
+  }
+
+  it("não entra na fila de revisão", async () => {
+    const { ingest, buildCapturesView } = await import("./captures.ts");
+    const { createSubscription } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    const resultado = await ingest(alvo.userId, [compra("NETFLIX.COM", "55,90", "ev-netflix")], AGORA);
+
+    assert.equal(resultado.captured, 1);
+    assert.equal(resultado.subscriptions, 1);
+
+    const fila = await buildCapturesView(alvo.userId, AGORA);
+    assert.equal(fila.pending.length, 0, "assinatura conhecida vive na própria aba");
+  });
+
+  it("reconhece mesmo com o valor reajustado", async () => {
+    const { ingest, buildCapturesView } = await import("./captures.ts");
+    const { createSubscription } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    // Reajuste anual: o valor mudou, a assinatura é a mesma.
+    await ingest(alvo.userId, [compra("NETFLIX", "62,90", "ev-reajuste")], AGORA);
+
+    const fila = await buildCapturesView(alvo.userId, AGORA);
+    assert.equal(fila.pending.length, 0);
+  });
+
+  it("compra comum continua indo para a fila", async () => {
+    const { ingest, buildCapturesView } = await import("./captures.ts");
+    const { createSubscription } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+
+    await ingest(alvo.userId, [compra("PADARIA CENTRAL", "12,00", "ev-padaria")], AGORA);
+
+    const fila = await buildCapturesView(alvo.userId, AGORA);
+    assert.equal(fila.pending.length, 1, "o que não é assinatura precisa de revisão");
+  });
+
+  it("assinatura pausada não reconhece nada", async () => {
+    const { ingest, buildCapturesView } = await import("./captures.ts");
+    const { createSubscription } = await import("./subscriptions.ts");
+    const { setRecurrenceActive } = await import("./recurrences.ts");
+    const alvo = await ambiente();
+
+    const id = await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+    await setRecurrenceActive(alvo.userId, id, false, AGORA);
+
+    await ingest(alvo.userId, [compra("NETFLIX.COM", "55,90", "ev-pausada")], AGORA);
+
+    const fila = await buildCapturesView(alvo.userId, AGORA);
+    assert.equal(fila.pending.length, 1, "assinatura cancelada volta a ser compra comum");
+  });
+});
+
+describe("relatório de assinaturas", () => {
+  beforeEach(() => zerar());
+
+  it("separa por classificação e mostra o custo anual", async () => {
+    const { createLabel, createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    const streaming = await createLabel(alvo.userId, { name: "Streaming" }, AGORA);
+    const ia = await createLabel(alvo.userId, { name: "IA" }, AGORA);
+
+    await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId, labelId: streaming },
+      AGORA,
+    );
+    await createSubscription(
+      alvo.userId,
+      { description: "Spotify", amount: cents(2_190), scheduleDay: 15, cardId: alvo.cartaoId, labelId: streaming },
+      AGORA,
+    );
+    await createSubscription(
+      alvo.userId,
+      { description: "Claude", amount: cents(10_000), scheduleDay: 5, cardId: alvo.cartaoId, labelId: ia },
+      AGORA,
+    );
+
+    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
+
+    assert.equal(relatorio.totals.monthlyCents, 17_780);
+    assert.equal(relatorio.totals.yearlyCents, 213_360, "o anual anda ao lado do mensal");
+    assert.equal(relatorio.totals.activeCount, 3);
+
+    const porStreaming = relatorio.byLabel.find((linha) => linha.label?.name === "Streaming");
+    assert.equal(porStreaming?.monthlyCents, 7_780);
+    assert.equal(porStreaming?.count, 2);
+  });
+
+  it("a anual entra como um doze avos do mês", async () => {
+    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await createSubscription(
+      alvo.userId,
+      {
+        description: "Domínio",
+        amount: cents(12_000),
+        scheduleDay: 1,
+        cardId: alvo.cartaoId,
+        interval: "yearly",
+      },
+      AGORA,
+    );
+
+    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
+    // Somar os 120,00 cheios faria o "gasto do mês" ser verdade em um mês e
+    // falso nos outros onze.
+    assert.equal(relatorio.totals.monthlyCents, 1_000);
+    assert.equal(relatorio.totals.yearlyCents, 12_000);
+  });
+
+  it("assinatura pausada não soma no total do mês", async () => {
+    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const { setRecurrenceActive } = await import("./recurrences.ts");
+    const alvo = await ambiente();
+
+    const id = await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+    await setRecurrenceActive(alvo.userId, id, false, AGORA);
+
+    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(relatorio.totals.monthlyCents, 0);
+    assert.equal(relatorio.totals.pausedCount, 1);
+  });
+
+  it("recusa assinatura sem cartão nem conta", async () => {
+    const { createSubscription } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await assert.rejects(
+      () => createSubscription(alvo.userId, { description: "Fantasma", amount: cents(1_000), scheduleDay: 1 }, AGORA),
+      /onde a assinatura é cobrada/,
+    );
+  });
+
+  it("agrupa por cartão, para saber o que pesa em cada fatura", async () => {
+    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+
+    await createSubscription(
+      alvo.userId,
+      { description: "Netflix", amount: cents(5_590), scheduleDay: 12, cardId: alvo.cartaoId },
+      AGORA,
+    );
+    await createSubscription(
+      alvo.userId,
+      { description: "Jornal", amount: cents(3_000), scheduleDay: 5, accountId: alvo.contaId },
+      AGORA,
+    );
+
+    const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(relatorio.byCard.length, 2);
+    assert.equal(relatorio.byCard.find((linha) => linha.cardId === null)?.cardName, "Débito em conta");
+  });
+});

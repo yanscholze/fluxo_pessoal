@@ -11,7 +11,13 @@ import { describe, it } from "node:test";
 
 import { cents } from "../../kernel/money.ts";
 import { localDate } from "../../time/local-date.ts";
-import { type ReceiptCandidate, matchReceipt, samePayer } from "./reconcile.ts";
+import {
+  type KnownSubscription,
+  type ReceiptCandidate,
+  matchReceipt,
+  matchSubscription,
+  samePayer,
+} from "./reconcile.ts";
 
 function parcela(overrides: Partial<ReceiptCandidate> = {}): ReceiptCandidate {
   return {
@@ -152,5 +158,49 @@ describe("baixa automática", () => {
         : null,
       "app",
     );
+  });
+});
+
+describe("assinatura reconhecida", () => {
+  const netflix: KnownSubscription = {
+    recurrenceId: "assinatura-netflix",
+    description: "Netflix",
+    amount: cents(5_590),
+    cardId: "cartao-1",
+  };
+
+  it("reconhece a cobrança pelo nome", () => {
+    const encontrada = matchSubscription({ merchant: "NETFLIX.COM", amount: cents(5_590) }, [netflix]);
+    assert.equal(encontrada?.recurrenceId, "assinatura-netflix");
+  });
+
+  it("reconhece mesmo com o valor reajustado", () => {
+    // O dano de errar aqui é a cobrança aparecer na aba errada, não dinheiro
+    // registrado — então o valor não precisa bater.
+    const encontrada = matchSubscription({ merchant: "NETFLIX", amount: cents(6_290) }, [netflix]);
+    assert.equal(encontrada?.recurrenceId, "assinatura-netflix");
+  });
+
+  it("desempata pelo valor quando há duas com nome parecido", () => {
+    const premium: KnownSubscription = {
+      recurrenceId: "netflix-premium",
+      description: "Netflix Premium",
+      amount: cents(9_990),
+      cardId: "cartao-1",
+    };
+
+    const encontrada = matchSubscription({ merchant: "NETFLIX PREMIUM", amount: cents(9_990) }, [
+      netflix,
+      premium,
+    ]);
+    assert.equal(encontrada?.recurrenceId, "netflix-premium");
+  });
+
+  it("compra comum não vira assinatura", () => {
+    assert.equal(matchSubscription({ merchant: "PADARIA CENTRAL", amount: cents(1_200) }, [netflix]), null);
+  });
+
+  it("sem estabelecimento identificado, não reconhece", () => {
+    assert.equal(matchSubscription({ merchant: null, amount: cents(5_590) }, [netflix]), null);
   });
 });
