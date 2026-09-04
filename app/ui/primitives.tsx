@@ -95,8 +95,14 @@ export function Panel({
 
   const espaco = { none: "", sm: "p-3", md: "p-4 sm:p-5", lg: "p-5 sm:p-6" }[padding];
 
+  /*
+   * `min-w-0` porque item de grid e de flex tem largura mínima automática: ela
+   * é o conteúdo, e uma tabela larga dentro do painel empurra o painel além da
+   * tela em vez de rolar dentro dele. O sintoma é a página inteira ganhar
+   * rolagem horizontal — a linha some pela direita e nem o valor aparece.
+   */
   return (
-    <Tag className={join(superficie, espaco, className)} {...rest}>
+    <Tag className={join("min-w-0", superficie, espaco, className)} {...rest}>
       {children}
     </Tag>
   );

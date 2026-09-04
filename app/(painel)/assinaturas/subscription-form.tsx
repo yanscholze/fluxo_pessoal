@@ -22,6 +22,7 @@ import { useState } from "react";
 
 import { Button, Field, Input, MoneyInput, Select } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/dialog.tsx";
+import { Plus, X } from "../../ui/icons.tsx";
 import { Notice } from "../../ui/primitives.tsx";
 
 export type Opcao = { readonly id: string; readonly name: string };
@@ -85,7 +86,45 @@ export function SubscriptionForm({
   const [categoria, setCategoria] = useState(assinatura?.categoryId ?? "");
   const [intervalo, setIntervalo] = useState<"monthly" | "yearly">(assinatura?.interval ?? "monthly");
 
+  /**
+   * Classificações criadas aqui dentro.
+   *
+   * O `router.refresh()` só chega quando o diálogo fecha; sem esta lista, a
+   * classificação recém-criada não apareceria no próprio select em que ela foi
+   * criada — e o usuário teria de fechar tudo e começar de novo.
+   */
+  const [novosRotulos, setNovosRotulos] = useState<readonly Opcao[]>([]);
+  const [criandoRotulo, setCriandoRotulo] = useState(false);
+  const [nomeDoRotulo, setNomeDoRotulo] = useState("");
+  const [salvandoRotulo, setSalvandoRotulo] = useState(false);
+
+  const rotulos = [...opcoes.labels, ...novosRotulos];
   const editando = assinatura !== null;
+
+  async function criarClassificacao() {
+    setSalvandoRotulo(true);
+    setErro(null);
+
+    const resposta = await fetch("/api/v1/subscription-labels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: nomeDoRotulo }),
+    });
+
+    setSalvandoRotulo(false);
+
+    if (!resposta.ok) {
+      const dados = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(dados.error?.message ?? "Não foi possível criar a classificação.");
+      return;
+    }
+
+    const { data } = (await resposta.json()) as { data: { id: string } };
+    setNovosRotulos((atuais) => [...atuais, { id: data.id, name: nomeDoRotulo.trim() }]);
+    setClassificacao(data.id);
+    setNomeDoRotulo("");
+    setCriandoRotulo(false);
+  }
 
   async function salvar() {
     setEnviando(true);
@@ -223,19 +262,65 @@ export function SubscriptionForm({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Classificação" htmlFor="assinatura-classificacao" hint="Para o relatório">
-            <Select
-              id="assinatura-classificacao"
-              value={classificacao}
-              onChange={(evento) => setClassificacao(evento.target.value)}
-            >
-              <option value="">Sem classificação</option>
-              {opcoes.labels.map((rotulo) => (
-                <option key={rotulo.id} value={rotulo.id}>
-                  {rotulo.name}
-                </option>
-              ))}
-            </Select>
+          <Field
+            label="Classificação"
+            htmlFor={criandoRotulo ? "assinatura-nova-classificacao" : "assinatura-classificacao"}
+            hint="Para o relatório"
+          >
+            {criandoRotulo ? (
+              <div className="flex gap-1.5">
+                <Input
+                  id="assinatura-nova-classificacao"
+                  value={nomeDoRotulo}
+                  onChange={(evento) => setNomeDoRotulo(evento.target.value)}
+                  placeholder="Jogos, Notícias…"
+                  maxLength={60}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  busy={salvandoRotulo}
+                  disabled={!nomeDoRotulo.trim()}
+                  onClick={criarClassificacao}
+                >
+                  Criar
+                </Button>
+                <button
+                  type="button"
+                  aria-label="Cancelar nova classificação"
+                  onClick={() => {
+                    setCriandoRotulo(false);
+                    setNomeDoRotulo("");
+                  }}
+                  className="rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-surface-sunken hover:text-ink"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <Select
+                  id="assinatura-classificacao"
+                  value={classificacao}
+                  onChange={(evento) => setClassificacao(evento.target.value)}
+                >
+                  <option value="">Sem classificação</option>
+                  {rotulos.map((rotulo) => (
+                    <option key={rotulo.id} value={rotulo.id}>
+                      {rotulo.name}
+                    </option>
+                  ))}
+                </Select>
+                <button
+                  type="button"
+                  aria-label="Criar classificação"
+                  onClick={() => setCriandoRotulo(true)}
+                  className="shrink-0 rounded-md border border-line px-2 text-ink-subtle transition-colors hover:bg-surface-sunken hover:text-ink"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            )}
           </Field>
 
           <Field label="Categoria" htmlFor="assinatura-categoria" hint="Para o orçamento">

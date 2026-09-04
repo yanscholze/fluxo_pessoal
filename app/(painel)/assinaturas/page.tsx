@@ -8,6 +8,7 @@ import { date, money, percent, relativeDay } from "../../ui/format.ts";
 import { Calendar, Check, Layers, Repeat, Wallet } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
+import { LabelsPanel } from "./labels-panel.tsx";
 import { NewSubscription } from "./new-subscription.tsx";
 import { SubscriptionActions } from "./subscription-actions.tsx";
 import type { Opcoes } from "./subscription-form.tsx";
@@ -292,6 +293,16 @@ export default async function Assinaturas() {
                   <Empty icon={Calendar} title="Nenhuma cobrança prevista" compact />
                 )}
               </Panel>
+
+              <LabelsPanel
+                labels={relatorio.labels.map((rotulo) => ({
+                  id: rotulo.id,
+                  name: rotulo.name,
+                  color: rotulo.color,
+                  count:
+                    relatorio.byLabel.find((linha) => linha.label?.id === rotulo.id)?.count ?? 0,
+                }))}
+              />
 
               <Panel>
                 <PanelHeader

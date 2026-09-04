@@ -63,7 +63,7 @@ export default async function VisaoGeral() {
         <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
 
         <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <CashflowPanel points={dashboard.cashflow} />
           </div>
           <CategoryPanel categories={dashboard.categorySpend} />
@@ -75,7 +75,7 @@ export default async function VisaoGeral() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <RecentPanel transactions={dashboard.recentTransactions} />
           </div>
           <AccountsPanel accounts={dashboard.accounts} />
