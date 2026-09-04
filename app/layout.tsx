@@ -4,6 +4,22 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Fluxo",
   description: "Saiba exatamente quanto você tem, quanto já está comprometido e quanto sobra.",
+  /**
+   * O manifesto é o que torna o Fluxo instalável — no computador pelo Chrome
+   * e pelo Edge, no celular pelo "adicionar à tela inicial". Junto com o
+   * service worker registrado em `install-app.tsx`, fecha os requisitos.
+   */
+  manifest: "/manifest.webmanifest",
+  applicationName: "Fluxo",
+  appleWebApp: { capable: true, title: "Fluxo", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/icone-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icone-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/icone-192.png", sizes: "192x192", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {

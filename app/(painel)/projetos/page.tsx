@@ -143,12 +143,30 @@ function CartaoDeProjeto({ projeto }: { projeto: Projeto }) {
   const { finance, effort, deadline } = projeto.health;
 
   return (
-    <Panel as="article" className="flex flex-col gap-3">
+    /**
+     * O cartão inteiro é o alvo, não só o nome.
+     *
+     * O link cobre a superfície por um pseudo-elemento esticado: o cartão
+     * continua sendo um `article` com medidores e distintivos dentro — que não
+     * podem virar conteúdo de âncora —, e mesmo assim qualquer ponto dele leva
+     * ao projeto. Um `onClick` na `div` daria o mesmo clique e nenhuma das
+     * outras coisas que um link é: abrir em nova aba, copiar endereço, receber
+     * foco na ordem certa, ser anunciado como link.
+     */
+    <Panel
+      as="article"
+      className="group relative flex flex-col gap-3 transition-colors hover:border-line-strong focus-within:border-accent-edge"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <a href={`/projetos/${projeto.id}`} className="block min-w-0">
-            <h3 className="truncate text-body font-medium text-ink hover:text-accent">{projeto.name}</h3>
-          </a>
+          <h3 className="truncate text-body font-medium text-ink transition-colors group-hover:text-accent">
+            <a
+              href={`/projetos/${projeto.id}`}
+              className="outline-none before:absolute before:inset-0 before:rounded-panel before:content-['']"
+            >
+              {projeto.name}
+            </a>
+          </h3>
           <p className="mt-0.5 truncate text-caption text-ink-subtle">
             {projeto.clientName ?? "Projeto próprio"}
           </p>

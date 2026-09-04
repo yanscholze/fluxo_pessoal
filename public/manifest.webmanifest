@@ -1,0 +1,56 @@
+{
+  "id": "/",
+  "name": "Fluxo",
+  "short_name": "Fluxo",
+  "description": "Saiba exatamente quanto você tem, quanto já está comprometido e quanto sobra.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#08090b",
+  "theme_color": "#08090b",
+  "categories": ["finance", "productivity"],
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icone-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo lançamento",
+      "short_name": "Lançar",
+      "url": "/lancamentos?novo=1",
+      "icons": [{ "src": "/icons/icone-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Cartões e faturas",
+      "short_name": "Cartões",
+      "url": "/cartoes",
+      "icons": [{ "src": "/icons/icone-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Projetos",
+      "short_name": "Projetos",
+      "url": "/projetos",
+      "icons": [{ "src": "/icons/icone-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

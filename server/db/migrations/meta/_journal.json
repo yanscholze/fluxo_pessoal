@@ -78,6 +78,13 @@
       "when": 1788520223866,
       "tag": "0011_dev-area",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788527785597,
+      "tag": "0012_project-info",
+      "breakpoints": true
     }
   ]
 }

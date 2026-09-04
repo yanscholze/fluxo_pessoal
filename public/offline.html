@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fluxo — sem conexão</title>
+    <style>
+      /* Sem folha de estilo externa de propósito: esta página precisa
+         funcionar exatamente quando nada mais carrega. */
+      :root { color-scheme: dark light; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        background: #08090b;
+        color: #e7e9ee;
+        font: 400 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { max-width: 26rem; text-align: center; }
+      img { width: 56px; height: 56px; margin-bottom: 1.25rem; }
+      h1 { font-size: 1.125rem; font-weight: 600; margin: 0 0 0.5rem; }
+      p { margin: 0; color: #9aa1ad; }
+      button {
+        margin-top: 1.5rem;
+        padding: 0.5rem 1rem;
+        border: 0;
+        border-radius: 0.375rem;
+        background: #35b7aa;
+        color: #06231f;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      @media (prefers-color-scheme: light) {
+        body { background: #f6f7f9; color: #14161a; }
+        p { color: #5b6270; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icone-192.png" alt="" />
+      <h1>Sem conexão</h1>
+      <p>
+        O Fluxo precisa da rede para mostrar seus números. Nada foi perdido — o que
+        está gravado continua no servidor, esperando você voltar.
+      </p>
+      <button type="button" onclick="location.reload()">Tentar de novo</button>
+    </main>
+  </body>
+</html>

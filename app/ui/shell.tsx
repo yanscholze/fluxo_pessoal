@@ -18,6 +18,7 @@ import { useState, type ReactNode } from "react";
 
 import { BackButton } from "./back-button.tsx";
 import { BottomNav } from "./bottom-nav.tsx";
+import { InstallApp } from "./install-app.tsx";
 import { gravarPreferencia, usePreferencia } from "./browser-preference.ts";
 
 import {
@@ -214,6 +215,11 @@ export function Shell({ userName, children }: { userName: string; children: Reac
         </div>
 
         <div className="shrink-0 border-t border-line p-2.5">
+          {/* O convite de instalação só existe quando o navegador oferece, e
+              some depois de instalado. Fica aqui, e não no cabeçalho, porque é
+              uma ação de uma vez só na vida do aplicativo. */}
+          <InstallApp className={join("mb-1.5 w-full", recolhida ? "lg:hidden" : "")} />
+
           <Link
             href="/configuracoes"
             className={join(

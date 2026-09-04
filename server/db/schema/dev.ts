@@ -97,6 +97,21 @@ export const projects = sqliteTable(
     mainBranch: text("main_branch"),
     productionUrl: text("production_url"),
     documentationUrl: text("documentation_url"),
+    /** Painel da infraestrutura: Cloudflare, Vercel, o que hospedar. */
+    infraUrl: text("infra_url"),
+    /** Painel administrativo do próprio site, quando existe. */
+    adminUrl: text("admin_url"),
+    /** Usuário com que se entra nesse painel. */
+    adminUser: text("admin_user"),
+    /**
+     * **Onde** a senha está, não a senha.
+     *
+     * Guardar senha em texto no banco seria transformar um vazamento do Fluxo
+     * num vazamento de todos os projetos do usuário. Este campo aponta para o
+     * cofre — "1Password, cofre Clientes" — e é isso que se lê quando a senha
+     * é necessária.
+     */
+    credentialsHint: text("credentials_hint"),
     notes: text("notes"),
     color: text("color").notNull().default("#6366f1"),
     archivedAt: text("archived_at"),

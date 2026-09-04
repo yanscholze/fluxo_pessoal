@@ -30,6 +30,18 @@ export class InputReader {
     return value === undefined || value === null || value === "";
   }
 
+  /**
+   * A chave veio no corpo, mesmo que vazia.
+   *
+   * `missing` trata `""` como ausente, o que é o certo para quem só quer ler
+   * um valor. Numa edição parcial a diferença importa: campo ausente é "não
+   * mexe", campo enviado vazio é "apague". Sem isto, remover um link que mudou
+   * seria impossível pela API.
+   */
+  provided(path: string): boolean {
+    return Object.hasOwn(this.body, path);
+  }
+
   string(path: string, options: { max?: number; min?: number } = {}): string {
     const value = this.raw(path);
     if (typeof value !== "string" || !value.trim()) {

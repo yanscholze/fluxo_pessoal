@@ -7,11 +7,12 @@ import { BackButton } from "../../../ui/back-button.tsx";
 import { KeyValue, ListRow, MetricStrip, Timeline } from "../../../ui/data-display.tsx";
 import { type LocalDate } from "../../../../core/time/local-date.ts";
 import { dateShort, decimal, money } from "../../../ui/format.ts";
-import { Clock, ExternalLink, Github, Wallet } from "../../../ui/icons.tsx";
+import { Clock, Wallet } from "../../../ui/icons.tsx";
 import { Page, PageHeader, SectionTitle, Stack } from "../../../ui/page-frame.tsx";
 import { Badge, Empty, Meter, Notice, Panel, PanelHeader } from "../../../ui/primitives.tsx";
 import { LogTime } from "./log-time.tsx";
 import { PaymentActions } from "./payment-actions.tsx";
+import { ProjectInfoCard } from "./project-info.tsx";
 import { ProposalsPanel } from "./proposals-panel.tsx";
 import { TasksPanel } from "./tasks-panel.tsx";
 
@@ -108,6 +109,20 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
           </Notice>
         ) : null}
 
+        <ProjectInfoCard
+          projectId={project.id}
+          info={{
+            repositoryUrl: project.repositoryUrl,
+            mainBranch: project.mainBranch,
+            productionUrl: project.productionUrl,
+            infraUrl: project.infraUrl,
+            adminUrl: project.adminUrl,
+            adminUser: project.adminUser,
+            credentialsHint: project.credentialsHint,
+            documentationUrl: project.documentationUrl,
+          }}
+        />
+
         <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
           <Panel>
             <PanelHeader
@@ -202,16 +217,7 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
               />
             </div>
 
-            {(project.repositoryUrl || project.productionUrl) && (
-              <div className="mt-4 space-y-1.5 border-t border-line pt-4">
-                {project.repositoryUrl ? (
-                  <Link href={project.repositoryUrl} icon="repo" label="Repositório" />
-                ) : null}
-                {project.productionUrl ? (
-                  <Link href={project.productionUrl} icon="site" label="Ambiente" />
-                ) : null}
-              </div>
-            )}
+
           </Panel>
         </div>
 
@@ -285,17 +291,3 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
   );
 }
 
-function Link({ href, icon, label }: { href: string; icon: "repo" | "site"; label: string }) {
-  const Icone = icon === "repo" ? Github : ExternalLink;
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="flex items-center gap-2 text-body-sm text-ink-muted transition-colors hover:text-accent"
-    >
-      <Icone size={14} strokeWidth={1.5} aria-hidden />
-      <span className="truncate">{label}</span>
-    </a>
-  );
-}

@@ -131,6 +131,13 @@ export type ProjectInput = {
   readonly productionUrl?: string | null;
   readonly documentationUrl?: string | null;
   readonly mainBranch?: string | null;
+  /** Painel da infraestrutura: Cloudflare, Vercel, o que hospedar. */
+  readonly infraUrl?: string | null;
+  /** Painel administrativo do próprio site. */
+  readonly adminUrl?: string | null;
+  readonly adminUser?: string | null;
+  /** **Onde** a senha está, nunca a senha. */
+  readonly credentialsHint?: string | null;
   readonly notes?: string | null;
   readonly color?: string | null;
 };
@@ -174,6 +181,10 @@ export async function createProject(
       productionUrl: input.productionUrl ?? null,
       documentationUrl: input.documentationUrl ?? null,
       mainBranch: input.mainBranch ?? null,
+      infraUrl: input.infraUrl ?? null,
+      adminUrl: input.adminUrl ?? null,
+      adminUser: input.adminUser ?? null,
+      credentialsHint: input.credentialsHint ?? null,
       notes: input.notes ?? null,
       ...(input.color ? { color: input.color } : {}),
     });
@@ -188,6 +199,72 @@ export async function createProject(
   });
 
   return id;
+}
+
+/**
+ * Edita a ficha do projeto.
+ *
+ * Campos ausentes ficam como estão; campos enviados vazios são **limpos**. A
+ * diferença importa: apagar um link é uma edição legítima, e tratar vazio como
+ * "não mexe" tornaria impossível remover um endereço que mudou.
+ */
+export async function updateProject(
+  userId: string,
+  projectId: string,
+  input: Partial<ProjectInput>,
+  now: Date = new Date(),
+): Promise<void> {
+  const projeto = await findProject(userId, projectId);
+  if (!projeto) throw notFound("Projeto", projectId);
+
+  if (input.clientId) {
+    const [cliente] = await getDatabase()
+      .select({ id: clients.id })
+      .from(clients)
+      .where(and(eq(clients.userId, userId), eq(clients.id, input.clientId)))
+      .limit(1);
+    if (!cliente) throw notFound("Cliente", input.clientId);
+  }
+
+  const nome = input.name?.trim();
+  if (input.name !== undefined && !nome) {
+    throw validationError("O projeto precisa de um nome", [
+      { path: "name", message: "O nome não pode ficar vazio" },
+    ]);
+  }
+
+  // `undefined` é "não mexe"; `null` ou string vazia limpam o campo.
+  const texto = (valor: string | null | undefined) => {
+    if (valor === undefined) return undefined;
+    const limpo = valor?.trim() ?? "";
+    return limpo === "" ? null : limpo;
+  };
+
+  await getDatabase()
+    .update(projects)
+    .set({
+      ...(nome ? { name: nome } : {}),
+      ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
+      ...(input.description !== undefined ? { description: texto(input.description) } : {}),
+      ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      ...(input.startsOn !== undefined ? { startsOn: input.startsOn } : {}),
+      ...(input.dueOn !== undefined ? { dueOn: input.dueOn } : {}),
+      ...(input.contract !== undefined ? { contractCents: input.contract ?? 0 } : {}),
+      ...(input.hourlyRate !== undefined ? { hourlyRateCents: input.hourlyRate ?? 0 } : {}),
+      ...(input.estimatedHours !== undefined ? { estimatedHoursMilli: input.estimatedHours ?? 0 } : {}),
+      ...(input.repositoryUrl !== undefined ? { repositoryUrl: texto(input.repositoryUrl) } : {}),
+      ...(input.mainBranch !== undefined ? { mainBranch: texto(input.mainBranch) } : {}),
+      ...(input.productionUrl !== undefined ? { productionUrl: texto(input.productionUrl) } : {}),
+      ...(input.documentationUrl !== undefined ? { documentationUrl: texto(input.documentationUrl) } : {}),
+      ...(input.infraUrl !== undefined ? { infraUrl: texto(input.infraUrl) } : {}),
+      ...(input.adminUrl !== undefined ? { adminUrl: texto(input.adminUrl) } : {}),
+      ...(input.adminUser !== undefined ? { adminUser: texto(input.adminUser) } : {}),
+      ...(input.credentialsHint !== undefined ? { credentialsHint: texto(input.credentialsHint) } : {}),
+      ...(input.notes !== undefined ? { notes: texto(input.notes) } : {}),
+      ...(input.color !== undefined ? { color: input.color ?? projeto.color } : {}),
+      updatedAt: now.toISOString(),
+    })
+    .where(and(eq(projects.userId, userId), eq(projects.id, projectId)));
 }
 
 export async function updateProjectStatus(
