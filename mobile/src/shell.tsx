@@ -24,7 +24,7 @@ import { LancamentoScreen } from "./screens/lancamento.tsx";
 import { OrcamentosScreen } from "./screens/orcamentos.tsx";
 import { useLedger } from "./state/ledger.tsx";
 import { Texto } from "./ui/primitives.tsx";
-import { radius, space, type, usePalette } from "./ui/theme.ts";
+import { elevation, radius, space, type, usePalette } from "./ui/theme.ts";
 
 type Aba = "inicio" | "extrato" | "cartoes" | "orcamentos" | "ajustes" | "capturas";
 
@@ -43,7 +43,6 @@ const ABAS: readonly { readonly id: Aba; readonly label: string }[] = [
   { id: "extrato", label: "Extrato" },
   { id: "cartoes", label: "Cartões" },
   { id: "orcamentos", label: "Orçamento" },
-  { id: "ajustes", label: "Ajustes" },
 ];
 
 export function Shell() {
@@ -74,7 +73,7 @@ export function Shell() {
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
       <View style={{ flex: 1 }}>
         {aba === "inicio" ? (
-          <InicioScreen onOpenTransaction={abrirLancamento} />
+          <InicioScreen onOpenTransaction={abrirLancamento} onAbrirAjustes={() => setAba("ajustes")} />
         ) : aba === "extrato" ? (
           <ExtratoScreen onOpenTransaction={abrirLancamento} />
         ) : aba === "cartoes" ? (
@@ -84,59 +83,74 @@ export function Shell() {
         ) : aba === "capturas" ? (
           <CapturasScreen onVoltar={() => setAba("ajustes")} />
         ) : (
-          <AjustesScreen onAbrirCapturas={() => setAba("capturas")} />
+          <AjustesScreen onAbrirCapturas={() => setAba("capturas")} onVoltar={() => setAba("inicio")} />
         )}
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Novo lançamento"
-        onPress={() => abrirLancamento(null)}
-        style={({ pressed }) => ({
-          position: "absolute",
-          right: space.lg,
-          bottom: insets.bottom + 76,
-          width: 56,
-          height: 56,
-          borderRadius: radius.pill,
-          backgroundColor: palette.accent,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: pressed ? 0.85 : 1,
-          elevation: 4,
-        })}
-      >
-        <Texto style={{ color: palette.accentInk, fontSize: 28, lineHeight: 32, fontWeight: "400" }}>+</Texto>
-      </Pressable>
+      {/*
+        A barra inferior: quatro destinos e a ação no meio.
 
+        O botão flutuante que existia antes tapava o canto do conteúdo e ficava
+        longe do polegar em telas grandes. No meio da barra ele é o alvo mais
+        fácil de acertar da tela inteira — e é a ação que este aplicativo existe
+        para tornar rápida.
+      */}
       <View
         style={{
           flexDirection: "row",
+          alignItems: "stretch",
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: palette.line,
           backgroundColor: palette.surface,
           paddingBottom: insets.bottom,
         }}
       >
-        {ABAS.map((item) => {
-          const ativo = item.id === aba;
-          const alerta = item.id === "ajustes" && sync.unresolved > 0;
+        {ABAS.slice(0, 2).map((item) => (
+          <ItemDeAba
+            key={item.id}
+            item={item}
+            ativo={item.id === aba}
+            alerta={item.id === "inicio" && sync.unresolved > 0}
+            onPress={() => setAba(item.id)}
+          />
+        ))}
 
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: ativo }}
-              onPress={() => setAba(item.id)}
-              style={{ flex: 1, alignItems: "center", paddingVertical: space.md }}
+        <View style={{ width: 68, alignItems: "center", justifyContent: "flex-start" }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Novo lançamento"
+            onPress={() => abrirLancamento(null)}
+            style={({ pressed }) => ({
+              width: 52,
+              height: 52,
+              // Sobe para fora da barra: é o que o distingue de um quinto
+              // destino e o torna o alvo evidente.
+              marginTop: -14,
+              borderRadius: radius.pill,
+              backgroundColor: palette.accent,
+              alignItems: "center",
+              justifyContent: "center",
+              transform: [{ scale: pressed ? 0.94 : 1 }],
+              ...elevation.float,
+            })}
+          >
+            <Texto
+              style={{ color: palette.accentInk, fontSize: 26, lineHeight: 30, fontWeight: "500" }}
             >
-              <Texto style={[type.bodySm, { color: ativo ? palette.accent : palette.inkSubtle }]}>
-                {item.label}
-                {alerta ? " •" : ""}
-              </Texto>
-            </Pressable>
-          );
-        })}
+              +
+            </Texto>
+          </Pressable>
+        </View>
+
+        {ABAS.slice(2).map((item) => (
+          <ItemDeAba
+            key={item.id}
+            item={item}
+            ativo={item.id === aba}
+            alerta={item.id === "inicio" && sync.unresolved > 0}
+            onPress={() => setAba(item.id)}
+          />
+        ))}
       </View>
 
       <Modal
@@ -148,5 +162,70 @@ export function Shell() {
         <LancamentoScreen existing={emEdicao} onClose={fecharLancamento} />
       </Modal>
     </View>
+  );
+}
+
+
+/**
+ * Um destino da barra.
+ *
+ * Sem ícone, e isso é deliberado: quatro palavras curtas cabem e não deixam
+ * dúvida, enquanto um ícone de "orçamento" ou de "ajustes" precisa ser
+ * aprendido. O ponto do alerta fica ao lado do rótulo em vez de virar um selo
+ * numerado — a informação útil é "tem algo esperando", não quantos.
+ */
+function ItemDeAba({
+  item,
+  ativo,
+  alerta,
+  onPress,
+}: {
+  item: { id: Aba; label: string };
+  ativo: boolean;
+  alerta: boolean;
+  onPress: () => void;
+}) {
+  const palette = usePalette();
+
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: ativo }}
+      onPress={onPress}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 52,
+        paddingVertical: space.sm,
+        gap: 4,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Texto
+          style={[
+            type.bodySm,
+            { color: ativo ? palette.accent : palette.inkSubtle, fontWeight: ativo ? "600" : "400" },
+          ]}
+        >
+          {item.label}
+        </Texto>
+        {alerta ? (
+          <View
+            style={{ width: 5, height: 5, borderRadius: radius.pill, backgroundColor: palette.caution }}
+          />
+        ) : null}
+      </View>
+
+      {/* Sublinhado curto marca a aba ativa sem depender só da cor. */}
+      <View
+        style={{
+          height: 2,
+          width: 16,
+          borderRadius: radius.pill,
+          backgroundColor: ativo ? palette.accent : "transparent",
+        }}
+      />
+    </Pressable>
   );
 }

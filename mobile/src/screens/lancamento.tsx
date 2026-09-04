@@ -20,10 +20,10 @@ import { competenceForPurchase } from "@fluxo/core/domain/card/invoice-cycle.ts"
 import type { TransactionKind } from "@fluxo/core/domain/ledger/types.ts";
 import { type Cents, parseMoney } from "@fluxo/core/kernel/money.ts";
 import { competenceOf } from "@fluxo/core/time/competence.ts";
-import { type LocalDate, isLocalDate, todayIn } from "@fluxo/core/time/local-date.ts";
+import { type LocalDate, addDays, isLocalDate, todayIn } from "@fluxo/core/time/local-date.ts";
 import { useLedger } from "../state/ledger.tsx";
 import type { LocalTransaction, TransactionDraft } from "../storage/model.ts";
-import { competence as formatCompetence, money } from "../ui/format.ts";
+import { competence as formatCompetence } from "../ui/format.ts";
 import { Body, Button, Card, Label, Notice, Small , Texto } from "../ui/primitives.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
@@ -131,49 +131,97 @@ export function LancamentoScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}>
+      {/* Puxador da folha: o gesto de arrastar para baixo é o que se tenta
+          primeiro num modal de celular, e sem a barrinha ninguém sabe que ele
+          existe. */}
+      <View style={{ alignItems: "center", paddingTop: space.sm }}>
+        <View
+          style={{
+            width: 36,
+            height: 4,
+            borderRadius: radius.pill,
+            backgroundColor: palette.lineStrong,
+          }}
+        />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Body strong style={{ fontSize: 20 }}>
+          <Texto style={[type.title, { color: palette.ink }]}>
             {existing ? "Editar lançamento" : "Novo lançamento"}
-          </Body>
+          </Texto>
           <Pressable onPress={onClose} hitSlop={12}>
-            <Body muted>Fechar</Body>
+            <Texto style={[type.body, { color: palette.inkMuted }]}>Fechar</Texto>
           </Pressable>
         </View>
 
-        <Card>
-          <Label>Valor</Label>
-          <TextInput
-            value={valor}
-            onChangeText={setValor}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-            placeholderTextColor={palette.inkSubtle}
-            style={[
-              { fontFamily: familiaDoPeso(type.figure.fontWeight) },
-              type.figure,
-              { color: centavos && centavos > 0 ? palette.ink : palette.inkSubtle, paddingVertical: space.sm },
-            ]}
-          />
-          {valor.trim() && !centavos ? (
-            <Small tone="negative">Valor não reconhecido.</Small>
-          ) : centavos && centavos > 0 ? (
-            <Small>{money(centavos)}</Small>
-          ) : null}
-        </Card>
-
-        <Card>
-          <Label>Tipo</Label>
-          <Options
-            options={TIPOS.map((tipo) => ({ id: tipo.value, label: tipo.label }))}
-            selected={kind}
+        {/*
+          Tipo primeiro, valor logo abaixo, no mesmo bloco.
+          A escolha do tipo muda o significado do número — e de tudo o que vem
+          depois —, então precisa vir antes dele, não num cartão separado lá
+          embaixo.
+        */}
+        <View
+          style={{
+            backgroundColor: palette.surface,
+            borderRadius: radius.xl,
+            borderWidth: 1,
+            borderColor: palette.line,
+            padding: space.lg,
+            gap: space.md,
+          }}
+        >
+          <Segmentos
+            opcoes={TIPOS.map((tipo) => ({ id: tipo.value, label: tipo.label }))}
+            selecionado={kind}
             onSelect={(escolha) => {
               setKind(escolha as TransactionKind);
               // Receita e transferência nunca saem de cartão.
               if (escolha !== "expense") setCartaoId(null);
             }}
           />
-        </Card>
+
+          <View>
+            <Label>Valor</Label>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
+              <Texto
+                style={[
+                  type.figure,
+                  { color: centavos && centavos > 0 ? palette.inkMuted : palette.inkSubtle },
+                ]}
+              >
+                R$
+              </Texto>
+              <TextInput
+                value={valor}
+                onChangeText={setValor}
+                keyboardType="decimal-pad"
+                placeholder="0,00"
+                placeholderTextColor={palette.inkSubtle}
+                autoFocus={!existing}
+                style={[
+                  { fontFamily: familiaDoPeso(type.display.fontWeight) },
+                  type.display,
+                  {
+                    flex: 1,
+                    color: centavos && centavos > 0
+                      ? kind === "income"
+                        ? palette.positive
+                        : palette.ink
+                      : palette.inkSubtle,
+                    paddingVertical: space.xs,
+                  },
+                ]}
+              />
+            </View>
+            {valor.trim() && !centavos ? (
+              <Small tone="negative">Valor não reconhecido.</Small>
+            ) : null}
+          </View>
+        </View>
 
         <Card>
           <Label>Descrição</Label>
@@ -199,7 +247,49 @@ export function LancamentoScreen({
         </Card>
 
         <Card>
-          <Label>Data</Label>
+          <Label>Quando</Label>
+
+          {/*
+            Quase todo lançamento é de hoje ou de ontem. Dois toques resolvem o
+            caso comum; digitar a data continua possível para o resto, mas
+            deixa de ser o caminho obrigatório — que era pedir `AAAA-MM-DD` no
+            teclado do celular.
+          */}
+          <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.sm }}>
+            {[
+              { rotulo: "Hoje", valor: hoje },
+              { rotulo: "Ontem", valor: addDays(hoje, -1) },
+              { rotulo: "Anteontem", valor: addDays(hoje, -2) },
+            ].map((atalho) => {
+              const ativo = data === atalho.valor;
+              return (
+                <Pressable
+                  key={atalho.rotulo}
+                  onPress={() => setData(atalho.valor)}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: radius.pill,
+                    backgroundColor: ativo ? palette.accentWash : palette.surfaceSunken,
+                    borderWidth: 1,
+                    borderColor: ativo ? palette.accentEdge : palette.line,
+                  }}
+                >
+                  <Texto
+                    style={[
+                      type.bodySm,
+                      { color: ativo ? palette.accent : palette.inkMuted, fontWeight: ativo ? "600" : "400" },
+                    ]}
+                  >
+                    {atalho.rotulo}
+                  </Texto>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <TextInput
             value={data}
             onChangeText={setData}
@@ -216,15 +306,26 @@ export function LancamentoScreen({
                 backgroundColor: palette.surfaceSunken,
                 borderRadius: radius.md,
                 paddingHorizontal: space.md,
-                paddingVertical: 14,
+                paddingVertical: 12,
               },
             ]}
           />
+
           {competencia ? (
-            <Small style={{ marginTop: space.sm }}>
-              {cartao ? "Entra na fatura de " : "Competência "}
-              {formatCompetence(competencia)}
-            </Small>
+            <View
+              style={{
+                marginTop: space.sm,
+                padding: space.sm + 2,
+                borderRadius: radius.md,
+                backgroundColor: cartao ? palette.cautionWash : palette.surfaceSunken,
+              }}
+            >
+              <Small tone={cartao ? "caution" : undefined}>
+                {cartao
+                  ? `Entra na fatura de ${formatCompetence(competencia)}`
+                  : `Competência ${formatCompetence(competencia)}`}
+              </Small>
+            </View>
           ) : null}
         </Card>
 
@@ -292,6 +393,65 @@ export function LancamentoScreen({
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Escolha exclusiva entre três, lado a lado.
+ *
+ * O tipo do lançamento tem sempre as mesmas três opções e é a decisão que muda
+ * todo o resto do formulário — merece um controle que mostre as três de uma
+ * vez, e não uma nuvem de pastilhas igual às categorias, que são muitas e
+ * variáveis.
+ */
+function Segmentos({
+  opcoes,
+  selecionado,
+  onSelect,
+}: {
+  opcoes: readonly { id: string; label: string }[];
+  selecionado: string;
+  onSelect: (id: string) => void;
+}) {
+  const palette = usePalette();
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        backgroundColor: palette.surfaceSunken,
+        borderRadius: radius.md,
+        padding: 3,
+        gap: 3,
+      }}
+    >
+      {opcoes.map((opcao) => {
+        const ativo = opcao.id === selecionado;
+        return (
+          <Pressable
+            key={opcao.id}
+            onPress={() => onSelect(opcao.id)}
+            style={{
+              flex: 1,
+              height: 34,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: radius.sm,
+              backgroundColor: ativo ? palette.surface : "transparent",
+            }}
+          >
+            <Texto
+              style={[
+                type.bodySm,
+                { color: ativo ? palette.ink : palette.inkMuted, fontWeight: ativo ? "600" : "400" },
+              ]}
+            >
+              {opcao.label}
+            </Texto>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 

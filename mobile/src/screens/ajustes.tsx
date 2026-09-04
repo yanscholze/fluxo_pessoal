@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { appVersion, deviceName } from "../device.ts";
@@ -17,7 +17,13 @@ import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Divider, Label, Notice, Row, Small } from "../ui/primitives.tsx";
 import { space, usePalette } from "../ui/theme.ts";
 
-export function AjustesScreen({ onAbrirCapturas }: { onAbrirCapturas: () => void }) {
+export function AjustesScreen({
+  onAbrirCapturas,
+  onVoltar,
+}: {
+  onAbrirCapturas: () => void;
+  onVoltar: () => void;
+}) {
   const palette = usePalette();
   const { state, disconnect } = useSession();
   const { sync, conflicts, synchronize, resolveConflict } = useLedger();
@@ -28,9 +34,14 @@ export function AjustesScreen({ onAbrirCapturas }: { onAbrirCapturas: () => void
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}>
-        <Body strong style={{ fontSize: 20 }}>
-          Ajustes
-        </Body>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+          <Pressable onPress={onVoltar} hitSlop={12} accessibilityRole="button" accessibilityLabel="Voltar">
+            <Body muted>← Voltar</Body>
+          </Pressable>
+          <Body strong style={{ fontSize: 20 }}>
+            Ajustes
+          </Body>
+        </View>
 
         <Card>
           <Label>Conta</Label>

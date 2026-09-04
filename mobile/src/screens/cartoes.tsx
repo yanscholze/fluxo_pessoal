@@ -22,6 +22,7 @@ import type { CardSummary } from "../finance/derive.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { CardFace, LARGURA_DA_FACE } from "../ui/card-face.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
+import { Medidor } from "../ui/charts.tsx";
 import { Body, Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
@@ -199,23 +200,11 @@ function DetalheDoCartao({ resumo, hoje }: { resumo: CardSummary; hoje: string }
             </Small>
           </View>
 
-          <View
-            style={{
-              height: 6,
-              borderRadius: radius.pill,
-              backgroundColor: palette.surfaceInset,
-              marginTop: space.sm,
-              overflow: "hidden",
-            }}
-          >
-            <View
-              style={{
-                height: "100%",
-                width: `${Math.min(100, Math.max(0, proporcao * 100))}%`,
-                borderRadius: radius.pill,
-                backgroundColor:
-                  proporcao > 0.85 ? palette.negative : proporcao > 0.6 ? palette.caution : palette.accent,
-              }}
+          <View style={{ marginTop: space.sm }}>
+            <Medidor
+              valor={usado}
+              total={card.limit}
+              tom={proporcao > 0.85 ? "negative" : proporcao > 0.6 ? "caution" : "accent"}
             />
           </View>
 

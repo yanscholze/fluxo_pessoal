@@ -34,9 +34,9 @@ import {
   type Transaction,
 } from "@fluxo/core/domain/ledger/types.ts";
 import { type Cents, subtract } from "@fluxo/core/kernel/money.ts";
-import type { Competence } from "@fluxo/core/time/competence.ts";
-import type { LocalDate } from "@fluxo/core/time/local-date.ts";
-import type { LocalAccount, LocalCard, LocalTransaction } from "../storage/model.ts";
+import { type Competence, series, shift } from "@fluxo/core/time/competence.ts";
+import { type LocalDate, addDays } from "@fluxo/core/time/local-date.ts";
+import type { LocalAccount, LocalCard, LocalCategory, LocalTransaction } from "../storage/model.ts";
 
 /**
  * Converte a linha local no lançamento do domínio.
@@ -203,4 +203,104 @@ export function overview(input: {
     cards,
     skipped,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Séries para os gráficos
+//
+// Continuam sem fazer conta de dinheiro: cada ponto é uma chamada a `flow` ou
+// a `totalAccountBalance`, as mesmas do site. O que este trecho faz é escolher
+// o recorte — quais competências, quais dias — e nada mais.
+// ---------------------------------------------------------------------------
+
+export type PontoMensal = {
+  readonly competence: Competence;
+  readonly income: Cents;
+  readonly expense: Cents;
+};
+
+/**
+ * Entrou e saiu, mês a mês, terminando na competência informada.
+ *
+ * Só consumo: transferência entre contas próprias não é receita nem despesa, e
+ * contá-la infla os dois lados do gráfico com dinheiro que só mudou de lugar.
+ */
+export function monthlyFlow(input: {
+  rows: readonly LocalTransaction[];
+  userId: string;
+  competence: Competence;
+  months: number;
+}): PontoMensal[] {
+  const { entries } = buildLedger(input.rows, input.userId);
+  const competencias = series(shift(input.competence, -(input.months - 1)), input.months);
+
+  return competencias.map((competence) => {
+    const consumo = flow(entries, { states: ["confirmed"], competence, kinds: CONSUMPTION });
+    return { competence, income: consumo.inflow, expense: consumo.outflow };
+  });
+}
+
+export type GastoPorCategoria = {
+  readonly categoryId: string | null;
+  readonly name: string;
+  readonly color: string | null;
+  readonly amount: Cents;
+};
+
+/**
+ * Quanto saiu em cada categoria na competência.
+ *
+ * Feito sobre os lançamentos, e não sobre o razão, porque categoria é
+ * propriedade do fato — a movimentação fala de dinheiro, não de significado.
+ * Só despesa confirmada entra: previsto ainda não aconteceu, e receita não tem
+ * o que dividir por categoria de gasto.
+ */
+export function spendByCategory(input: {
+  rows: readonly LocalTransaction[];
+  categories: readonly LocalCategory[];
+  competence: Competence;
+}): GastoPorCategoria[] {
+  const nomes = new Map(input.categories.map((categoria) => [categoria.id, categoria]));
+  const totais = new Map<string | null, number>();
+
+  for (const row of input.rows) {
+    if (row.kind !== "expense" || row.state !== "confirmed") continue;
+    if (row.competence !== input.competence) continue;
+    totais.set(row.categoryId, (totais.get(row.categoryId) ?? 0) + row.amount);
+  }
+
+  return [...totais]
+    .map(([categoryId, amount]) => {
+      const categoria = categoryId ? nomes.get(categoryId) : undefined;
+      return {
+        categoryId,
+        name: categoria?.name ?? "Sem categoria",
+        color: categoria?.color ?? null,
+        amount: amount as Cents,
+      };
+    })
+    .sort((esquerda, direita) => direita.amount - esquerda.amount);
+}
+
+/**
+ * Saldo ao fim de cada um dos últimos dias.
+ *
+ * Alimenta a série curta do topo do painel. Reconstruído a partir do razão a
+ * cada leitura — guardar a série seria manter um número à mão, que é
+ * exatamente o que este projeto não faz com dinheiro.
+ */
+export function balanceHistory(input: {
+  rows: readonly LocalTransaction[];
+  accounts: readonly LocalAccount[];
+  userId: string;
+  today: LocalDate;
+  days: number;
+}): Cents[] {
+  const { entries } = buildLedger(input.rows, input.userId);
+  const aberturas = new Map(input.accounts.map((conta) => [conta.id, conta.openingBalance]));
+
+  return Array.from({ length: input.days }, (_, indice) => {
+    const dia = addDays(input.today, -(input.days - 1 - indice));
+    return totalAccountBalance(entries, aberturas, dia);
+  });
 }

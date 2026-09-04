@@ -30,7 +30,15 @@ import {
 } from "../storage/ledger.ts";
 import type { LocalAccount, LocalCard, LocalCategory, LocalTransaction, TransactionDraft } from "../storage/model.ts";
 import { type OutboxRow, countByStatus, discard, listUnresolved, rebase } from "../storage/outbox.ts";
-import { type Overview, overview } from "../finance/derive.ts";
+import {
+  type GastoPorCategoria,
+  type Overview,
+  type PontoMensal,
+  balanceHistory,
+  monthlyFlow,
+  overview,
+  spendByCategory,
+} from "../finance/derive.ts";
 import { appVersion, deviceName } from "../device.ts";
 
 import { useSession } from "./session.tsx";
@@ -54,6 +62,12 @@ type LedgerContextValue = {
   readonly categories: readonly LocalCategory[];
   readonly cards: readonly LocalCard[];
   readonly overview: Overview | null;
+  /** Séries do painel. Derivadas na leitura, como todo o resto. */
+  readonly charts: {
+    readonly monthly: readonly PontoMensal[];
+    readonly byCategory: readonly GastoPorCategoria[];
+    readonly balanceDays: readonly number[];
+  };
   readonly sync: SyncStatus;
   readonly conflicts: readonly OutboxRow[];
   refresh(): Promise<void>;
@@ -224,6 +238,27 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     });
   }, [conectado, transactions, accounts, cards]);
 
+  /**
+   * As séries dos gráficos.
+   *
+   * Separadas do `overview` de propósito: são varreduras mais caras — seis
+   * competências e trinta dias — e não precisam refazer quando só a sessão
+   * muda. Memorizadas sobre os mesmos dados, recalculam junto com eles.
+   */
+  const charts = useMemo(() => {
+    if (!conectado) return { monthly: [], byCategory: [], balanceDays: [] };
+
+    const hoje = todayIn();
+    const competencia = competenceOf(hoje);
+    const userId = conectado.credentials.user.id;
+
+    return {
+      monthly: monthlyFlow({ rows: transactions, userId, competence: competencia, months: 6 }),
+      byCategory: spendByCategory({ rows: transactions, categories, competence: competencia }),
+      balanceDays: balanceHistory({ rows: transactions, accounts, userId, today: hoje, days: 30 }),
+    };
+  }, [conectado, transactions, accounts, categories]);
+
   const value = useMemo<LedgerContextValue>(
     () => ({
       loading,
@@ -232,6 +267,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       categories,
       cards,
       overview: numeros,
+      charts,
       sync,
       conflicts,
       refresh,
@@ -248,6 +284,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       categories,
       cards,
       numeros,
+      charts,
       sync,
       conflicts,
       refresh,

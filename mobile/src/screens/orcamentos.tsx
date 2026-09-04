@@ -20,6 +20,7 @@ import { ApiError, OfflineError } from "../net/client.ts";
 import { type BudgetLine, type BudgetsSnapshot, fetchBudgets } from "../net/budgets.ts";
 import { useConnectedSession } from "../state/session.tsx";
 import { money, percent } from "../ui/format.ts";
+import { Medidor } from "../ui/charts.tsx";
 import { Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
@@ -148,7 +149,6 @@ function LinhaDeOrcamento({ linha }: { linha: BudgetLine }) {
 
   const estourou = linha.available <= 0;
   const emRisco = !estourou && linha.willExceed;
-  const cor = estourou ? palette.negative : emRisco ? palette.caution : palette.accent;
   const proporcao = Math.min(100, Math.max(0, linha.percentUsed));
 
   return (
@@ -177,17 +177,11 @@ function LinhaDeOrcamento({ linha }: { linha: BudgetLine }) {
         </View>
       </View>
 
-      <View
-        style={{
-          height: 6,
-          borderRadius: radius.pill,
-          backgroundColor: palette.surfaceInset,
-          marginTop: space.md,
-          overflow: "hidden",
-        }}
-      >
-        <View
-          style={{ height: "100%", width: `${proporcao}%`, borderRadius: radius.pill, backgroundColor: cor }}
+      <View style={{ marginTop: space.md }}>
+        <Medidor
+          valor={linha.spent}
+          total={linha.amount}
+          tom={estourou ? "negative" : proporcao > 80 ? "caution" : "accent"}
         />
       </View>
 
