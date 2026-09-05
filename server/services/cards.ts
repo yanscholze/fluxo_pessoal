@@ -50,6 +50,16 @@ export type CardView = {
   readonly paymentAccountId: string;
   readonly paymentAccountName: string;
   readonly limitCents: number;
+  /** O ciclo cru, para a tela de correção — a fatura ativa mostra as datas. */
+  readonly tier: string;
+  readonly closingDay: number;
+  readonly dueDay: number;
+  readonly dueAdjustment: "previous" | "next";
+  readonly rewardMode: "none" | "points" | "cashback" | "both";
+  readonly pointsPerDollarMilli: number;
+  readonly cashbackBasisPoints: number;
+  readonly pointsGoal: number;
+  readonly manualUsdRateMicros: number;
   readonly usedLimitCents: number;
   readonly availableLimitCents: number;
   readonly debtCents: number;
@@ -167,6 +177,15 @@ function toCardView(
     paymentAccountId: card.paymentAccountId,
     paymentAccountName: accountName.get(card.paymentAccountId) ?? "Conta removida",
     limitCents: card.limitCents,
+    tier: card.tier,
+    closingDay: card.closingDay,
+    dueDay: card.dueDay,
+    dueAdjustment: card.dueAdjustment,
+    rewardMode: card.rewardMode,
+    pointsPerDollarMilli: card.pointsPerDollarMilli,
+    cashbackBasisPoints: card.cashbackBasisPoints,
+    pointsGoal: card.pointsGoal,
+    manualUsdRateMicros: card.manualUsdRateMicros,
     usedLimitCents: usado,
     availableLimitCents:
       card.kind === "credit" ? availableLimit(entries, card.id, card.limitCents as Cents) : 0,

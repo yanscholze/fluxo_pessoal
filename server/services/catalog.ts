@@ -10,13 +10,22 @@
 import { and, count, eq, isNull, max } from "drizzle-orm";
 
 import { SUPPORTED_CURRENCIES, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
-import { assertValidCycle } from "../../core/domain/card/invoice-cycle.ts";
+import { assertValidCycle, type CycleConfig, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import { conflict, duplicate, notFound, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
 import type { Cents } from "../../core/kernel/money.ts";
+import type { Competence } from "../../core/time/competence.ts";
 import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
-import { accounts, cards, categories, ledgerEntries, recurrences, transactions } from "../db/schema/index.ts";
+import {
+  accounts,
+  cards,
+  categories,
+  invoices,
+  ledgerEntries,
+  recurrences,
+  transactions,
+} from "../db/schema/index.ts";
 
 // ---------------------------------------------------------------------------
 // Contas
@@ -313,6 +322,143 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
   });
 
   return id;
+}
+
+export type CardPatch = {
+  readonly name?: string | null;
+  readonly paymentAccountId?: string | null;
+  readonly closingDay?: number | null;
+  readonly dueDay?: number | null;
+  readonly dueAdjustment?: "previous" | "next" | null;
+  readonly limit?: Cents | null;
+  readonly brand?: string | null;
+  readonly tier?: string | null;
+  readonly last4?: string | null;
+  readonly color?: string | null;
+  readonly rewardMode?: "none" | "points" | "cashback" | "both" | null;
+  readonly pointsPerDollarMilli?: number | null;
+  readonly cashbackBasisPoints?: number | null;
+  readonly pointsGoal?: number | null;
+  readonly manualUsdRateMicros?: number | null;
+};
+
+/**
+ * Corrige um cartão já cadastrado.
+ *
+ * O caso que obriga esta função a existir é o dia de fechamento digitado
+ * errado. Ele não é um enfeite do cadastro: é o que decide em qual fatura cada
+ * compra cai. Errado, todas as competências saem erradas — e, sem edição, a
+ * única saída seria apagar o cartão e perder o histórico junto.
+ *
+ * Mudar o ciclo **não** reescreve fatura fechada ou paga: aquelas já viraram
+ * fato, com data de vencimento que alguém honrou. O que se recalcula são as
+ * faturas abertas cujo fechamento ainda não chegou — essas ainda são previsão,
+ * e previsão tem de seguir o ciclo corrente.
+ */
+export async function updateCard(
+  userId: string,
+  cardId: string,
+  patch: CardPatch,
+  now: Date = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+
+  const [atual] = await database
+    .select()
+    .from(cards)
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)))
+    .limit(1);
+  if (!atual) throw notFound("Cartão", cardId);
+
+  const ciclo = {
+    closingDay: patch.closingDay ?? atual.closingDay,
+    dueDay: patch.dueDay ?? atual.dueDay,
+    dueAdjustment: patch.dueAdjustment ?? atual.dueAdjustment,
+  };
+  assertValidCycle(ciclo);
+
+  if (patch.paymentAccountId) {
+    const [conta] = await database
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.userId, userId), eq(accounts.id, patch.paymentAccountId)))
+      .limit(1);
+    if (!conta) throw notFound("Conta de pagamento", patch.paymentAccountId);
+  }
+
+  if (patch.name && patch.name !== atual.name) {
+    const [homonimo] = await database
+      .select({ id: cards.id })
+      .from(cards)
+      .where(and(eq(cards.userId, userId), eq(cards.name, patch.name)))
+      .limit(1);
+    if (homonimo) throw duplicate("Já existe um cartão com este nome");
+  }
+
+  const campos: Record<string, unknown> = { updatedAt: now.toISOString() };
+  if (patch.name) campos.name = patch.name;
+  if (patch.paymentAccountId) campos.paymentAccountId = patch.paymentAccountId;
+  if (patch.closingDay != null) campos.closingDay = patch.closingDay;
+  if (patch.dueDay != null) campos.dueDay = patch.dueDay;
+  if (patch.dueAdjustment) campos.dueAdjustment = patch.dueAdjustment;
+  if (patch.limit != null) campos.limitCents = patch.limit as number;
+  if (patch.brand != null) campos.brand = patch.brand;
+  if (patch.tier != null) campos.tier = patch.tier;
+  if (patch.last4 != null) campos.last4 = patch.last4.replace(/\D/g, "").slice(-4);
+  if (patch.color) campos.color = patch.color;
+  if (patch.rewardMode) campos.rewardMode = patch.rewardMode;
+  if (patch.pointsPerDollarMilli != null) campos.pointsPerDollarMilli = patch.pointsPerDollarMilli;
+  if (patch.cashbackBasisPoints != null) campos.cashbackBasisPoints = patch.cashbackBasisPoints;
+  if (patch.pointsGoal != null) campos.pointsGoal = patch.pointsGoal;
+  if (patch.manualUsdRateMicros != null) campos.manualUsdRateMicros = patch.manualUsdRateMicros;
+
+  await database
+    .update(cards)
+    .set(campos)
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)));
+
+  const mudouOCiclo =
+    ciclo.closingDay !== atual.closingDay ||
+    ciclo.dueDay !== atual.dueDay ||
+    ciclo.dueAdjustment !== atual.dueAdjustment;
+
+  if (mudouOCiclo) await reagendarFaturasAbertas(userId, cardId, ciclo, now);
+}
+
+/**
+ * Reescreve as datas das faturas que ainda não fecharam.
+ *
+ * Só as `open` com fechamento no futuro. Uma fatura cujo fechamento já passou
+ * — mesmo ainda aberta — recebeu compras sob a regra antiga, e mover a data
+ * dela mudaria retroativamente onde essas compras caíram.
+ */
+async function reagendarFaturasAbertas(
+  userId: string,
+  cardId: string,
+  cycle: CycleConfig,
+  now: Date,
+): Promise<void> {
+  const database = getDatabase();
+  const hoje = todayIn(now);
+
+  const abertas = await database
+    .select({ id: invoices.id, competence: invoices.competence, closingDate: invoices.closingDate })
+    .from(invoices)
+    .where(and(eq(invoices.userId, userId), eq(invoices.cardId, cardId), eq(invoices.status, "open")));
+
+  for (const fatura of abertas) {
+    if ((fatura.closingDate as LocalDate) <= hoje) continue;
+
+    const agenda = scheduleFor(cycle, fatura.competence as Competence);
+    await database
+      .update(invoices)
+      .set({
+        closingDate: agenda.closingDate,
+        dueDate: agenda.dueDate,
+        updatedAt: now.toISOString(),
+      })
+      .where(eq(invoices.id, fatura.id));
+  }
 }
 
 async function clearPrimary(userId: string, now: Date): Promise<void> {

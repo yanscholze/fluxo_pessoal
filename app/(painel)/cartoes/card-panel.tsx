@@ -6,8 +6,9 @@ import type { CardsView, CardView, InvoiceView } from "../../../server/services/
 import { Button } from "../../ui/controls.tsx";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, money, percent, relativeDay } from "../../ui/format.ts";
-import { CircleAlert } from "../../ui/icons.tsx";
+import { CircleAlert, Pencil } from "../../ui/icons.tsx";
 import { Badge, Divider, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
+import { NewCard } from "./new-card.tsx";
 import { PayInvoice } from "./pay-invoice.tsx";
 
 const SITUACAO: Record<InvoiceView["status"], { texto: string; tom: Tone }> = {
@@ -27,6 +28,7 @@ export function CardPanel({
   today: CardsView["today"];
 }) {
   const [pagando, setPagando] = useState<InvoiceView | null>(null);
+  const [editando, setEditando] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
   const ativa = card.invoices.find((invoice) => invoice.isActive);
@@ -44,6 +46,30 @@ export function CardPanel({
     <Panel as="article">
       {/* Nome, bandeira, final e situação vivem na face do cartão, logo acima.
           Repeti-los aqui seria a mesma informação duas vezes na mesma dobra. */}
+      <NewCard
+        accounts={accounts}
+        open={editando}
+        onClose={() => setEditando(false)}
+        card={{
+          id: card.id,
+          name: card.name,
+          kind: card.kind,
+          brand: card.brand,
+          tier: card.tier,
+          last4: card.last4,
+          color: card.color,
+          paymentAccountId: card.paymentAccountId,
+          limitCents: card.limitCents,
+          closingDay: card.closingDay,
+          dueDay: card.dueDay,
+          dueAdjustment: card.dueAdjustment,
+          rewardMode: card.rewardMode,
+          pointsPerDollarMilli: card.pointsPerDollarMilli,
+          cashbackBasisPoints: card.cashbackBasisPoints,
+          pointsGoal: card.pointsGoal,
+        }}
+      />
+
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-heading text-ink">
@@ -51,8 +77,18 @@ export function CardPanel({
           </h2>
           <p className="mt-0.5 truncate text-caption text-ink-subtle">
             {card.brand ? `${card.brand} · ` : ""}paga por {card.paymentAccountName}
+            {card.kind === "credit"
+              ? ` · fecha dia ${card.closingDay}, vence dia ${card.dueDay}`
+              : ""}
           </p>
         </div>
+
+        {/* O dia de fechamento é o campo mais fácil de errar no cadastro e o
+            mais caro de ter errado: ele decide em qual fatura cada compra cai.
+            Sem correção, a saída seria apagar o cartão e perder o histórico. */}
+        <Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditando(true)}>
+          Editar
+        </Button>
 
         {card.kind === "credit" ? (
           <div className="text-right">
