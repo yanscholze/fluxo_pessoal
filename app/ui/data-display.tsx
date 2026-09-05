@@ -223,7 +223,7 @@ const ESCONDE: Record<string, string> = {
   sm: "hidden @sm:table-cell",
   md: "hidden @lg:table-cell",
   lg: "hidden @2xl:table-cell",
-  xl: "hidden @4xl:table-cell",
+  xl: "hidden @3xl:table-cell",
 };
 
 /**

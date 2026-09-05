@@ -280,6 +280,12 @@
   /* A coluna da página: três larguras, uma por tipo de tela — formulário   */
   /* não deve esticar, tabela ganha com o espaço, leitura fica no meio.     */
   /*                                                                        */
+  /* O limite serve para a linha de texto não ficar longa demais — mas quem */
+  /* protege o texto é `--container-measure-*`, aplicada no parágrafo. Aqui  */
+  /* o conteúdo é painel e tabela, que só ganham com o espaço. Em 78rem, uma */
+  /* tela 16:9 deixava mais de 400px de vazio dos dois lados enquanto a      */
+  /* tabela lá dentro escondia colunas por falta de largura.                */
+  /*                                                                        */
   /* A medida de leitura: quantos caracteres cabem numa linha antes de o    */
   /* olho perder o começo da seguinte. Havia **sete** valores diferentes    */
   /* para isso no produto — 34ch, 38ch, 42ch, 46ch, 52ch, 54ch e 62ch —     */
@@ -289,8 +295,8 @@
   /* ---------------------------------------------------------------------- */
 
   --container-page-narrow: 48rem;
-  --container-page: 78rem;
-  --container-page-wide: 92rem;
+  --container-page: 96rem;
+  --container-page-wide: 112rem;
 
   --container-measure-sm: 42ch;
   --container-measure: 56ch;
