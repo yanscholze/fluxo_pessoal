@@ -170,6 +170,11 @@ export function ReviewPanel({
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <select
+                  // A tela repete este seletor uma vez por lançamento. Sem
+                  // dizer de qual, o leitor de tela anuncia dez "caixa de
+                  // seleção" iguais e quem navega por teclado não sabe qual
+                  // está classificando.
+                  aria-label={`Categoria de ${item.description}`}
                   value={item.categoryId ?? ""}
                   onChange={(evento) =>
                     chamar(

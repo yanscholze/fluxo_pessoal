@@ -8,8 +8,15 @@
  *
  * A proporção é a do cartão real (85,6 × 53,98 mm). Fugir dela produz um
  * retângulo que *lembra* um cartão sem ser um, que é pior do que não ter.
+ *
+ * A tinta acompanha a cor escolhida. Fixa em branco, metade da paleta de
+ * partida ficava abaixo do mínimo de leitura — no âmbar, 2,15:1 — e o seletor
+ * aceita qualquer cor, então não haveria lista de exceções que bastasse. As
+ * opacidades saem de `currentColor`, e por isso a hierarquia entre nome, marca
+ * e número continua a mesma nos dois casos.
  */
 
+import { needsDarkInk } from "../../../core/kernel/color.ts";
 import { competenceShort, dateShort, money } from "../../ui/format.ts";
 import { CircleAlert } from "../../ui/icons.tsx";
 import { join } from "../../ui/primitives.tsx";
@@ -40,35 +47,45 @@ export function CardFace({
   onSelect?: () => void;
   id?: string;
 }) {
+  const escura = needsDarkInk(data.color);
+  /** Tinta e véus acompanham o fundo: no claro, o que escurece é preto. */
+  const tinta = escura ? "text-[#10151c]" : "text-white";
+  const veu = escura ? "bg-black/12" : "bg-white/10";
+  const selo = escura ? "bg-white/45" : "bg-black/35";
+  const brilho = escura
+    ? "bg-linear-to-br from-white/35 via-transparent to-black/12"
+    : "bg-linear-to-br from-white/22 via-transparent to-black/25";
+  const contorno = escura ? "ring-black/10" : "ring-white/12";
+
   const conteudo = (
     <>
       {/* Brilho diagonal: dá volume ao plástico sem virar gradiente chapado. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-linear-to-br from-white/22 via-transparent to-black/25"
+        className={join("pointer-events-none absolute inset-0", brilho)}
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute -right-10 -top-16 size-40 rounded-full bg-white/10 blur-2xl"
+        className={join("pointer-events-none absolute -right-10 -top-16 size-40 rounded-full blur-2xl", veu)}
       />
 
       <div className="relative flex h-full flex-col justify-between p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-body font-semibold text-white drop-shadow-sm">{data.name}</p>
-            <p className="mt-0.5 text-caption text-white/70">
+            <p className="truncate text-body font-semibold drop-shadow-sm">{data.name}</p>
+            <p className="mt-0.5 text-caption opacity-70">
               {data.kind === "credit" ? "Crédito" : "Débito"}
               {data.isPrimary ? " · principal" : ""}
             </p>
           </div>
 
           {data.overdueCount > 0 ? (
-            <span className="flex shrink-0 items-center gap-1 rounded-sm bg-black/35 px-1.5 py-0.5 text-label uppercase text-white">
+            <span className={join("flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-label uppercase", selo)}>
               <CircleAlert size={11} strokeWidth={2} aria-hidden />
               {data.overdueCount}
             </span>
           ) : (
-            <svg viewBox="0 0 20 20" className="size-5 shrink-0 text-white/55" fill="none" aria-hidden>
+            <svg viewBox="0 0 20 20" className="size-5 shrink-0 opacity-55" fill="none" aria-hidden>
               <path d="M7 4a9 9 0 0 1 0 12M11 6a5.5 5.5 0 0 1 0 8M14.6 7.6a2.5 2.5 0 0 1 0 4.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           )}
@@ -83,10 +100,10 @@ export function CardFace({
 
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="tabular text-body font-medium tracking-[0.18em] text-white/90">
+            <p className="tabular text-body font-medium tracking-[0.18em] opacity-90">
               {data.last4 ? `•••• ${data.last4}` : "••••"}
             </p>
-            <p className="mt-1 text-caption text-white/65">
+            <p className="mt-1 text-caption opacity-65">
               {data.kind !== "credit"
                 ? "sai direto do saldo"
                 : data.closingOn && data.dueOn
@@ -98,15 +115,15 @@ export function CardFace({
           <div className="shrink-0 text-right">
             {data.invoice ? (
               <>
-                <p className="text-label uppercase text-white/60">
+                <p className="text-label uppercase opacity-60">
                   {competenceShort(data.invoice.competence as never)}
                 </p>
-                <p className="tabular text-body font-semibold text-white">
+                <p className="tabular text-body font-semibold">
                   {money(data.invoice.outstandingCents)}
                 </p>
               </>
             ) : (
-              <p className="text-caption text-white/70">{data.brand ?? ""}</p>
+              <p className="text-caption opacity-70">{data.brand ?? ""}</p>
             )}
           </div>
         </div>
@@ -116,7 +133,9 @@ export function CardFace({
 
   const forma = join(
     "relative aspect-[1.586/1] w-[19rem] shrink-0 overflow-hidden rounded-xl text-left",
-    "shadow-float ring-1 ring-inset ring-white/12 transition-[transform,opacity] duration-300 ease-out-soft",
+    "shadow-float ring-1 ring-inset transition-[transform,opacity] duration-300 ease-out-soft",
+    tinta,
+    contorno,
     selected === false ? "scale-[0.94] opacity-55" : "scale-100 opacity-100",
   );
 

@@ -504,7 +504,7 @@ export function Timeline({ items, className }: { items: readonly TimelineItem[];
             </div>
             <p className="mt-0.5 text-caption text-ink-subtle">
               {item.when}
-              {item.detail ? <span className="mx-1.5 text-line-strong">·</span> : null}
+              {item.detail ? <span aria-hidden className="mx-1.5 text-line-strong">·</span> : null}
               {item.detail}
             </p>
           </div>

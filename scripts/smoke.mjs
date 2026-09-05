@@ -10,9 +10,47 @@
 
 const BASE = process.argv[2] ?? "http://localhost:5173";
 
+/**
+ * Cada rodada cria o próprio usuário e apaga só o que criou.
+ *
+ * O usuário descartável é isolamento, não descuido: rodar sobre a conta de
+ * demonstração corromperia os números que ela existe para mostrar. O que
+ * faltava era a outra metade — vinte e uma rodadas tinham deixado vinte e um
+ * usuários no banco local, cada um com contas e lançamentos que ninguém mais
+ * ia olhar.
+ *
+ * A limpeza só acontece no banco local do Miniflare, e só quando o alvo é
+ * localhost: contra um servidor de verdade não há arquivo para abrir, e apagar
+ * usuário por fora do produto seria exatamente o tipo de atalho que este
+ * script existe para não precisar.
+ */
+async function limpar(email) {
+  if (!/^https?:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) return;
+
+  try {
+    const { readdirSync } = await import("node:fs");
+    const { DatabaseSync } = await import("node:sqlite");
+    const pasta = ".wrangler/state/v3/d1/miniflare-D1DatabaseObject";
+    const arquivo = readdirSync(pasta).find((nome) => nome.endsWith(".sqlite"));
+    if (!arquivo) return;
+
+    const banco = new DatabaseSync(`${pasta}/${arquivo}`);
+    // As tabelas apontam para `users` com `on delete cascade`: apagar o
+    // usuário leva junto contas, cartões, lançamentos e sessões.
+    const { changes } = banco.prepare("delete from users where email = ?").run(email);
+    banco.close();
+    if (changes) console.log(`\n  (usuário de teste ${email} removido do banco local)`);
+  } catch {
+    // Limpeza é conveniência. Falhar aqui não invalida a verificação que já
+    // passou, e mascarar o resultado dela por causa disso seria pior.
+  }
+}
+
 let token = null;
 let falhas = 0;
 let verificacoes = 0;
+/** Guardado fora de `main` para a limpeza alcançá-lo mesmo se algo estourar. */
+let emailDoTeste = null;
 
 async function api(caminho, { method = "GET", body } = {}) {
   const resposta = await fetch(`${BASE}${caminho}`, {
@@ -59,6 +97,7 @@ async function main() {
 
   // --- Cadastro ------------------------------------------------------------
   const email = `smoke-${Date.now()}@fluxo.teste`;
+  emailDoTeste = email;
   const cadastro = await api("/api/v1/session", {
     method: "POST",
     body: { action: "signup", email, password: "senha-de-teste-123", displayName: "Teste Silva", kind: "device" },
@@ -698,13 +737,17 @@ async function main() {
   console.log(`     aperto em           ${livre.lowestOn}`);
   console.log(`     ciclo ${livre.windowStart} a ${livre.windowEnd} · horizonte até ${livre.horizonEnd}`);
 
+  await limpar(emailDoTeste);
+
   console.log(
     `\n${verificacoes - falhas}/${verificacoes} verificações passaram${falhas ? ` — ${falhas} FALHA(S)` : ""}`,
   );
   process.exit(falhas ? 1 : 0);
 }
 
-main().catch((erro) => {
+main().catch(async (erro) => {
+  // Limpa também quando falhou: a rodada interrompida deixa o mesmo lixo.
+  if (emailDoTeste) await limpar(emailDoTeste);
   console.error(`\nErro: ${erro.message}`);
   process.exit(1);
 });

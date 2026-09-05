@@ -168,7 +168,7 @@ export default async function Planejamento() {
                   <span className="tabular font-medium text-positive">{money(pendenteEntrada)} a entrar</span>
                 ) : null}
                 {pendenteEntrada > 0 && pendenteSaida > 0 ? (
-                  <span className="mx-1.5 text-line-strong">·</span>
+                  <span aria-hidden className="mx-1.5 text-line-strong">·</span>
                 ) : null}
                 {pendenteSaida > 0 ? (
                   <span className="tabular font-medium text-ink">{money(pendenteSaida)} a sair</span>

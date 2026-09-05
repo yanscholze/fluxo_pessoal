@@ -21,9 +21,16 @@ import { CreditCard, Plus, X } from "../../ui/icons.tsx";
 import { Notice, Panel } from "../../ui/primitives.tsx";
 import { CardFace } from "./card-face.tsx";
 
-/** Paleta de partida. O usuário ainda pode digitar qualquer cor no seletor. */
+/**
+ * Paleta de partida. O usuário ainda pode digitar qualquer cor no seletor.
+ *
+ * Todas passam em 4,5:1 contra a tinta que a face escolhe para elas — o roxo
+ * de antes ficava em 4,35:1 com branco e 4,22:1 com preto, ou seja, reprovava
+ * nas duas e não havia tinta que resolvesse. Para a cor digitada à mão, a face
+ * ainda escolhe a melhor das duas; aqui o padrão já nasce legível.
+ */
 const CORES = [
-  ["#7c5cff", "Roxo"],
+  ["#6d4bd8", "Roxo"],
   ["#0d9668", "Verde"],
   ["#2563eb", "Azul"],
   ["#dc2626", "Vermelho"],

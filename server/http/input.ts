@@ -21,6 +21,8 @@ export class InputReader {
    * que não podia ser testado.
    */
   private readonly body: Record<string, unknown>;
+  /** Campos que alguma leitura tocou. O resto o `done()` denuncia. */
+  private readonly lidos = new Set<string>();
 
   constructor(body: Record<string, unknown>) {
     this.body = body;
@@ -31,6 +33,7 @@ export class InputReader {
   }
 
   private raw(path: string): unknown {
+    this.lidos.add(path);
     return this.body[path];
   }
 
@@ -234,8 +237,20 @@ export class InputReader {
     return this.issues.length > 0;
   }
 
-  /** Estoura com todos os problemas acumulados. Chame antes de usar os valores. */
+  /**
+   * Estoura com todos os problemas acumulados. Chame antes de usar os valores.
+   *
+   * Campo que a rota não lê também é problema, e o pior tipo: um `PATCH` com
+   * `{"color": "#6d4bd8"}` numa rota que só entende `isPrimary` respondia 200
+   * sem trocar cor nenhuma. O cliente não tem como descobrir que o campo foi
+   * ignorado — ele pediu, recebeu sucesso, e nada mudou.
+   */
   done(message = "Revise os campos destacados"): void {
+    for (const campo of Object.keys(this.body)) {
+      if (!this.lidos.has(campo)) {
+        this.fail(campo, "Campo não reconhecido por esta rota");
+      }
+    }
     if (this.issues.length) throw validationError(message, this.issues);
   }
 }

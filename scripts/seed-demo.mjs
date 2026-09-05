@@ -120,7 +120,7 @@ async function main() {
         institution: "Nu Pagamentos",
         openingBalance: 210000,
         openedOn: dia(7, 1),
-        color: "#7c5cff",
+        color: "#6d4bd8",
       },
     })
   ).id;
@@ -166,7 +166,7 @@ async function main() {
         brand: "Mastercard",
         tier: "Ultravioleta",
         last4: "4417",
-        color: "#7c5cff",
+        color: "#6d4bd8",
         isPrimary: true,
         rewardMode: "both",
         pointsPerDollarMilli: 1500,

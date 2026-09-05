@@ -178,8 +178,13 @@
 
   /* Texto, em três degraus. Mais que isso vira ruído; menos, vira monotonia. */
   --color-ink: #10151c;
-  --color-ink-muted: #5b6572;
-  --color-ink-subtle: #8b95a3;
+  /* O terceiro tom precisa passar em 4,5:1 no fundo mais escuro em que ele
+     aparece, e não só no branco. Em #8b95a3 dava 3,03:1 — a dica de campo, o
+     rótulo do menu e o "—" de célula vazia ficavam abaixo do mínimo de leitura
+     em toda tela. Escurecer o terceiro tom obrigou a escurecer o segundo: sem
+     isso os dois encostavam e a hierarquia entre apoio e dica sumia. */
+  --color-ink-muted: #4a5462;
+  --color-ink-subtle: #606974;
 
   /* --- Cromo interativo -------------------------------------------------- */
   --color-accent: #0d9668;
@@ -444,7 +449,10 @@
 
   --color-ink: #e9ecef;
   --color-ink-muted: #99a2ac;
-  --color-ink-subtle: #6a737e;
+  /* 3,93:1 sobre a superfície, e 3,4:1 sobre o painel elevado — abaixo do
+     mínimo nos dois. Clareado até 4,99:1, com a distância para `muted`
+     preservada, que é o que mantém a leitura em três níveis. */
+  --color-ink-subtle: #7b8490;
 
   --color-accent: #21c99a;
   --color-accent-ink: #04231b;
