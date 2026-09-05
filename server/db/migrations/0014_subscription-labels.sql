@@ -19,4 +19,20 @@ CREATE TABLE `subscription_labels` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `subscription_labels_user_name_unq` ON `subscription_labels` (`user_id`,`name`);--> statement-breakpoint
-ALTER TABLE `recurrences` ADD `subscription_label_id` text REFERENCES subscription_labels(id);
+-- Sem `REFERENCES` na coluna, de propósito.
+--
+-- A migration inteira vai num lote atômico, e o D1 prepara as instruções antes
+-- de executá-las: uma chave estrangeira apontando para a tabela criada duas
+-- linhas acima não encontra o destino na hora da preparação, e o lote falha
+-- inteiro. Foi o que travou a produção na décima quarta migration, com o
+-- migrator repetindo a mesma falha a cada requisição.
+--
+-- A referência das outras migrations funciona porque aponta para tabela que já
+-- existia antes do lote — `categories` na décima, `recurrences` na décima
+-- quinta. Aqui o destino nasce junto.
+--
+-- Quem garante a integridade é o serviço: `createSubscription` e
+-- `updateSubscription` conferem a classificação contra `listLabels` antes de
+-- gravar, e `archiveLabel` arquiva em vez de apagar justamente para nenhuma
+-- assinatura ficar apontando para o vazio.
+ALTER TABLE `recurrences` ADD `subscription_label_id` text;

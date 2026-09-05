@@ -68,3 +68,8 @@ google-services.json
 /.agents/
 /.claude/skills/
 /skills-lock.json
+
+# Exportações do banco. Contêm lançamentos financeiros reais — e este
+# repositório é público. Backup vive na máquina, nunca no histórico.
+backups/
+*.sql.gz

@@ -87,19 +87,79 @@ function tablesCreatedBy(text: string): string[] {
 }
 
 /**
+ * Todo SQL que este migrator aplica, na ordem.
+ *
+ * Serve para saber, na primeira execução, **tudo** que vai ser criado daqui
+ * para a frente — e não só o que a inicial cria.
+ */
+const TODO_O_SQL: readonly string[] = [
+  inicial,
+  vinculoRecorrencia,
+  naturezaMovimentacao,
+  importacao,
+  planejamento,
+  recompensas,
+  usoDaIa,
+  captura,
+  sincronizacao,
+  pareamento,
+  categoriaDaCaptura,
+  areaDeTrabalho,
+  fichaDoProjeto,
+  conciliacao,
+  classificacoes,
+  cobrancaDeAssinatura,
+  valorRecebido,
+  categoriaDeTempo,
+];
+
+/**
+ * Os nomes de tabela que cada migration cria, na ordem das migrations.
+ *
+ * Exportado porque é o contrato do afastamento: se um nome que o produto vai
+ * criar não estiver aqui, um banco vindo da implementação original trava na
+ * migration que o cria — que foi exatamente o que aconteceu com
+ * `reward_redemptions`.
+ */
+export const TABELAS_POR_MIGRATION: readonly (readonly string[])[] =
+  TODO_O_SQL.map(tablesCreatedBy);
+
+/** Todas elas, achatadas. */
+export const TABELAS_DO_SCHEMA: readonly string[] = TABELAS_POR_MIGRATION.flat();
+
+/**
  * Afasta as tabelas da primeira implementação que colidem em nome com as novas.
  *
  * Elas são renomeadas, não apagadas: são a origem da migração de dados e a
  * última linha de defesa se algo der errado. As tabelas antigas sem colisão
  * ficam onde estão até a limpeza final.
+ *
+ * Olha o que **todas** as migrations criam, não só a inicial. Considerar
+ * apenas a primeira parecia bastar e não bastava: `reward_redemptions` nasce
+ * na quinta e `sync_mutations` na oitava, e as duas já existiam com esse nome
+ * na implementação original. O banco de produção subiu com as quatro primeiras
+ * aplicadas e travou na quinta, com "table already exists" — a cada
+ * requisição, para sempre, porque o migrator não avança sem completar a
+ * migration da vez.
  */
-async function renameLegacyTables(database: Database): Promise<void> {
+async function renameLegacyTables(database: Database, pendentes: readonly number[]): Promise<void> {
   const rows = await database.all<{ name: string }>(
     sql`SELECT name FROM sqlite_master WHERE type = 'table'`,
   );
   const present = new Set(rows.map((row) => row.name));
 
-  for (const table of tablesCreatedBy(inicial)) {
+  /*
+   * Só o que as migrations **pendentes** vão criar.
+   *
+   * Considerar o schema inteiro parece mais seguro e é o oposto: uma tabela
+   * criada por migration já aplicada é do schema novo, está em uso, e afastá-la
+   * a renomeia para `legacy_` — foi assim que `recurrences` sumiu de produção
+   * entre um deploy e o seguinte, e a migration seguinte morreu com "no such
+   * table: recurrences". O que já foi criado por este migrator é dele.
+   */
+  const vaoSerCriadas = pendentes.flatMap((id) => TABELAS_POR_MIGRATION[id] ?? []);
+
+  for (const table of vaoSerCriadas) {
     const legacy = `legacy_${table}`;
     // Só renomeia o que existe e ainda não foi renomeado. Num banco novo
     // (desenvolvimento, teste) nada acontece.
@@ -116,13 +176,9 @@ const MIGRATIONS: readonly Migration[] = [
   {
     id: 0,
     name: "schema-inicial",
-    // Afastar o legado e criar o schema são o mesmo passo. Separá-los deixaria
-    // o banco num estado onde o primeiro já rodou e o segundo não, e o retry
-    // pularia justamente a parte que precisava rodar de novo.
-    run: async (database) => {
-      await renameLegacyTables(database);
-      await fromSql(inicial)(database);
-    },
+    // O afastamento do legado acontece em `run()`, antes de qualquer
+    // migration: ele é pré-condição de todas, e não só desta.
+    run: fromSql(inicial),
   },
   { id: 1, name: "vincula-lancamento-a-recorrencia", run: fromSql(vinculoRecorrencia) },
   { id: 2, name: "natureza-da-movimentacao", run: fromSql(naturezaMovimentacao) },
@@ -174,9 +230,47 @@ async function run(): Promise<void> {
   const rows = await database.all<{ id: number }>(sql`SELECT id FROM _migrations`);
   const done = new Set(rows.map((row) => row.id));
 
+  /*
+   * Afastar o legado é pré-condição de qualquer migration, não passo da
+   * primeira.
+   *
+   * Estava dentro da migration 0, e por isso só protegia o que a 0 cria. Um
+   * banco vindo da implementação original passou pelas quatro primeiras e
+   * travou na quinta com "table already exists": `reward_redemptions` nasce lá
+   * e já existia com outro esquema. O migrator não avança sem completar a
+   * migration da vez, então toda requisição repetia a mesma falha.
+   *
+   * Aqui em cima, roda antes de qualquer tentativa — inclusive num banco que
+   * já travou no meio, que se conserta sozinho no deploy seguinte. É
+   * idempotente e barato: uma consulta a `sqlite_master`, e só renomeia o que
+   * existe e ainda não foi renomeado.
+   */
+  const pendentes = MIGRATIONS.filter((migration) => !done.has(migration.id)).map((m) => m.id);
+  if (pendentes.length) await renameLegacyTables(database, pendentes);
+
   for (const migration of MIGRATIONS) {
     if (done.has(migration.id)) continue;
-    await migration.run(database);
+
+    try {
+      await migration.run(database);
+    } catch (error) {
+      /*
+       * Diz qual migration e qual erro, e só então propaga.
+       *
+       * Sem isto, uma migration quebrada em produção aparece como "erro no
+       * render de Server Components, mensagem omitida" — a mesma tela para
+       * qualquer causa. Foram necessários três deploys para descobrir que a
+       * décima quarta era a culpada, e o que sai daqui é nome de tabela e
+       * mensagem do SQLite, não dado de usuário.
+       */
+      console.error(
+        `[migrator] falhou na migration ${migration.id} (${migration.name}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw error;
+    }
+
     await database.run(
       sql`INSERT INTO _migrations (id, name) VALUES (${migration.id}, ${migration.name})`,
     );
