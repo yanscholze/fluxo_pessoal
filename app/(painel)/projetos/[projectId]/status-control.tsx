@@ -14,6 +14,10 @@
  * o que o cliente encontrou, e é ele que consome as horas que ninguém orçou.
  * Um projeto encerrado sai da lista de abertos e do painel inicial — por isso a
  * decisão é explícita, e não um clique a mais no mesmo botão.
+ *
+ * Por isso o seletor **não** oferece concluído nem cancelado: as duas tiram o
+ * projeto da tela, e um seletor que faz isso ao rolar a lista com o dedo é uma
+ * armadilha. Encerrar passa pelo diálogo; cancelar também.
  */
 
 import { useRouter } from "next/navigation";
@@ -28,7 +32,7 @@ import {
 } from "../../../../core/domain/work/status.ts";
 import { Button, Select } from "../../../ui/controls.tsx";
 import { Dialog } from "../../../ui/dialog.tsx";
-import { Check, ChevronRight, RefreshCw } from "../../../ui/icons.tsx";
+import { Check, ChevronRight, RefreshCw, X } from "../../../ui/icons.tsx";
 import { Notice } from "../../../ui/primitives.tsx";
 
 export function StatusControl({
@@ -44,6 +48,7 @@ export function StatusControl({
   const router = useRouter();
   const [enviando, setEnviando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const proxima = nextPhase(status);
@@ -86,8 +91,13 @@ export function StatusControl({
         onChange={(evento) => mudar(evento.target.value as ProjectStatus)}
         className="w-auto"
       >
-        {PROJECT_STATUSES.map((situacao) => (
-          <option key={situacao} value={situacao}>
+        {/* A situação atual sempre aparece, mesmo sendo terminal: um projeto
+            concluído precisa mostrar que está concluído. O que ela não pode é
+            ser escolhida daqui. */}
+        {PROJECT_STATUSES.filter(
+          (situacao) => !isClosedStatus(situacao) || situacao === status,
+        ).map((situacao) => (
+          <option key={situacao} value={situacao} disabled={isClosedStatus(situacao)}>
             {PROJECT_STATUS_LABEL[situacao]}
           </option>
         ))}
@@ -114,9 +124,14 @@ export function StatusControl({
           Reabrir
         </Button>
       ) : (
-        <Button variant="primary" icon={Check} onClick={() => setConfirmando(true)}>
-          Concluir
-        </Button>
+        <>
+          <Button variant="primary" icon={Check} onClick={() => setConfirmando(true)}>
+            Concluir
+          </Button>
+          <Button variant="ghost" icon={X} onClick={() => setCancelando(true)}>
+            Cancelar projeto
+          </Button>
+        </>
       )}
 
       <Dialog
@@ -150,6 +165,30 @@ export function StatusControl({
             situação certa: o projeto continua visível e o tempo de suporte ainda pode ser lançado.
           </Notice>
         </div>
+      </Dialog>
+
+      <Dialog
+        open={cancelando}
+        onClose={() => setCancelando(false)}
+        title="Cancelar o projeto?"
+        description="Ele sai da lista de abertos como cancelado — sem entrega, diferente de concluído."
+        width="sm"
+        footer={
+          <Button
+            variant="danger"
+            busy={enviando}
+            onClick={async () => {
+              if (await mudar("cancelled")) setCancelando(false);
+            }}
+          >
+            Cancelar projeto
+          </Button>
+        }
+      >
+        <Notice tone="caution">
+          O que já foi lançado continua onde está: as horas trabalhadas seguem no relatório e as
+          parcelas recebidas seguem no razão. Cancelar não devolve dinheiro nem apaga trabalho.
+        </Notice>
       </Dialog>
     </div>
   );
