@@ -7,7 +7,7 @@
  * o que é aceitável porque elas já viraram lançamento ou já foram descartadas.
  */
 
-import { notFound } from "../../../../../core/kernel/errors.ts";
+import { notFound, validationError } from "../../../../../core/kernel/errors.ts";
 import { requireUser } from "../../../../../server/auth/session.ts";
 import { read } from "../../../../../server/http/input.ts";
 import { handle, json, noContent, readJson } from "../../../../../server/http/respond.ts";
@@ -24,10 +24,15 @@ export const PATCH = handle(async (request: Request) => {
   const user = await requireUser(request);
   const input = read(await readJson(request));
 
-  const ativa = input.choice("isActive", ["true", "false"] as const);
+  const ativa = input.optionalBoolean("isActive");
   input.done();
 
-  await setReceiptRuleActive(user.id, idOf(request), ativa === "true");
+  // Sem o campo, nada a alterar — mas a rota existe para alterar algo.
+  if (ativa === null) throw validationError("Informe se a regra fica ativa", [
+    { path: "isActive", message: "Informe verdadeiro ou falso" },
+  ]);
+
+  await setReceiptRuleActive(user.id, idOf(request), ativa);
   return json({ data: { ok: true } });
 });
 

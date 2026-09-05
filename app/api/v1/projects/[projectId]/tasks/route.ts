@@ -24,7 +24,7 @@ export const POST = handle(async (request: Request) => {
   const input = read(await readJson(request));
 
   const minutos = input.optionalInteger("estimateMinutes", { min: 0, max: 100_000 });
-  const cobravel = input.optionalChoice("billable", ["true", "false"] as const);
+  const cobravel = input.optionalBoolean("billable");
 
   const payload = {
     projectId,
@@ -34,7 +34,7 @@ export const POST = handle(async (request: Request) => {
     priority: input.optionalChoice("priority", PRIORIDADES) ?? undefined,
     dueOn: input.optionalDate("dueOn"),
     estimate: minutos === null ? null : fromMinutes(minutos),
-    ...(cobravel !== null ? { billable: cobravel === "true" } : {}),
+    ...(cobravel !== null ? { billable: cobravel } : {}),
   };
   input.done();
 

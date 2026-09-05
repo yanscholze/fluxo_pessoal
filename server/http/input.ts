@@ -14,8 +14,17 @@ import { type LocalDate, parseLocalDate } from "../../core/time/local-date.ts";
 
 export class InputReader {
   private readonly issues: FieldIssue[] = [];
+  /*
+   * Campo declarado e atribuído, e não `constructor(private readonly body)`.
+   * A forma curta é açúcar do TypeScript, e o executor de teste do Node roda
+   * em modo que só remove tipos: com ela, este módulo era o único do servidor
+   * que não podia ser testado.
+   */
+  private readonly body: Record<string, unknown>;
 
-  constructor(private readonly body: Record<string, unknown>) {}
+  constructor(body: Record<string, unknown>) {
+    this.body = body;
+  }
 
   private fail(path: string, message: string): void {
     this.issues.push({ path, message });
@@ -156,6 +165,25 @@ export class InputReader {
     if (value === "false" || value === 0) return false;
     this.fail(path, "Informe verdadeiro ou falso");
     return fallback;
+  }
+
+  /**
+   * Booleano opcional: `null` quando o campo não veio.
+   *
+   * Existe porque a alternativa que se usava — `optionalChoice(["true",
+   * "false"])` — aceita só a **string**. Um cliente que mande o JSON natural,
+   * `{"billable": false}`, levava 400 na rota de correção enquanto a de
+   * criação aceitava o mesmo valor: duas regras para o mesmo campo, e a
+   * segunda só aparecia depois de já ter escrito o formulário.
+   */
+  optionalBoolean(path: string): boolean | null {
+    const value = this.raw(path);
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value === "boolean") return value;
+    if (value === "true" || value === 1) return true;
+    if (value === "false" || value === 0) return false;
+    this.fail(path, "Informe verdadeiro ou falso");
+    return null;
   }
 
   choice<const T extends readonly string[]>(path: string, allowed: T): T[number] {

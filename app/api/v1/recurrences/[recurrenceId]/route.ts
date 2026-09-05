@@ -26,7 +26,7 @@ export const PATCH = handle(async (request: Request) => {
   const recurrenceId = idOf(request);
   const input = read(await readJson(request));
 
-  const ativa = input.optionalChoice("isActive", ["true", "false"] as const);
+  const ativa = input.optionalBoolean("isActive");
 
   const campos = {
     description: input.optionalString("description", { max: 120 }),
@@ -43,7 +43,7 @@ export const PATCH = handle(async (request: Request) => {
   };
   input.done();
 
-  if (ativa !== null) await setRecurrenceActive(user.id, recurrenceId, ativa === "true");
+  if (ativa !== null) await setRecurrenceActive(user.id, recurrenceId, ativa);
 
   const mexeu =
     campos.description !== null ||

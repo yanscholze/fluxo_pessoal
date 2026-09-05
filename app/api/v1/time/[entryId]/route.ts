@@ -31,14 +31,14 @@ export const PATCH = handle(async (request: Request) => {
   const input = read(await readJson(request));
 
   const minutos = input.optionalInteger("minutes", { min: 1, max: MAX_MINUTOS });
-  const billable = input.optionalChoice("billable", ["true", "false"] as const);
+  const billable = input.optionalBoolean("billable");
 
   const patch = {
     workedOn: input.optionalDate("workedOn"),
     duration: minutos === null ? null : fromMinutes(minutos),
     description: input.optionalString("description", { max: 300 }),
     activity: input.optionalChoice("activity", ACTIVITIES),
-    billable: billable === null ? null : billable === "true",
+    billable,
     taskId: input.optionalReference("taskId"),
     // `provided` separa "não mandou o campo" de "mandou vazio para desvincular".
     clearTask: input.provided("taskId") && input.optionalReference("taskId") === null,

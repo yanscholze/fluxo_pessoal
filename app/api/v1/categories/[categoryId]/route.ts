@@ -31,7 +31,7 @@ export const PATCH = handle(async (request: Request) => {
   const name = input.optionalString("name", { max: 60 });
   const color = input.optionalString("color", { max: 9 });
   const icon = input.optionalString("icon", { max: 40 });
-  const isEssential = input.optionalChoice("isEssential", ["true", "false"] as const);
+  const isEssential = input.optionalBoolean("isEssential");
   const excludeFromFreeToSpend = input.optionalChoice("excludeFromFreeToSpend", ["true", "false"] as const);
 
   input.done();
@@ -51,7 +51,7 @@ export const PATCH = handle(async (request: Request) => {
       ...(color ? { color } : {}),
       ...(icon ? { icon } : {}),
       // "Essencial" só faz sentido em saída: é o que alimenta a reserva.
-      ...(isEssential !== null ? { isEssential: isEssential === "true" && existing.kind === "expense" } : {}),
+      ...(isEssential !== null ? { isEssential: isEssential && existing.kind === "expense" } : {}),
       ...(excludeFromFreeToSpend !== null
         ? { excludeFromFreeToSpend: excludeFromFreeToSpend === "true" }
         : {}),
