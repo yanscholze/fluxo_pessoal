@@ -119,6 +119,50 @@ cd mobile
 eas build --platform android --profile production
 ```
 
+### Ou compilar na própria máquina, sem conta
+
+O EAS é o caminho normal — ele assina com a chave da conta, que é a mesma da
+Play Store. Mas o APK também sai localmente, e é o que resolve quando não há
+sessão do Expo à mão.
+
+Exige uma vez: JDK **17** (não o 25 do sistema — o React Native não compila com
+ele), o SDK do Android com plataforma 36 e build-tools 36, e o NDK, sem o qual
+a configuração do CMake falha em `expo-modules-core`.
+
+```bash
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+```
+
+Depois, a cada build:
+
+```bash
+cd mobile
+npx expo prebuild --platform android --no-install
+echo "sdk.dir=$HOME/Android/Sdk" > android/local.properties
+cd android && JAVA_HOME=~/.jdks/jdk-17 ./gradlew assembleRelease
+```
+
+O APK sai em `mobile/android/app/build/outputs/apk/release/app-release.apk`.
+
+Duas diferenças em relação ao EAS, e as duas importam:
+
+- **A assinatura é a de depuração.** O APK instala por sideload — que é o
+  propósito do perfil `preview` — mas não serve para a Play Store, que exige a
+  chave de release da conta.
+- **`android/` é gerado**, e por isso fica fora do repositório: editar ali é
+  perder a edição no próximo `prebuild`.
+
+O endereço do servidor entra pelo `.env` do `mobile/`, lido no momento do
+bundle:
+
+```
+EXPO_PUBLIC_API_BASE_URL=https://fluxo-pessoal.cloudfapp.workers.dev
+```
+
+Não é segredo — é o mesmo endereço que o navegador acessa, e serve como
+sugestão inicial da tela de conexão. O token do aparelho é que é segredo, e
+vive no armazenamento criptografado do Android.
+
 Os perfis estão em `mobile/eas.json`:
 
 | Perfil | Saída | Para quê |

@@ -73,3 +73,6 @@ google-services.json
 # repositório é público. Backup vive na máquina, nunca no histórico.
 backups/
 *.sql.gz
+
+# Artefatos de build do aplicativo. Um APK tem 74 MB e é regerável.
+builds/
