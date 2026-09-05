@@ -37,7 +37,7 @@ export function RecentPanel({ transactions }: { transactions: Dashboard["recentT
         <DataTable
           caption="Últimos lançamentos confirmados"
           columns={[
-            { key: "descricao", header: "Lançamento" },
+            { key: "descricao", header: "Lançamento", flexible: true },
             { key: "tipo", header: "Natureza", hideBelow: "sm" },
             { key: "data", header: "Data", align: "right" },
             { key: "valor", header: "Valor", align: "right" },
@@ -50,7 +50,7 @@ export function RecentPanel({ transactions }: { transactions: Dashboard["recentT
 
             return (
               <Tr key={transaction.id}>
-                <Td>
+                <Td truncate>
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span
                       className={`flex size-7 shrink-0 items-center justify-center rounded-md ${

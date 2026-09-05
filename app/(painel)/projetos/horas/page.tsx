@@ -183,7 +183,7 @@ export default async function RelatorioDeHoras({
                 <DataTable
                   caption="Horas e retorno por projeto"
                   columns={[
-                    { key: "projeto", header: "Projeto" },
+                    { key: "projeto", header: "Projeto", flexible: true },
                     { key: "horas", header: "Horas", align: "right", width: "5rem" },
                     { key: "receita", header: "Receita", align: "right", width: "7rem", hideBelow: "sm" },
                     { key: "hora", header: "Por hora", align: "right", width: "6.5rem" },
@@ -191,7 +191,7 @@ export default async function RelatorioDeHoras({
                 >
                   {relatorio.projects.map((linha) => (
                     <Tr key={linha.projectId}>
-                      <Td>
+                      <Td truncate>
                         <span className="flex flex-wrap items-center gap-1.5">
                           <Link
                             href={`/projetos/${linha.projectId}`}
@@ -252,7 +252,7 @@ export default async function RelatorioDeHoras({
                   caption="Detalhamento das sessões de trabalho"
                   columns={[
                     { key: "data", header: "Data", width: "5.5rem" },
-                    { key: "descricao", header: "O que foi feito" },
+                    { key: "descricao", header: "O que foi feito", flexible: true },
                     { key: "categoria", header: "Categoria", hideBelow: "sm" },
                     { key: "projeto", header: "Projeto", hideBelow: "lg" },
                     { key: "duracao", header: "Horas", align: "right", width: "5rem" },
@@ -263,7 +263,7 @@ export default async function RelatorioDeHoras({
                       <Td className="tabular whitespace-nowrap text-caption text-ink-subtle">
                         {dateShort(sessao.workedOn)}
                       </Td>
-                      <Td>
+                      <Td truncate>
                         <span className="flex flex-wrap items-center gap-1.5">
                           <span className="truncate text-body-sm text-ink">{sessao.description}</span>
                           {!sessao.billable ? <Badge tone="neutral">não cobrável</Badge> : null}

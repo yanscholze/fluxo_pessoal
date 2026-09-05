@@ -166,7 +166,7 @@ export default async function Relatorios({
             />
 
             {report.expensesByCategory.length ? (
-              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+              <div className="flex flex-col items-center gap-6 @md:flex-row @md:items-start">
                 <DonutChart
                   slices={report.expensesByCategory.slice(0, 8).map((item, i) => ({
                     label: item.name,

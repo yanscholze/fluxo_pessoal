@@ -147,7 +147,7 @@ export default async function Investimentos() {
               hint="Concentração é risco: uma classe sozinha carregando a carteira aparece aqui antes de aparecer no bolso."
               className="min-w-0"
             >
-              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+              <div className="flex flex-col items-center gap-6 @md:flex-row @md:items-start">
                 <DonutChart
                   slices={fatias.map((item) => ({
                     label: item.label,
@@ -190,7 +190,7 @@ export default async function Investimentos() {
             <DataTable
               caption="Ativos da carteira com valor aportado, valor atual, rentabilidade e participação"
               columns={[
-                { key: "ativo", header: "Ativo" },
+                { key: "ativo", header: "Ativo", flexible: true },
                 { key: "classe", header: "Classe", hideBelow: "md" },
                 { key: "aportado", header: "Aportado", align: "right", hideBelow: "sm" },
                 { key: "atual", header: "Valor atual", align: "right" },
@@ -211,7 +211,7 @@ export default async function Investimentos() {
 
                 return (
                   <Tr key={ativo.id}>
-                    <Td>
+                    <Td truncate>
                       <span className="block truncate text-body text-ink">{ativo.name}</span>
                       <span className="mt-0.5 block truncate text-caption text-ink-subtle">{contexto}</span>
                     </Td>

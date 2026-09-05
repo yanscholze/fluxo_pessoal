@@ -142,7 +142,7 @@ export default async function Recompensas() {
                     <DataTable
                       caption={`Compras do ${cartao.cardName} que geraram recompensa`}
                       columns={[
-                        { key: "descricao", header: "Compra" },
+                        { key: "descricao", header: "Compra", flexible: true },
                         { key: "competencia", header: "Fatura", hideBelow: "sm" },
                         { key: "data", header: "Data", align: "right", hideBelow: "sm", width: "5.5rem" },
                         { key: "valor", header: "Valor", align: "right", width: "7rem" },
@@ -151,7 +151,7 @@ export default async function Recompensas() {
                     >
                       {cartao.entries.map((entrada) => (
                         <Tr key={entrada.transactionId}>
-                          <Td>
+                          <Td truncate>
                             <span className="flex min-w-0 items-center gap-2">
                               <span className="truncate text-body">{entrada.description}</span>
                               {!entrada.settled ? <Badge tone="caution">fatura aberta</Badge> : null}

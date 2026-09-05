@@ -126,7 +126,7 @@ export default async function Importar({
             <DataTable
               caption="Histórico de importações"
               columns={[
-                { key: "arquivo", header: "Arquivo" },
+                { key: "arquivo", header: "Arquivo", flexible: true },
                 { key: "destino", header: "Destino", hideBelow: "md" },
                 { key: "situacao", header: "Situação", hideBelow: "sm" },
                 { key: "resultado", header: "Resultado", align: "right" },
@@ -136,7 +136,7 @@ export default async function Importar({
                 const situacao = SITUACAO[batch.status] ?? SITUACAO.discarded;
                 return (
                   <Tr key={batch.id}>
-                    <Td>
+                    <Td truncate>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-body">{batch.filename}</span>
                         <Badge>{batch.format.toUpperCase()}</Badge>

@@ -103,7 +103,7 @@ export default async function Orcamentos({
       <Stack gap="lg">
         {temOrcamento ? (
           <Panel padding="lg">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+            <div className="flex flex-col gap-6 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-10">
               <div className="min-w-0 flex-1">
                 <Label>Ainda dá para gastar</Label>
                 <Figure
@@ -246,7 +246,7 @@ export default async function Orcamentos({
             <DataTable
               caption="Orçamentos da competência, por categoria"
               columns={[
-                { key: "categoria", header: "Categoria" },
+                { key: "categoria", header: "Categoria", flexible: true },
                 { key: "uso", header: "Uso", width: "20%", hideBelow: "md" },
                 { key: "gasto", header: "Gasto", align: "right", hideBelow: "sm" },
                 { key: "teto", header: "Teto", align: "right", hideBelow: "sm" },
@@ -296,7 +296,7 @@ function LinhaDeOrcamento({ item }: { item: BudgetView }) {
 
   return (
     <Tr>
-      <Td>
+      <Td truncate>
         <div className="flex min-w-0 items-start gap-2.5">
           <span
             className="mt-1.5 size-2 shrink-0 rounded-full"

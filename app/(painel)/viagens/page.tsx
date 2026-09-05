@@ -103,7 +103,7 @@ export default async function Viagens() {
                 {viagem.byCategory.length ? (
                   <div className="mt-5">
                     <SectionTitle title="Gastos por categoria" />
-                    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                    <div className="flex flex-col items-center gap-5 @md:flex-row @md:items-start">
                       <DonutChart
                         slices={viagem.byCategory.map((item, i) => ({
                           label: item.name,
@@ -153,7 +153,7 @@ export default async function Viagens() {
                     <DataTable
                       caption={`Lançamentos de ${viagem.name}`}
                       columns={[
-                        { key: "descricao", header: "Lançamento" },
+                        { key: "descricao", header: "Lançamento", flexible: true },
                         { key: "categoria", header: "Categoria", hideBelow: "sm" },
                         { key: "data", header: "Data", align: "right", width: "5.5rem" },
                         { key: "valor", header: "Valor", align: "right", width: "7rem" },
@@ -161,7 +161,7 @@ export default async function Viagens() {
                     >
                       {viagem.entries.map((item) => (
                         <Tr key={item.transactionId}>
-                          <Td className="truncate text-body">{item.description}</Td>
+                          <Td truncate className="truncate text-body">{item.description}</Td>
                           <Td hideBelow="sm" className="text-body-sm text-ink-muted">
                             {item.categoryName ?? "sem categoria"}
                           </Td>

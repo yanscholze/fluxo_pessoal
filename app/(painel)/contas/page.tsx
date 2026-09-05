@@ -244,7 +244,7 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
       <DataTable
         caption="Saldo, movimento do mês e previsão de cada conta de uso corrente"
         columns={[
-          { key: "conta", header: "Conta" },
+          { key: "conta", header: "Conta", flexible: true },
           { key: "entradas", header: "Entradas", align: "right", hideBelow: "lg" },
           { key: "saidas", header: "Saídas", align: "right", hideBelow: "lg" },
           { key: "previsto", header: "Previsto no fim do mês", align: "right", hideBelow: "sm" },
@@ -253,7 +253,7 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
       >
         {accounts.map((conta) => (
           <Tr key={conta.id}>
-            <Td>
+            <Td truncate>
               <Identidade conta={conta} />
             </Td>
             <Td align="right" hideBelow="lg">

@@ -198,13 +198,32 @@ export type Column = {
   readonly width?: string;
   /** Some abaixo do ponto dado. Use para coluna de contexto, nunca para a essencial. */
   readonly hideBelow?: "sm" | "md" | "lg" | "xl";
+  /**
+   * A coluna que absorve a sobra e corta o próprio texto.
+   *
+   * Sem ela, `table-layout: auto` dá a cada coluna a largura do conteúdo mais
+   * longo, e uma descrição comprida empurra a tabela além do painel — o
+   * `truncate` do conteúdo não faz nada, porque não há largura para respeitar.
+   * Marque a coluna descritiva; as de valor ficam com a largura que pedem.
+   */
+  readonly flexible?: boolean;
 };
 
+/**
+ * O ponto de corte mede a **tabela**, não a janela.
+ *
+ * Era `sm:`, `md:`, `lg:` — os pontos da viewport — e isso mentia sempre que a
+ * tabela não ocupava a tela inteira. Num painel de dois terços numa tela de
+ * 1920, a viewport diz "xl, mostre tudo" enquanto a tabela tem 780px e sete
+ * colunas: nenhuma coluna sumia, e a linha rolava de lado com o valor
+ * escondido fora da vista. Container query pergunta ao espaço que existe de
+ * verdade.
+ */
 const ESCONDE: Record<string, string> = {
-  sm: "hidden sm:table-cell",
-  md: "hidden md:table-cell",
-  lg: "hidden lg:table-cell",
-  xl: "hidden xl:table-cell",
+  sm: "hidden @sm:table-cell",
+  md: "hidden @lg:table-cell",
+  lg: "hidden @2xl:table-cell",
+  xl: "hidden @4xl:table-cell",
 };
 
 /**
@@ -226,8 +245,14 @@ export function DataTable({
   className?: string;
 }) {
   return (
-    <div className={join("-mx-4 overflow-x-auto sm:mx-0", className)}>
-      <table className="w-full min-w-[36rem] border-collapse text-body-sm">
+    /*
+     * `@container` é o que dá sentido aos cortes acima. A rolagem continua como
+     * rede de segurança — se ainda assim não couber, a tabela rola dentro de si
+     * em vez de empurrar a página — mas deixou de ser o caminho normal: sem
+     * largura mínima, as colunas somem antes de faltar espaço.
+     */
+    <div className={join("@container -mx-4 overflow-x-auto sm:mx-0", className)}>
+      <table className="w-full border-collapse text-body-sm">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <thead>
           <tr className="border-b border-line">
@@ -235,7 +260,9 @@ export function DataTable({
               <th
                 key={coluna.key}
                 scope="col"
-                style={coluna.width ? { width: coluna.width } : undefined}
+                style={
+                  coluna.flexible ? { width: "100%" } : coluna.width ? { width: coluna.width } : undefined
+                }
                 className={join(
                   "whitespace-nowrap px-3 pb-2 text-label uppercase text-ink-subtle first:pl-4 last:pr-4 sm:first:pl-0 sm:last:pr-0",
                   coluna.align === "right" ? "text-right" : "text-left",
@@ -272,12 +299,15 @@ export function Td({
   children,
   align = "left",
   hideBelow,
+  truncate,
   className,
   colSpan,
 }: {
   children: ReactNode;
   align?: "left" | "right";
   hideBelow?: "sm" | "md" | "lg" | "xl";
+  /** Par do `flexible` da coluna: deixa a célula encolher e o texto cortar. */
+  truncate?: boolean;
   className?: string;
   colSpan?: number;
 }) {
@@ -286,6 +316,9 @@ export function Td({
       colSpan={colSpan}
       className={join(
         "px-3 py-2.5 align-middle text-ink first:pl-4 last:pr-4 sm:first:pl-0 sm:last:pr-0",
+        // `max-w-0` é o que faz o `truncate` dos filhos ter contra o que cortar:
+        // sem largura máxima, a célula cresce e o texto nunca reticencia.
+        truncate ? "max-w-0" : "",
         align === "right" ? "text-right" : "text-left",
         hideBelow ? ESCONDE[hideBelow] : "",
         className,

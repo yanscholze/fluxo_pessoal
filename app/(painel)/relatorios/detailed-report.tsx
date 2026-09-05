@@ -161,7 +161,7 @@ export function DetailedReportBody({
               <DataTable
                 caption={entrada ? "Maiores entradas do período" : "Maiores saídas do período"}
                 columns={[
-                  { key: "descricao", header: "Lançamento" },
+                  { key: "descricao", header: "Lançamento", flexible: true },
                   { key: "categoria", header: "Categoria", hideBelow: "md" },
                   { key: "origem", header: "Onde", hideBelow: "lg" },
                   { key: "data", header: "Data", align: "right", width: "5.5rem" },
@@ -170,7 +170,7 @@ export function DetailedReportBody({
               >
                 {report.largest.map((linha) => (
                   <Tr key={linha.id}>
-                    <Td className="truncate text-body text-ink">{linha.description}</Td>
+                    <Td truncate className="truncate text-body text-ink">{linha.description}</Td>
                     <Td hideBelow="md">
                       {linha.categoryName ? (
                         <span className="flex items-center gap-1.5">

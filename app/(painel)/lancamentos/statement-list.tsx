@@ -48,11 +48,11 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
       <DataTable
         caption="Lançamentos da competência"
         columns={[
-          { key: "descricao", header: "Lançamento" },
+          { key: "descricao", header: "Lançamento", flexible: true },
           { key: "categoria", header: "Categoria", hideBelow: "md" },
           { key: "conta", header: "Conta", hideBelow: "lg" },
           { key: "natureza", header: "Natureza", hideBelow: "lg" },
-          { key: "data", header: "Data", align: "right", width: "5.5rem" },
+          { key: "data", header: "Data", align: "right", width: "5.5rem", hideBelow: "sm" },
           { key: "valor", header: "Valor", align: "right", width: "8rem" },
           { key: "acoes", header: "Ações", align: "right", width: "4.5rem" },
         ]}
@@ -71,7 +71,7 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
 
           return (
             <Tr key={row.id}>
-              <Td>
+              <Td truncate>
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span
                     className={`flex size-7 shrink-0 items-center justify-center rounded-md ${
@@ -88,13 +88,25 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
                       {previsto ? <Badge tone="caution">previsto</Badge> : null}
                       {row.state === "review" ? <Badge tone="accent">a revisar</Badge> : null}
                     </span>
-                    {row.installmentLabel || faturaDeOutroMes ? (
-                      <span className="mt-0.5 block truncate text-caption text-ink-subtle">
-                        {row.installmentLabel}
-                        {row.installmentLabel && faturaDeOutroMes ? " · " : ""}
-                        {faturaDeOutroMes ? `fatura ${row.competence}` : ""}
-                      </span>
-                    ) : null}
+                    {/* A data desce para cá exatamente quando a coluna some.
+                        Num extrato, a data não é contexto: é o eixo da leitura,
+                        e escondê-la sem devolvê-la deixaria a linha sem
+                        resposta para "quando foi isso". */}
+                    <span className="mt-0.5 block truncate text-caption text-ink-subtle">
+                      <span className="@sm:hidden">{dateShort(row.occurredOn)}</span>
+                      {row.installmentLabel ? (
+                        <>
+                          <span className="@sm:hidden"> · </span>
+                          {row.installmentLabel}
+                        </>
+                      ) : null}
+                      {faturaDeOutroMes ? (
+                        <>
+                          {row.installmentLabel ? " · " : <span className="@sm:hidden"> · </span>}
+                          {`fatura ${row.competence}`}
+                        </>
+                      ) : null}
+                    </span>
                   </span>
                 </span>
               </Td>
@@ -123,7 +135,7 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
                 <Badge tone={natureza.tone}>{natureza.label}</Badge>
               </Td>
 
-              <Td align="right" className="tabular whitespace-nowrap text-caption text-ink-subtle">
+              <Td align="right" hideBelow="sm" className="tabular whitespace-nowrap text-caption text-ink-subtle">
                 {dateShort(row.occurredOn)}
               </Td>
 

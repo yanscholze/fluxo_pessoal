@@ -117,7 +117,7 @@ export default async function Automaticos() {
             <DataTable
               caption="Capturas já resolvidas"
               columns={[
-                { key: "descricao", header: "Sugestão" },
+                { key: "descricao", header: "Sugestão", flexible: true },
                 { key: "app", header: "Aplicativo", hideBelow: "sm" },
                 { key: "situacao", header: "Decisão", hideBelow: "sm" },
                 { key: "data", header: "Data", align: "right", width: "5.5rem" },
@@ -128,7 +128,7 @@ export default async function Automaticos() {
                 const situacao = SITUACAO[item.status] ?? SITUACAO.ignorado;
                 return (
                   <Tr key={item.id}>
-                    <Td className="truncate text-body">{item.description}</Td>
+                    <Td truncate className="truncate text-body">{item.description}</Td>
                     <Td hideBelow="sm" className="truncate text-body-sm text-ink-muted">
                       {item.sourceLabel ?? item.sourceApp}
                     </Td>

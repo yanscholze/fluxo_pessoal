@@ -137,7 +137,7 @@ export default async function Assinaturas() {
               <DataTable
                 caption="Assinaturas cadastradas"
                 columns={[
-                  { key: "servico", header: "Serviço" },
+                  { key: "servico", header: "Serviço", flexible: true },
                   { key: "classificacao", header: "Classificação", hideBelow: "md" },
                   { key: "onde", header: "Sai de", hideBelow: "xl" },
                   { key: "proxima", header: "Próxima", align: "right", hideBelow: "lg" },
@@ -148,7 +148,7 @@ export default async function Assinaturas() {
               >
                 {assinaturas.map((assinatura) => (
                   <Tr key={assinatura.id}>
-                    <Td>
+                    <Td truncate>
                       <span className="flex min-w-0 items-center gap-2">
                         <span
                           className={`truncate text-body ${assinatura.isActive ? "text-ink" : "text-ink-subtle"}`}

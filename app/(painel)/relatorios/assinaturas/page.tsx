@@ -161,7 +161,7 @@ export default async function RelatorioDeAssinaturas() {
                 <DataTable
                   caption="Assinaturas cadastradas"
                   columns={[
-                    { key: "nome", header: "Assinatura" },
+                    { key: "nome", header: "Assinatura", flexible: true },
                     { key: "classificacao", header: "Classificação", hideBelow: "md" },
                     { key: "cobranca", header: "Cobrada em", hideBelow: "lg" },
                     { key: "mensal", header: "Por mês", align: "right", width: "7rem" },
@@ -170,7 +170,7 @@ export default async function RelatorioDeAssinaturas() {
                 >
                   {report.subscriptions.map((assinatura) => (
                     <Tr key={assinatura.id}>
-                      <Td>
+                      <Td truncate>
                         <span className="flex items-center gap-2">
                           <span
                             className={`truncate text-body ${assinatura.isActive ? "text-ink" : "text-ink-muted"}`}

@@ -53,7 +53,7 @@ export function FreeToSpend({
         }`}
       />
 
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+      <div className="relative flex flex-col gap-6 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-10">
         <div className="min-w-0 flex-1">
           <Label>Livre para gastar</Label>
 

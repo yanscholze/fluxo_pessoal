@@ -27,7 +27,7 @@ export function CategoryPanel({ categories }: { categories: Dashboard["categoryS
       />
 
       {categories.length ? (
-        <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+        <div className="flex flex-col items-center gap-5 @md:flex-row @md:items-start">
           <DonutChart
             slices={categories.map((categoria, i) => ({
               label: categoria.name,

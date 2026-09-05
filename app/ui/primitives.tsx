@@ -100,9 +100,14 @@ export function Panel({
    * é o conteúdo, e uma tabela larga dentro do painel empurra o painel além da
    * tela em vez de rolar dentro dele. O sintoma é a página inteira ganhar
    * rolagem horizontal — a linha some pela direita e nem o valor aparece.
+   *
+   * `@container` para que o conteúdo possa perguntar pela largura **do
+   * painel**. Os pontos de corte da viewport mentem aqui: numa tela de 1024px
+   * o `sm:` está ativo e manda pôr gráfico e lista lado a lado, mesmo quando o
+   * painel é uma coluna de 220px — e a lista sobra pela direita.
    */
   return (
-    <Tag className={join("min-w-0", superficie, espaco, className)} {...rest}>
+    <Tag className={join("@container min-w-0", superficie, espaco, className)} {...rest}>
       {children}
     </Tag>
   );

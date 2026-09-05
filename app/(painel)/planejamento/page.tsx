@@ -308,16 +308,16 @@ export default async function Planejamento() {
           <DataTable
             caption="Renda prevista, comprometido e sobra por competência"
             columns={[
-              { key: "mes", header: "Mês" },
+              { key: "mes", header: "Mês", flexible: true },
               { key: "uteis", header: "Dias úteis", align: "right", hideBelow: "md" },
-              { key: "renda", header: "Renda prevista", align: "right" },
+              { key: "renda", header: "Renda prevista", align: "right", hideBelow: "sm" },
               { key: "comprometido", header: "Comprometido", align: "right" },
               { key: "sobra", header: "Sobra", align: "right" },
             ]}
           >
             {view.projection.map((mes) => (
               <Tr key={mes.competence}>
-                <Td>
+                <Td truncate>
                   <span className="flex items-center gap-2">
                     <span className="whitespace-nowrap">{competenceShort(mes.competence)}</span>
                     {mes.competence === view.competence ? (
@@ -330,7 +330,7 @@ export default async function Planejamento() {
                 <Td align="right" hideBelow="md" className="tabular text-ink-subtle">
                   {mes.businessDays}
                 </Td>
-                <Td align="right">
+                <Td align="right" hideBelow="sm">
                   <Amount cents={mes.incomeCents} tone="positive" size="body-sm" />
                 </Td>
                 <Td align="right">
