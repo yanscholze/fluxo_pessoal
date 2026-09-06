@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon.png",
@@ -19,15 +19,29 @@
       "predictiveBackGestureEnabled": true
     },
     "plugins": [
-      ["expo-secure-store", { "configureAndroidBackup": true }],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
       "expo-sqlite",
-      ["expo-font", { "fonts": [
-        "./assets/fonts/Figtree-Regular.ttf",
-        "./assets/fonts/Figtree-Medium.ttf",
-        "./assets/fonts/Figtree-SemiBold.ttf",
-        "./assets/fonts/Figtree-Bold.ttf"
-      ] }]
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Figtree-Regular.ttf",
+            "./assets/fonts/Figtree-Medium.ttf",
+            "./assets/fonts/Figtree-SemiBold.ttf",
+            "./assets/fonts/Figtree-Bold.ttf"
+          ]
+        }
+      ]
     ],
-    "extra": { "eas": { "projectId": "13821e67-9f56-418c-a8bd-fe90eaf83620" } }
+    "extra": {
+      "eas": {
+        "projectId": "13821e67-9f56-418c-a8bd-fe90eaf83620"
+      }
+    }
   }
 }
