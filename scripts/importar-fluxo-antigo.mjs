@@ -14,9 +14,14 @@
  * faria e não escreve nada. É o modo padrão de propósito — a importação mexe
  * em dinheiro de verdade, e a conferência tem de vir antes.
  *
- * Credenciais vêm do ambiente (`FLUXO_EMAIL`, `FLUXO_SENHA`), nunca de
- * argumento: linha de comando vaza em histórico de shell e em lista de
- * processos.
+ * Autenticação por **pareamento**, o mesmo do aplicativo: o script pede um
+ * código, o dono aprova no site já autenticado, e o script recebe um token
+ * próprio. Ninguém digita senha aqui, e o token é revogável a qualquer momento
+ * sem trocar a senha da conta.
+ *
+ * Aceita também `FLUXO_EMAIL` e `FLUXO_SENHA` no ambiente, para quando o dono
+ * roda contra o próprio servidor local — nunca por argumento, porque linha de
+ * comando vaza em histórico de shell e em lista de processos.
  */
 
 import { readFileSync } from "node:fs";
@@ -36,18 +41,18 @@ if (!arquivo) {
 const EMAIL = process.env.FLUXO_EMAIL;
 const SENHA = process.env.FLUXO_SENHA;
 
-if (!EMAIL || !SENHA) {
-  console.error("defina FLUXO_EMAIL e FLUXO_SENHA no ambiente");
-  process.exit(64);
-}
-
 let cookie = "";
+let token = null;
 const problemas = [];
 
 async function api(caminho, { method = "GET", body } = {}) {
   const resposta = await fetch(`${base}${caminho}`, {
     method,
-    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(cookie ? { cookie } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
@@ -102,6 +107,56 @@ const CATEGORIAS_DESCARTADAS = new Set(["Transferência", "Pagamento de fatura",
  */
 const CONTA_ARTIFICIAL = "Lançamento Futuro Para Fatura";
 
+/**
+ * Entra na conta: por senha do ambiente, ou pelo pareamento.
+ *
+ * O pareamento é o caminho quando quem roda o script não é quem tem a senha —
+ * e é a única forma de dar acesso a um terceiro sem entregar a conta inteira:
+ * o que ele recebe é um token de aparelho, que aparece na lista de aparelhos
+ * conectados e some com um clique.
+ */
+async function autenticar() {
+  if (EMAIL && SENHA) {
+    await api("/api/v1/session", {
+      method: "POST",
+      body: { action: "signin", email: EMAIL, password: SENHA },
+    });
+    console.log("autenticado por senha do ambiente.");
+    return;
+  }
+
+  const deviceId = `importador-${Date.now()}`;
+  const pedido = await api("/api/v1/pairing", {
+    method: "POST",
+    body: { deviceId, deviceName: "Importador do Fluxo antigo", platform: "script" },
+  });
+
+  console.log("\n  ┌──────────────────────────────────────────────┐");
+  console.log(`  │   código de pareamento:  ${pedido.code.padEnd(20)}│`);
+  console.log("  └──────────────────────────────────────────────┘");
+  console.log(`\n  Abra ${base}/conectar já autenticado e digite o código.`);
+  console.log("  Aguardando aprovação…\n");
+
+  const limite = Date.now() + 10 * 60_000;
+  while (Date.now() < limite) {
+    await new Promise((resolva) => setTimeout(resolva, 2500));
+
+    const resultado = await api("/api/v1/pairing", {
+      method: "PUT",
+      body: { code: pedido.code, pollToken: pedido.pollToken },
+    });
+
+    if (resultado.status === "aprovado" && resultado.token) {
+      token = resultado.token;
+      console.log(`autenticado como ${resultado.user?.email ?? "conta pareada"}.`);
+      return;
+    }
+    if (resultado.status === "expirado") throw new Error("o código expirou; rode de novo");
+  }
+
+  throw new Error("ninguém aprovou o código em dez minutos");
+}
+
 async function main() {
   const dados = JSON.parse(readFileSync(arquivo, "utf8"));
 
@@ -112,10 +167,7 @@ async function main() {
   );
   console.log(aplicar ? "\nMODO: aplicando\n" : "\nMODO: simulação (use --aplicar para escrever)\n");
 
-  await api("/api/v1/session", {
-    method: "POST",
-    body: { action: "signin", email: EMAIL, password: SENHA },
-  });
+  await autenticar();
 
   // -------------------------------------------------------------------------
   // Catálogo
