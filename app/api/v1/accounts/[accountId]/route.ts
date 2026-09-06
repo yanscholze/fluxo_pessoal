@@ -30,7 +30,16 @@ export const PATCH = handle(async (request: Request) => {
   const color = input.optionalString("color", { max: 9 });
   const goalAmount = input.optionalMoney("goalAmount");
   const monthlyYieldBasisPoints = input.optionalInteger("monthlyYieldBasisPoints", { min: 0, max: 100_000 });
-  const includeInTotals = input.optionalChoice("includeInTotals", ["true", "false"] as const);
+  const includeInTotals = input.optionalBoolean("includeInTotals");
+  /*
+   * O saldo de abertura é corrigível.
+   *
+   * Ele é o que existia antes do primeiro lançamento, e quem digita errado no
+   * cadastro — ou importa de um sistema antigo com o número errado — só
+   * descobre quando o saldo de hoje não bate. Sem esta porta, a saída era
+   * apagar a conta e recriar, perdendo o histórico junto.
+   */
+  const openingBalance = input.optionalMoney("openingBalance", { allowNegative: true });
 
   input.done();
 
@@ -40,7 +49,8 @@ export const PATCH = handle(async (request: Request) => {
     ...(color !== null ? { color } : {}),
     ...(goalAmount !== null ? { goalAmount } : {}),
     ...(monthlyYieldBasisPoints !== null ? { monthlyYieldBasisPoints } : {}),
-    ...(includeInTotals !== null ? { includeInTotals: includeInTotals === "true" } : {}),
+    ...(includeInTotals !== null ? { includeInTotals } : {}),
+    ...(openingBalance !== null ? { openingBalance } : {}),
   });
 
   return json({ data: { ok: true } });

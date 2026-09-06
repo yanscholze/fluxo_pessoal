@@ -24,7 +24,9 @@
  * comando vaza em histórico de shell e em lista de processos.
  */
 
-import { readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const args = process.argv.slice(2);
 const arquivo = args.find((a) => !a.startsWith("--"));
@@ -43,6 +45,15 @@ const SENHA = process.env.FLUXO_SENHA;
 
 let cookie = "";
 let token = null;
+
+/**
+ * Onde o token do pareamento fica entre uma execução e outra.
+ *
+ * Fora do repositório e legível só pelo dono. Sem isto, conferir a simulação e
+ * depois aplicar custaria dois pareamentos — e a segunda aprovação, feita às
+ * pressas para não repetir o trabalho, é justamente a que ninguém lê.
+ */
+const ARQUIVO_DO_TOKEN = join(homedir(), ".fluxo-importador-token");
 const problemas = [];
 
 async function api(caminho, { method = "GET", body } = {}) {
@@ -116,6 +127,22 @@ const CONTA_ARTIFICIAL = "Lançamento Futuro Para Fatura";
  * conectados e some com um clique.
  */
 async function autenticar() {
+  // Token de uma execução anterior, se ainda valer.
+  if (existsSync(ARQUIVO_DO_TOKEN)) {
+    token = readFileSync(ARQUIVO_DO_TOKEN, "utf8").trim();
+    try {
+      const sessao = await api("/api/v1/session");
+      if (sessao?.authenticated) {
+        console.log(`autenticado como ${sessao.user.email} (token guardado).`);
+        return;
+      }
+    } catch {
+      // Token vencido ou revogado: segue para o pareamento.
+    }
+    token = null;
+    unlinkSync(ARQUIVO_DO_TOKEN);
+  }
+
   if (EMAIL && SENHA) {
     await api("/api/v1/session", {
       method: "POST",
@@ -148,6 +175,8 @@ async function autenticar() {
 
     if (resultado.status === "aprovado" && resultado.token) {
       token = resultado.token;
+      writeFileSync(ARQUIVO_DO_TOKEN, token, { mode: 0o600 });
+      chmodSync(ARQUIVO_DO_TOKEN, 0o600);
       console.log(`autenticado como ${resultado.user?.email ?? "conta pareada"}.`);
       return;
     }

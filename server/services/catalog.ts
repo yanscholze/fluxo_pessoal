@@ -7,7 +7,7 @@
  * uma conta que não existia mais.
  */
 
-import { and, count, eq, isNull, max } from "drizzle-orm";
+import { and, count, eq, isNull, max, or } from "drizzle-orm";
 
 import { SUPPORTED_CURRENCIES, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
 import { assertValidCycle, type CycleConfig, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
@@ -142,7 +142,26 @@ export async function archiveAccount(userId: string, accountId: string, now: Dat
     .from(ledgerEntries)
     .where(and(eq(ledgerEntries.userId, userId), eq(ledgerEntries.accountId, accountId)));
 
-  if (total > 0) {
+  /*
+   * O lançamento apagado também segura a conta.
+   *
+   * A exclusão é lógica: a linha fica com `deleted_at` preenchido, e as
+   * entradas dela saem do razão — o contador acima zera. Mas `transactions`
+   * aponta para a conta com `restrict`, e essa referência não sumiu. Sem olhar
+   * aqui, o serviço tentava apagar de fato e o banco recusava com "Failed
+   * query", que chegava à tela como erro interno.
+   */
+  const [{ total: historico } = { total: 0 }] = await database
+    .select({ total: count() })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        or(eq(transactions.originAccountId, accountId), eq(transactions.destinationAccountId, accountId)),
+      ),
+    );
+
+  if (total > 0 || historico > 0) {
     await database
       .update(accounts)
       .set({ archivedAt: now.toISOString(), updatedAt: now.toISOString() })
@@ -150,11 +169,37 @@ export async function archiveAccount(userId: string, accountId: string, now: Dat
     return "archived";
   }
 
-  const [{ total: linked } = { total: 0 }] = await database
+  /*
+   * Cartão ativo impede; cartão arquivado só impede **apagar**.
+   *
+   * A distinção importa porque a chave estrangeira não some quando o cartão é
+   * arquivado: a linha continua apontando para a conta, e a exclusão falharia
+   * no banco. Um erro de conflito para o cartão que o usuário ainda usa é
+   * resposta; para um cartão que ele já arquivou é obstáculo sem explicação —
+   * foi o que travou uma reimportação, com cinco cartões arquivados prendendo
+   * as oito contas. Nesse caso a conta é arquivada, que é o mais perto de
+   * apagar que dá para chegar sem quebrar referência.
+   */
+  const [{ total: ativos } = { total: 0 }] = await database
+    .select({ total: count() })
+    .from(cards)
+    .where(
+      and(eq(cards.userId, userId), eq(cards.paymentAccountId, accountId), isNull(cards.archivedAt)),
+    );
+  if (ativos > 0) throw conflict("Há cartões que pagam a fatura por esta conta");
+
+  const [{ total: arquivados } = { total: 0 }] = await database
     .select({ total: count() })
     .from(cards)
     .where(and(eq(cards.userId, userId), eq(cards.paymentAccountId, accountId)));
-  if (linked > 0) throw conflict("Há cartões que pagam a fatura por esta conta");
+
+  if (arquivados > 0) {
+    await database
+      .update(accounts)
+      .set({ archivedAt: now.toISOString(), updatedAt: now.toISOString() })
+      .where(and(eq(accounts.userId, userId), eq(accounts.id, accountId)));
+    return "archived";
+  }
 
   await database.delete(accounts).where(and(eq(accounts.userId, userId), eq(accounts.id, accountId)));
   return "deleted";
@@ -220,12 +265,19 @@ export async function createCategory(userId: string, input: CategoryInput, now: 
 export async function archiveCategory(userId: string, categoryId: string, now: Date = new Date()): Promise<void> {
   const database = getDatabase();
 
+  /*
+   * Conta **toda** transação, inclusive a apagada.
+   *
+   * A exclusão de lançamento é lógica: a linha fica no banco com `deleted_at`
+   * preenchido, para a sincronização com o aparelho continuar coerente. Mas a
+   * chave estrangeira é `restrict` e não sabe disso — ignorando as apagadas, o
+   * contador dava zero, o serviço tentava apagar de fato e o banco recusava
+   * com "Failed query", que virava erro 500 na tela.
+   */
   const [{ total } = { total: 0 }] = await database
     .select({ total: count() })
     .from(transactions)
-    .where(
-      and(eq(transactions.userId, userId), eq(transactions.categoryId, categoryId), isNull(transactions.deletedAt)),
-    );
+    .where(and(eq(transactions.userId, userId), eq(transactions.categoryId, categoryId)));
 
   if (total > 0) {
     await database
