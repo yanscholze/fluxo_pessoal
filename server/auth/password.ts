@@ -8,8 +8,23 @@
 
 import { validationError } from "../../core/kernel/errors.ts";
 
-/** Padrão atual do OWASP para PBKDF2-SHA256. */
-export const DEFAULT_ITERATIONS = 210_000;
+/**
+ * Teto do runtime, não escolha nossa.
+ *
+ * O OWASP recomenda 210 mil iterações para PBKDF2-SHA256, e era esse o valor
+ * aqui — mas o Workers recusa acima de cem mil: `Pbkdf2 failed: iteration
+ * counts above 100000 are not supported`. Local passava, produção respondia
+ * 500 em todo cadastro e todo login, e o erro só aparecia no log do worker.
+ *
+ * O número fica gravado por usuário junto com o hash, então este valor é só o
+ * padrão para senha nova: subir de novo, no dia em que a plataforma permitir,
+ * não invalida nenhuma senha já cadastrada — `needsRehash` reforça cada uma no
+ * login seguinte.
+ */
+export const DEFAULT_ITERATIONS = 100_000;
+
+/** O que o runtime aceita. Passar disto é erro de execução, não de senha. */
+export const MAX_ITERATIONS = 100_000;
 
 const KEY_BITS = 256;
 const SALT_BYTES = 16;
@@ -58,7 +73,10 @@ export type PasswordRecord = {
   readonly iterations: number;
 };
 
-export async function hashPassword(password: string, iterations = DEFAULT_ITERATIONS): Promise<PasswordRecord> {
+export async function hashPassword(
+  password: string,
+  iterations = DEFAULT_ITERATIONS,
+): Promise<PasswordRecord> {
   assertAcceptablePassword(password);
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const derived = await derive(password, salt, iterations);

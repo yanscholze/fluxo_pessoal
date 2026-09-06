@@ -19,7 +19,7 @@ export const users = sqliteTable(
      *  para que aumentá-las não invalide as senhas já cadastradas. */
     passwordHash: text("password_hash").notNull(),
     passwordSalt: text("password_salt").notNull(),
-    passwordIterations: integer("password_iterations").notNull().default(210_000),
+    passwordIterations: integer("password_iterations").notNull().default(100_000),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
