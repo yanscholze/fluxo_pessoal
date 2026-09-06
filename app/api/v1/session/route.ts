@@ -39,7 +39,12 @@ export const POST = handle(async (request: Request) => {
 
   const result =
     action === "signup"
-      ? await signUp({ email, password, displayName: displayName ?? "" })
+      ? await signUp(
+          { email, password, displayName: displayName ?? "" },
+          // O aparelho que se cadastra precisa da sessão longa, igual à de
+          // quem entra por aqui: ele não tem como renovar sozinho.
+          { kind, deviceName, platform },
+        )
       : await signIn(
           { email, password },
           {

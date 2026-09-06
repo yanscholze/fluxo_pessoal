@@ -1,210 +1,227 @@
 /**
- * Conectar o aparelho a uma conta.
+ * Entrar no Fluxo.
  *
- * Duas etapas: informar o endereço do servidor e trocar um código pelo token.
- * O usuário nunca digita senha aqui — quem prova identidade é a sessão web em
- * que ele aprova o código. Um aplicativo que pede a senha para depois guardá-la
- * transforma cada aparelho perdido num vazamento.
+ * Mesmo e-mail e mesma senha do site. O aparelho não pergunta endereço de
+ * servidor: ele já sabe para onde apontar, embutido no momento do build — e
+ * perguntar isso na primeira tela é pedir ao usuário um dado que o aplicativo
+ * tem. Quem hospeda em outro endereço troca em Ajustes, que é onde a resposta
+ * "não é este servidor" cabe.
  *
- * A consulta é por sondagem, não por notificação em tempo real: são poucos
- * segundos de espera, e uma conexão persistente para isso custaria bateria
- * para o resto da vida do aplicativo.
+ * O que fica guardado é o **token de aparelho** que o servidor devolve, no
+ * armazenamento criptografado do Android. A senha existe durante a chamada e
+ * some com a tela: nunca é escrita em disco, nem no banco local, nem em log.
+ *
+ * O pareamento por código continua no servidor e é mais forte para conectar um
+ * aparelho de terceiro. Para o dono entrando no próprio celular, ele cobrava
+ * abrir o site no computador antes de cada conexão — atrito sem ganho, já que
+ * quem tem a senha entra pelo site de qualquer jeito.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, TextInput, View } from "react-native";
+import { useCallback, useState } from "react";
+import { ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { normalizeBaseUrl, suggestedBaseUrl } from "../config.ts";
-import { appVersion, deviceName } from "../device.ts";
+import { deviceName } from "../device.ts";
+import { signIn, signUp } from "../net/auth.ts";
 import { ApiError, OfflineError } from "../net/client.ts";
-import { claimPairing, startPairing } from "../net/pairing.ts";
-import type { PairingStart } from "../net/types.ts";
 import { useSession } from "../state/session.tsx";
-import { Body, Button, Card, Figure, Label, Notice, Small , Texto } from "../ui/primitives.tsx";
+import { Body, Button, Card, Figure, Label, Notice, Small } from "../ui/primitives.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
-/** Intervalo entre consultas. Rápido o bastante para parecer instantâneo. */
-const POLL_MS = 2500;
+type Modo = "entrar" | "criar";
 
 export function ConectarScreen() {
   const palette = usePalette();
-  const { state, connect } = useSession();
-  const identificador = state.status === "carregando" ? "" : state.deviceId;
+  const { connect } = useSession();
 
-  const [endereco, setEndereco] = useState(suggestedBaseUrl());
-  const [pedido, setPedido] = useState<PairingStart | null>(null);
+  const [modo, setModo] = useState<Modo>("entrar");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [nome, setNome] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const baseUrl = useRef<string>("");
+  /** Onde o servidor mora. Vem do build; Ajustes troca depois, se precisar. */
+  const [servidor, setServidor] = useState(suggestedBaseUrl());
+  const [trocandoServidor, setTrocandoServidor] = useState(false);
 
-  const pedirCodigo = useCallback(async () => {
-    const normalizado = normalizeBaseUrl(endereco);
-    if (!normalizado) {
-      setErro("Informe o endereço do Fluxo, por exemplo fluxo.seudominio.com.br");
+  const criando = modo === "criar";
+
+  const entrar = useCallback(async () => {
+    const baseUrl = normalizeBaseUrl(servidor);
+    if (!baseUrl) {
+      setErro("O endereço do servidor está vazio. Toque em “Outro servidor” para informá-lo.");
+      return;
+    }
+    if (!email.trim() || !senha) {
+      setErro("Informe e-mail e senha.");
+      return;
+    }
+    if (criando && !nome.trim()) {
+      setErro("Informe seu nome.");
       return;
     }
 
     setOcupado(true);
     setErro(null);
-    baseUrl.current = normalizado;
 
     try {
-      setPedido(
-        await startPairing({
-          baseUrl: normalizado,
-          deviceId: identificador,
-          deviceName,
-          appVersion,
-        }),
-      );
+      const resultado = criando
+        ? await signUp({ baseUrl, email, password: senha, displayName: nome })
+        : await signIn({ baseUrl, email, password: senha, deviceName });
+
+      // A senha sai da memória junto com a tela: o que persiste é o token.
+      setSenha("");
+      await connect({ baseUrl, token: resultado.token, user: resultado.user });
     } catch (problema) {
       setErro(
         problema instanceof OfflineError
-          ? "Não foi possível falar com esse endereço. Confira o endereço e a conexão."
+          ? "Não foi possível falar com o servidor. Confira sua conexão."
           : problema instanceof ApiError
             ? problema.message
-            : "Não foi possível iniciar a conexão.",
+            : criando
+              ? "Não foi possível criar a conta."
+              : "Não foi possível entrar.",
       );
     } finally {
       setOcupado(false);
     }
-  }, [endereco, identificador]);
+  }, [servidor, email, senha, nome, criando, connect]);
 
-  // Sondagem enquanto houver um código na tela.
-  useEffect(() => {
-    if (!pedido) return;
-    let vivo = true;
-
-    const consultar = async () => {
-      try {
-        const resultado = await claimPairing({
-          baseUrl: baseUrl.current,
-          code: pedido.code,
-          pollToken: pedido.pollToken,
-        });
-
-        if (!vivo) return;
-
-        if (resultado.status === "expirado") {
-          setPedido(null);
-          setErro("O código expirou. Peça um novo.");
-          return;
-        }
-
-        if (resultado.status === "aprovado" && resultado.token && resultado.user) {
-          await connect({ baseUrl: baseUrl.current, token: resultado.token, user: resultado.user });
-        }
-      } catch (problema) {
-        // Falha de rede durante a espera não invalida o código: a próxima
-        // consulta tenta de novo. Só erro do servidor interrompe.
-        if (!vivo || problema instanceof OfflineError) return;
-        setPedido(null);
-        setErro(problema instanceof ApiError ? problema.message : "A conexão falhou.");
-      }
-    };
-
-    const intervalo = setInterval(() => void consultar(), POLL_MS);
-    void consultar();
-
-    return () => {
-      vivo = false;
-      clearInterval(intervalo);
-    };
-  }, [pedido, connect]);
+  const campo = [
+    { fontFamily: familiaDoPeso(type.body.fontWeight) },
+    type.body,
+    {
+      marginTop: space.sm,
+      color: palette.ink,
+      backgroundColor: palette.surfaceSunken,
+      borderRadius: radius.md,
+      paddingHorizontal: space.md,
+      paddingVertical: 14,
+    },
+  ];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.lg }}>
+      <ScrollView
+        contentContainerStyle={{ padding: space.lg, gap: space.lg }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ gap: space.xs, paddingTop: space.lg }}>
           <Figure small>Fluxo</Figure>
-          <Body muted>Conecte este aparelho à sua conta.</Body>
+          <Body muted>
+            {criando ? "Crie sua conta para começar." : "Entre com a sua conta do Fluxo."}
+          </Body>
         </View>
 
-        {pedido ? (
-          <Card>
-            <Label>Digite este código no site</Label>
-            <View
-              style={{
-                marginTop: space.md,
-                marginBottom: space.md,
-                backgroundColor: palette.surfaceSunken,
-                borderRadius: radius.md,
-                paddingVertical: space.lg,
-                alignItems: "center",
-              }}
-            >
-              <Body strong style={{ fontSize: 34, lineHeight: 40, letterSpacing: 8 }}>
-                {pedido.code}
-              </Body>
-            </View>
+        <Card>
+          {criando ? (
+            <>
+              <Label>Nome</Label>
+              <TextInput
+                value={nome}
+                onChangeText={setNome}
+                autoCapitalize="words"
+                autoComplete="name"
+                placeholder="Como quer ser chamado"
+                placeholderTextColor={palette.inkSubtle}
+                style={campo}
+              />
+              <View style={{ height: space.md }} />
+            </>
+          ) : null}
 
-            <Body muted>
-              Abra o Fluxo no navegador, já conectado, e vá em Conectar aparelho. O código vale por dez
-              minutos.
-            </Body>
+          <Label>E-mail</Label>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            keyboardType="email-address"
+            inputMode="email"
+            placeholder="voce@exemplo.com"
+            placeholderTextColor={palette.inkSubtle}
+            style={campo}
+          />
 
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.md }}>
-              <ActivityIndicator color={palette.accent} />
-              <Small>Aguardando aprovação…</Small>
-            </View>
+          <View style={{ height: space.md }} />
 
-            <Button
-              label="Cancelar"
-              variant="ghost"
-              onPress={() => setPedido(null)}
-              style={{ marginTop: space.md }}
-            />
-          </Card>
-        ) : (
+          <Label>Senha</Label>
+          <TextInput
+            value={senha}
+            onChangeText={setSenha}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete={criando ? "new-password" : "current-password"}
+            placeholder={criando ? "Ao menos dez caracteres" : "Sua senha"}
+            placeholderTextColor={palette.inkSubtle}
+            onSubmitEditing={() => void entrar()}
+            returnKeyType="go"
+            style={campo}
+          />
+
+          <Button
+            label={criando ? "Criar conta" : "Entrar"}
+            onPress={() => void entrar()}
+            busy={ocupado}
+            style={{ marginTop: space.lg }}
+          />
+
+          <Button
+            label={criando ? "Já tenho conta" : "Criar uma conta"}
+            variant="ghost"
+            onPress={() => {
+              setModo(criando ? "entrar" : "criar");
+              setErro(null);
+            }}
+            style={{ marginTop: space.sm }}
+          />
+        </Card>
+
+        {erro ? <Notice tone="negative">{erro}</Notice> : null}
+
+        {/* Escondido por padrão: a instalação normal aponta para o servidor do
+            build, e um campo de endereço na primeira tela só cria dúvida sobre
+            uma resposta que o aplicativo já tem. */}
+        {trocandoServidor ? (
           <Card>
             <Label>Endereço do servidor</Label>
             <TextInput
-              value={endereco}
-              onChangeText={setEndereco}
+              value={servidor}
+              onChangeText={setServidor}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
+              inputMode="url"
               placeholder="fluxo.seudominio.com.br"
               placeholderTextColor={palette.inkSubtle}
-              style={[
-                { fontFamily: familiaDoPeso(type.body.fontWeight) },
-                type.body,
-                {
-                  marginTop: space.sm,
-                  color: palette.ink,
-                  backgroundColor: palette.surfaceSunken,
-                  borderRadius: radius.md,
-                  paddingHorizontal: space.md,
-                  paddingVertical: 14,
-                },
-              ]}
+              style={campo}
             />
             <Small style={{ marginTop: space.sm }}>
               O mesmo endereço que você usa no navegador.
             </Small>
-
-            <Button
-              label="Pedir código"
-              onPress={() => void pedirCodigo()}
-              busy={ocupado}
-              disabled={!identificador}
-              style={{ marginTop: space.lg }}
-            />
           </Card>
+        ) : (
+          <Button
+            label="Outro servidor"
+            variant="ghost"
+            onPress={() => setTrocandoServidor(true)}
+          />
         )}
 
-        {erro ? <Notice tone="negative">{erro}</Notice> : null}
-
         <Card>
-          <Label>Como funciona</Label>
+          <Label>Segurança</Label>
           <View style={{ marginTop: space.md, gap: space.sm }}>
-            <Small tone="muted">1. O aplicativo gera um código de seis caracteres.</Small>
-            <Small tone="muted">2. Você digita o código no site, já autenticado.</Small>
-            <Small tone="muted">3. O aplicativo recebe um token próprio, revogável a qualquer momento.</Small>
-            <Small>Sua senha não passa por este aparelho.</Small>
+            <Small tone="muted">
+              A senha é usada uma vez, para entrar, e não fica guardada no aparelho.
+            </Small>
+            <Small tone="muted">
+              O que fica é um token deste aparelho, no armazenamento criptografado do Android.
+            </Small>
+            <Small>Você pode revogá-lo a qualquer momento pelo site, sem trocar a senha.</Small>
           </View>
         </Card>
       </ScrollView>

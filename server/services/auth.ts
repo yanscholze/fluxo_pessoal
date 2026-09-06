@@ -116,7 +116,11 @@ async function clearFailures(key: string): Promise<void> {
   await getDatabase().delete(authAttempts).where(eq(authAttempts.keyHash, key));
 }
 
-export async function signUp(input: SignUpInput, now: Date = new Date()): Promise<AuthResult> {
+export async function signUp(
+  input: SignUpInput,
+  options: SignInOptions = {},
+  now: Date = new Date(),
+): Promise<AuthResult> {
   const email = assertEmail(input.email);
   assertAcceptablePassword(input.password);
 
@@ -145,7 +149,23 @@ export async function signUp(input: SignUpInput, now: Date = new Date()): Promis
   // categorias padrão dão ponto de partida e podem ser trocadas à vontade.
   await seedDefaults(userId, now);
 
-  const session = await issueSession({ userId, kind: "web", now });
+  /*
+   * A sessão nasce do tipo de quem pediu.
+   *
+   * Fixa em `web`, um cadastro feito pelo aplicativo recebia um token com a
+   * validade curta da sessão de navegador — e o aparelho, que não tem como
+   * renovar sozinho, seria desconectado semanas depois sem explicação. Quem
+   * entra e quem se cadastra pelo celular precisam da mesma sessão.
+   */
+  const session = await issueSession({
+    userId,
+    kind: options.kind ?? "web",
+    deviceId: options.deviceId,
+    deviceName: options.deviceName,
+    platform: options.platform,
+    appVersion: options.appVersion,
+    now,
+  });
   return { user: { id: userId, email, displayName }, session };
 }
 
