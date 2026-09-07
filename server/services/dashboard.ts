@@ -131,6 +131,13 @@ export type Dashboard = {
     readonly windowEnd: LocalDate;
     readonly horizonEnd: LocalDate;
   };
+  /**
+   * Folga do vale-alimentação, à parte da folga do dinheiro.
+   *
+   * Ausente quando não há conta de benefício — mostrar um vale de R$ 0,00 para
+   * quem não tem vale é ruído.
+   */
+  readonly benefitFreeToSpend: { readonly amountCents: number; readonly liquidBalanceCents: number } | null;
   readonly monthFlow: {
     readonly incomeCents: number;
     readonly expenseCents: number;
@@ -332,6 +339,13 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       netWorthCents: position.netWorth,
       committedCents: position.committed,
     },
+    benefitFreeToSpend:
+      position.benefitFreeToSpend.liquidBalance === 0 && position.benefitFreeToSpend.amount === 0
+        ? null
+        : {
+            amountCents: position.benefitFreeToSpend.amount,
+            liquidBalanceCents: position.benefitFreeToSpend.liquidBalance,
+          },
     freeToSpend: {
       amountCents: position.freeToSpend.amount,
       liquidBalanceCents: position.freeToSpend.liquidBalance,

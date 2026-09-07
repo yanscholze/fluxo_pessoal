@@ -309,6 +309,118 @@ describe("livre para gastar", () => {
   });
 });
 
+describe("bolsos separados: dinheiro e benefício", () => {
+  /*
+   * Vale-alimentação não é dinheiro fungível: compra comida e nada mais.
+   * Somá-lo ao saldo da conta produzia um "livre para gastar" que prometia
+   * pagar aluguel e fatura com um saldo que não paga nenhum dos dois.
+   */
+  const contas = [
+    conta({ id: CONTA, kind: "checking", openingBalance: cents(100_000) }),
+    conta({ id: "vale", kind: "benefit", openingBalance: cents(70_900) }),
+  ];
+
+  it("mede o dinheiro sem somar o vale", () => {
+    const folga = computeFreeToSpend({ accounts: contas, cards: [], entries: [], today: localDate("2026-09-07") }, "money");
+
+    assert.equal(folga.liquidBalance, cents(100_000));
+    assert.equal(folga.amount, cents(100_000));
+  });
+
+  it("mede o vale sem somar o dinheiro", () => {
+    const folga = computeFreeToSpend({ accounts: contas, cards: [], entries: [], today: localDate("2026-09-07") }, "benefit");
+
+    assert.equal(folga.liquidBalance, cents(70_900));
+  });
+
+  it("a fatura do cartão não aperta a folga do vale", () => {
+    // O vale não quita fatura; descontá-la dele zeraria um saldo que existe.
+    const compra = lancamento({
+      id: "tx-1",
+      kind: "expense",
+      amount: cents(50_000),
+      origin: cardParty(CARTAO),
+      occurredOn: localDate("2026-09-01"),
+      competence: competence("2026-09"),
+    });
+    const entrada = { accounts: contas, cards: [cartaoFecha13], entries: razao(compra), today: localDate("2026-09-07") };
+
+    assert.equal(computeFreeToSpend(entrada, "benefit").amount, cents(70_900));
+    assert.equal(computeFreeToSpend(entrada, "money").amount, cents(50_000), "no dinheiro ela pesa");
+  });
+
+  it("a posição devolve os dois, e o saldo corrente soma os dois", () => {
+    const posicao = computeFinancialPosition({
+      accounts: contas,
+      cards: [],
+      entries: [],
+      today: localDate("2026-09-07"),
+    });
+
+    assert.equal(posicao.freeToSpend.amount, cents(100_000));
+    assert.equal(posicao.benefitFreeToSpend.amount, cents(70_900));
+    assert.equal(posicao.currentBalance, cents(170_900), "ter é a soma; poder gastar é que não");
+  });
+});
+
+describe("categoria fora do livre para gastar", () => {
+  /*
+   * A marcação existia mas só alcançava previsto em conta: a fatura entrava
+   * sempre pelo total. Quem separa "Empréstimo do Cartão" quer exatamente que
+   * aquelas parcelas não apertem a folga do mês.
+   */
+  const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(300_000) })];
+  const emprestimo = lancamento({
+    id: "tx-emprestimo",
+    kind: "expense",
+    amount: cents(177_142),
+    origin: cardParty(CARTAO),
+    categoryId: "cat-emprestimo",
+    occurredOn: localDate("2026-09-01"),
+    competence: competence("2026-09"),
+  });
+  const compra = lancamento({
+    id: "tx-compra",
+    kind: "expense",
+    amount: cents(20_000),
+    origin: cardParty(CARTAO),
+    categoryId: "cat-mercado",
+    occurredOn: localDate("2026-09-02"),
+    competence: competence("2026-09"),
+  });
+  const entries = razao(emprestimo, compra);
+  const categorias = new Map([
+    ["tx-emprestimo", "cat-emprestimo"],
+    ["tx-compra", "cat-mercado"],
+  ]);
+
+  it("sem a marcação, a parcela pesa na folga", () => {
+    const folga = computeFreeToSpend({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      categoryByTransaction: categorias,
+      today: localDate("2026-09-07"),
+    });
+
+    assert.equal(folga.amount, cents(300_000 - 177_142 - 20_000));
+  });
+
+  it("com a marcação, só a compra comum pesa", () => {
+    const folga = computeFreeToSpend({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries,
+      categoryByTransaction: categorias,
+      policy: { excludedCategoryIds: new Set(["cat-emprestimo"]) },
+      today: localDate("2026-09-07"),
+    });
+
+    assert.equal(folga.amount, cents(300_000 - 20_000));
+    assert.equal(folga.openInvoices, cents(20_000), "a fatura em aberto reflete só o que pesa");
+  });
+});
+
 describe("posição financeira", () => {
   const hoje = localDate("2026-08-05");
   const contas = [

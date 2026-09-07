@@ -59,7 +59,7 @@ export default async function VisaoGeral() {
 
       <Stack gap="lg">
         {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
-        <FreeToSpend data={dashboard.freeToSpend} today={dashboard.today} />
+        <FreeToSpend data={dashboard.freeToSpend} benefit={dashboard.benefitFreeToSpend} today={dashboard.today} />
 
         <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
 
