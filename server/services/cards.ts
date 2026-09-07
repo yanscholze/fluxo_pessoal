@@ -47,6 +47,7 @@ export type CardView = {
   readonly brand: string;
   readonly last4: string;
   readonly color: string;
+  readonly imageUrl: string | null;
   readonly isPrimary: boolean;
   readonly paymentAccountId: string;
   readonly paymentAccountName: string;
@@ -175,6 +176,7 @@ function toCardView(
     brand: card.brand,
     last4: card.last4,
     color: card.color,
+    imageUrl: card.imageUrl ?? null,
     isPrimary: card.isPrimary,
     paymentAccountId: card.paymentAccountId,
     paymentAccountName: accountName.get(card.paymentAccountId) ?? "Conta removida",

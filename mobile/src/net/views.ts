@@ -422,6 +422,7 @@ export type ProjetosView = {
     readonly receivedCents: number;
     readonly pendingCents: number;
     readonly overdueCents: number;
+    readonly unscheduledCents: number;
     readonly lateProjects: number;
     readonly weekMilli: number;
   };

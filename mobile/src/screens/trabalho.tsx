@@ -50,15 +50,27 @@ export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
         <>
           <Card>
             <Label>A receber</Label>
+            {/*
+              O que falta entrar, e não só o que está agendado.
+
+              `pendingCents` conta parcela criada. Quem combinou R$ 900 e ainda
+              não montou o cronograma via "R$ 0,00 a receber" com o projeto em
+              aberto — o número mais desanimador possível, e errado.
+            */}
             <Figure tone={dados.totals.overdueCents > 0 ? "negative" : "neutral"}>
-              {money(cents(dados.totals.pendingCents))}
+              {money(
+                cents(
+                  dados.totals.pendingCents + dados.totals.overdueCents + dados.totals.unscheduledCents,
+                ),
+              )}
             </Figure>
             <Small style={{ marginTop: 2 }}>
               {dados.totals.activeProjects} projeto{dados.totals.activeProjects === 1 ? "" : "s"} ativo
               {dados.totals.activeProjects === 1 ? "" : "s"} ·{" "}
               {emHoras(dados.totals.weekMilli).toFixed(1)} h na semana
-              {dados.totals.overdueCents > 0
-                ? ` · ${money(cents(dados.totals.overdueCents))} vencido`
+              {dados.totals.overdueCents > 0 ? ` · ${money(cents(dados.totals.overdueCents))} vencido` : ""}
+              {dados.totals.unscheduledCents > 0
+                ? ` · ${money(cents(dados.totals.unscheduledCents))} sem parcela agendada`
                 : ""}
             </Small>
           </Card>

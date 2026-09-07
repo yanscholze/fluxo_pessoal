@@ -17,7 +17,7 @@ import {
   activeCycleWindow,
   dueDateFor,
 } from "../card/invoice-cycle.ts";
-import { accountBalance, cardDebt, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
+import { accountBalance, cardDebtAsOf, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
 import type { LedgerEntry } from "../ledger/types.ts";
 
 /** O que um cartão precisa expor para participar da posição financeira. */
@@ -320,7 +320,27 @@ export function computeFinancialPosition(input: PositionInput): FinancialPositio
   // O saldo corrente continua somando os dois bolsos: é quanto o usuário tem.
   // O que não se soma é a **folga**, que depende do que cada bolso paga.
   const currentBalance = (freeToSpend.liquidBalance + benefitFreeToSpend.liquidBalance) as Cents;
-  const totalDebt = sum(input.cards.filter((card) => card.kind === "credit").map((card) => cardDebt(input.entries, card.id)));
+  /*
+   * O passivo do patrimônio é o que já foi cobrado, não o que ainda vai ser.
+   *
+   * `cardDebt` soma também o previsto, e num extrato com parcelamento longo
+   * isso é a diferença entre um patrimônio e uma ficção: as 67 parcelas
+   * futuras de um usuário real somavam R$ 13.319,68 e derrubavam o patrimônio
+   * para -R$ 14.531,00, num mês em que ele não devia nada além da fatura
+   * aberta de R$ 4.956,51.
+   *
+   * Parcela que ainda não virou cobrança é **compromisso** — e ela já aparece
+   * como tal em `committed` e em "parcelas a vencer". Contá-la aqui também
+   * seria contá-la duas vezes, uma delas no lugar errado.
+   *
+   * É o mesmo critério que a série histórica usa, o que faz o último ponto do
+   * gráfico finalmente falar a mesma língua dos anteriores.
+   */
+  const totalDebt = sum(
+    input.cards
+      .filter((card) => card.kind === "credit")
+      .map((card) => cardDebtAsOf(input.entries, card.id, input.today)),
+  );
 
   return {
     asOf: input.today,

@@ -82,6 +82,8 @@ export type CardSummary = {
   readonly brand: string;
   readonly last4: string;
   readonly color: string;
+  /** Caminho da foto do cartão, quando há uma. Os bytes vêm por rota própria. */
+  readonly imageUrl: string | null;
   readonly isPrimary: boolean;
   readonly limitCents: number;
   readonly availableLimitCents: number;
@@ -431,6 +433,7 @@ function summarizeCard(card: CardRecord, entries: readonly LedgerEntry[], today:
     brand: card.brand,
     last4: card.last4,
     color: card.color,
+    imageUrl: card.imageUrl ?? null,
     isPrimary: card.isPrimary,
     limitCents: card.limitCents,
     // Sem piso de competência: fatura atrasada continua ocupando limite.

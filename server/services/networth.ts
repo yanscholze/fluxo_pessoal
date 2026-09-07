@@ -11,7 +11,7 @@
  * errado e o usuário não teria como saber qual.
  */
 
-import { accountBalance, cardDebt, cardDebtAsOf } from "../../core/domain/ledger/balance.ts";
+import { accountBalance, cardDebtAsOf } from "../../core/domain/ledger/balance.ts";
 import { computeFinancialPosition } from "../../core/domain/position/financial-position.ts";
 import { type Competence, competenceOf, series, shift } from "../../core/time/competence.ts";
 import { type LocalDate, lastDayOfMonth, todayIn } from "../../core/time/local-date.ts";
@@ -106,7 +106,8 @@ export async function buildNetWorthView(userId: string, now: Date = new Date()):
       id: card.id,
       name: card.name,
       kind: "card" as const,
-      amountCents: cardDebt(entries, card.id),
+      // Mesmo critério do total: dívida realizada, não parcela futura.
+      amountCents: cardDebtAsOf(entries, card.id, today),
     }))
     .filter((passivo) => passivo.amountCents > 0)
     .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);

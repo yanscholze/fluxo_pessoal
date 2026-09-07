@@ -8,6 +8,7 @@ import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, money, percent, relativeDay } from "../../ui/format.ts";
 import { CircleAlert, Pencil } from "../../ui/icons.tsx";
 import { Badge, Divider, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
+import { CardPhoto } from "./card-photo.tsx";
 import { NewCard } from "./new-card.tsx";
 import { PayInvoice } from "./pay-invoice.tsx";
 
@@ -89,6 +90,8 @@ export function CardPanel({
         <Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditando(true)}>
           Editar
         </Button>
+
+        <CardPhoto cardId={card.id} hasPhoto={card.imageUrl !== null} />
 
         {card.kind === "credit" ? (
           <div className="text-right">

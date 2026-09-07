@@ -492,6 +492,65 @@ describe("posição financeira", () => {
   });
 });
 
+describe("parcela futura não é dívida de hoje", () => {
+  /*
+   * De um extrato real: o dono tinha uma fatura aberta de R$ 4.956,51 e 67
+   * parcelas futuras somando R$ 13.319,68. O patrimônio aparecia como
+   * -R$ 14.531,00 porque as parcelas ainda não cobradas entravam como passivo.
+   *
+   * Elas são compromisso, e já contam como tal em `committed`. Somá-las ao
+   * passivo é contá-las duas vezes — e a segunda no lugar errado.
+   */
+  const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(393_268) })];
+
+  const cobrada = lancamento({
+    id: "tx-cobrada",
+    kind: "expense",
+    amount: cents(495_651),
+    origin: cardParty(CARTAO),
+    occurredOn: localDate("2026-09-01"),
+    competence: competence("2026-09"),
+  });
+  const futura = lancamento({
+    id: "tx-futura",
+    kind: "expense",
+    amount: cents(1_331_968),
+    state: "planned",
+    origin: cardParty(CARTAO),
+    occurredOn: localDate("2026-10-12"),
+    competence: competence("2026-10"),
+  });
+
+  it("o patrimônio conta só o que já foi cobrado", () => {
+    const posicao = computeFinancialPosition({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries: razao(cobrada, futura),
+      today: localDate("2026-09-07"),
+    });
+
+    assert.equal(posicao.cardDebt, cents(495_651), "a parcela de outubro não é dívida em setembro");
+    assert.equal(posicao.netWorth, cents(393_268 - 495_651));
+  });
+
+  it("sem parcela futura o resultado é o mesmo", () => {
+    const so = computeFinancialPosition({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries: razao(cobrada),
+      today: localDate("2026-09-07"),
+    });
+    const com = computeFinancialPosition({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries: razao(cobrada, futura),
+      today: localDate("2026-09-07"),
+    });
+
+    assert.equal(com.netWorth, so.netWorth);
+  });
+});
+
 describe("fluxo futuro", () => {
   it("projeta o saldo ao fim de cada competência", () => {
     const contas = [conta({ id: CONTA, kind: "checking", openingBalance: cents(100000) })];

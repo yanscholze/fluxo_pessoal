@@ -12,6 +12,7 @@ import { and, count, eq, isNull, max, or } from "drizzle-orm";
 import { SUPPORTED_CURRENCIES, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
 import { assertValidCycle, type CycleConfig, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import { conflict, duplicate, notFound, validationError } from "../../core/kernel/errors.ts";
+import { bytesFromDataUrl } from "../../core/kernel/data-url.ts";
 import { newId } from "../../core/kernel/id.ts";
 import type { Cents } from "../../core/kernel/money.ts";
 import type { Competence } from "../../core/time/competence.ts";
@@ -19,6 +20,7 @@ import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
 import {
   accounts,
+  cardImages,
   cards,
   categories,
   invoices,
@@ -591,4 +593,97 @@ export async function seedDefaults(userId: string, now: Date = new Date()): Prom
   for (const categoria of padroes) {
     await createCategory(userId, categoria, now).catch(() => undefined);
   }
+}
+
+// --- foto do cartão ----------------------------------------------------------
+
+/**
+ * Teto da foto do cartão.
+ *
+ * Bem menor que o dos documentos (2 MB): é uma imagem de face de cartão, que
+ * nunca precisa de mais que isso, e ela é carregada toda vez que a tela de
+ * cartões abre. Aceitar um arquivo de câmera cru faria o aplicativo baixar
+ * megabytes para desenhar um retângulo de sete centímetros.
+ */
+export const MAX_CARD_IMAGE_BYTES = 400_000;
+
+const TIPOS_DE_IMAGEM = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+export async function setCardImage(
+  userId: string,
+  cardId: string,
+  dataUrl: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+  const [cartao] = await database
+    .select({ id: cards.id })
+    .from(cards)
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)))
+    .limit(1);
+  if (!cartao) throw notFound("Cartão", cardId);
+
+  const lido = bytesFromDataUrl(dataUrl);
+  if (!lido.ok) {
+    throw validationError("Não foi possível ler a imagem", [
+      { path: "dataUrl", message: "Envie a foto como data URL em base64" },
+    ]);
+  }
+  if (!TIPOS_DE_IMAGEM.has(lido.contentType)) {
+    throw validationError("Formato de imagem não aceito", [
+      { path: "dataUrl", message: "Use PNG, JPEG ou WebP" },
+    ]);
+  }
+  if (lido.bytes.length === 0 || lido.bytes.length > MAX_CARD_IMAGE_BYTES) {
+    throw conflict("Imagem grande demais", {
+      details: { maxBytes: MAX_CARD_IMAGE_BYTES, sizeBytes: lido.bytes.length },
+    });
+  }
+
+  const agora = now.toISOString();
+  await database
+    .insert(cardImages)
+    .values({
+      cardId,
+      userId,
+      content: lido.bytes,
+      contentType: lido.contentType,
+      sizeBytes: lido.bytes.length,
+      updatedAt: agora,
+    })
+    .onConflictDoUpdate({
+      target: cardImages.cardId,
+      set: { content: lido.bytes, contentType: lido.contentType, sizeBytes: lido.bytes.length, updatedAt: agora },
+    });
+
+  // A coluna guarda o caminho, não os bytes: é ela que a listagem carrega.
+  // O carimbo de tempo na ponta força o cliente a rebuscar depois de trocar a
+  // foto, em vez de continuar mostrando a antiga do cache.
+  await database
+    .update(cards)
+    .set({ imageUrl: `/api/v1/cards/${cardId}/image?v=${Date.parse(agora)}`, updatedAt: agora })
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)));
+}
+
+export async function removeCardImage(userId: string, cardId: string, now: Date = new Date()): Promise<void> {
+  const database = getDatabase();
+  await database.delete(cardImages).where(and(eq(cardImages.userId, userId), eq(cardImages.cardId, cardId)));
+  await database
+    .update(cards)
+    .set({ imageUrl: null, updatedAt: now.toISOString() })
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)));
+}
+
+export async function findCardImage(
+  userId: string,
+  cardId: string,
+): Promise<{ content: Uint8Array; contentType: string; updatedAt: string } | null> {
+  const [linha] = await getDatabase()
+    .select({ content: cardImages.content, contentType: cardImages.contentType, updatedAt: cardImages.updatedAt })
+    .from(cardImages)
+    .where(and(eq(cardImages.userId, userId), eq(cardImages.cardId, cardId)))
+    .limit(1);
+
+  if (!linha) return null;
+  return { content: linha.content as Uint8Array, contentType: linha.contentType, updatedAt: linha.updatedAt };
 }

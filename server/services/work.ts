@@ -799,6 +799,15 @@ export type WorkOverview = {
     readonly contractedCents: number;
     readonly receivedCents: number;
     readonly pendingCents: number;
+    /**
+     * Contrato sem parcela agendada.
+     *
+     * É dinheiro combinado que ninguém marcou para cobrar — o vazamento mais
+     * comum de quem trabalha por projeto. Ficava só dentro do projeto e não
+     * subia para o total, então "a receber" mostrava R$ 0,00 para quem tinha
+     * R$ 900,00 combinados e nenhuma parcela criada.
+     */
+    readonly unscheduledCents: number;
     readonly overdueCents: number;
     readonly lateProjects: number;
     readonly weekMilli: number;
@@ -860,6 +869,10 @@ export async function buildWorkOverview(userId: string, now: Date = new Date()):
       receivedCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.received, 0),
       pendingCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.pending, 0),
       overdueCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.overdue, 0),
+      unscheduledCents: projectSummaries.reduce(
+        (soma, item) => soma + (isOpenStatus(item.status) ? item.health.finance.unscheduled : 0),
+        0,
+      ),
       lateProjects: projectSummaries.filter((item) => item.health.deadline.status === "atrasado").length,
       weekMilli,
     },

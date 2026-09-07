@@ -7,7 +7,7 @@
 
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { users } from "./identity.ts";
 
@@ -149,4 +149,28 @@ export const trips = sqliteTable(
     uniqueIndex("trips_user_name_start_unq").on(table.userId, table.name, table.startDate),
     index("trips_user_period_idx").on(table.userId, table.startDate),
   ],
+);
+
+/**
+ * A foto do cartão, à parte da linha do cartão.
+ *
+ * Bytes numa tabela própria para que a listagem de cartões — carregada a cada
+ * abertura do painel e do aplicativo — continue pequena. `cards.image_url`
+ * guarda só o caminho de onde buscá-la.
+ */
+export const cardImages = sqliteTable(
+  "card_images",
+  {
+    cardId: text("card_id")
+      .primaryKey()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: blob("content").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (tabela) => [index("card_images_user_idx").on(tabela.userId)],
 );
