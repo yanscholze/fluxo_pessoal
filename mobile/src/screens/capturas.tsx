@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, OfflineError } from "../net/client.ts";
@@ -24,7 +24,7 @@ import { useConnectedSession } from "../state/session.tsx";
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { money } from "../ui/format.ts";
 import { Body, Button, Card, Empty, Label, Notice, Small } from "../ui/primitives.tsx";
-import { space, usePalette } from "../ui/theme.ts";
+import { radius, space, usePalette } from "../ui/theme.ts";
 
 export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
   const palette = usePalette();
@@ -58,15 +58,29 @@ export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
     void isListenerEnabled().then(setPermissao);
   }, [carregar]);
 
+  /**
+   * Para onde cada captura vai.
+   *
+   * O servidor tem um padrão por aplicativo de origem — o cartão ou a conta
+   * que o dono amarrou àquela fonte — mas quando ele não existe a confirmação
+   * era recusada com "Escolha a conta ou o cartão deste lançamento" e a tela
+   * não tinha como responder: mandava sempre sem destino. Escolher aqui
+   * resolve o caso e ensina o padrão para as próximas.
+   */
+  const [destinos, setDestinos] = useState<Record<string, { kind: "account" | "card"; id: string }>>({});
+
   const decidir = useCallback(
     async (captureId: string, decision: "confirmar" | "ignorar" | "duplicado") => {
       setResolvendo(captureId);
+      const destino = destinos[captureId];
       try {
         await resolveCapture({
           baseUrl: credentials.baseUrl,
           token: credentials.token,
           captureId,
           decision,
+          accountId: destino?.kind === "account" ? destino.id : null,
+          cardId: destino?.kind === "card" ? destino.id : null,
         });
         await carregar();
         // Confirmar cria um lançamento no servidor; sincronizar traz o
@@ -78,7 +92,7 @@ export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
         setResolvendo(null);
       }
     },
-    [credentials, carregar, synchronize],
+    [credentials, carregar, synchronize, destinos],
   );
 
   return (
@@ -157,6 +171,11 @@ export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
                     {captura.rawText}
                   </Small>
 
+                  <SeletorDeDestino
+                    escolhido={destinos[captura.id] ?? null}
+                    onEscolher={(destino) => setDestinos((atual) => ({ ...atual, [captura.id]: destino }))}
+                  />
+
                   <View style={{ flexDirection: "row", gap: space.sm }}>
                     <Button
                       label="Confirmar"
@@ -203,5 +222,65 @@ export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Escolhe a conta ou o cartão de uma captura.
+ *
+ * Aparece em cada sugestão porque a notificação do banco nem sempre diz o
+ * suficiente: "compra aprovada" pode ser crédito ou débito, e o mesmo
+ * aplicativo emite as duas. Quando a fonte tem padrão configurado, ele já vem
+ * marcado e o toque é opcional; quando não tem, é ele que destrava a
+ * confirmação.
+ */
+function SeletorDeDestino({
+  escolhido,
+  onEscolher,
+}: {
+  escolhido: { kind: "account" | "card"; id: string } | null;
+  onEscolher: (destino: { kind: "account" | "card"; id: string }) => void;
+}) {
+  const palette = usePalette();
+  const { accounts, cards } = useLedger();
+
+  const opcoes = [
+    ...cards
+      .filter((cartao) => cartao.kind === "credit" && cartao.archivedAt === null)
+      .map((cartao) => ({ kind: "card" as const, id: cartao.id, label: cartao.name })),
+    ...accounts
+      .filter((conta) => conta.archivedAt === null)
+      .map((conta) => ({ kind: "account" as const, id: conta.id, label: conta.name })),
+  ];
+
+  if (opcoes.length === 0) return null;
+
+  return (
+    <View style={{ gap: 6 }}>
+      <Small>Onde lançar</Small>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+        {opcoes.map((opcao) => {
+          const marcado = escolhido?.kind === opcao.kind && escolhido.id === opcao.id;
+          return (
+            <Pressable
+              key={`${opcao.kind}-${opcao.id}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: marcado }}
+              onPress={() => onEscolher({ kind: opcao.kind, id: opcao.id })}
+              style={{
+                paddingHorizontal: space.md,
+                paddingVertical: 6,
+                borderRadius: radius.pill,
+                backgroundColor: marcado ? palette.accent : palette.surfaceSunken,
+              }}
+            >
+              <Small tone={marcado ? "subtle" : "muted"} style={{ color: marcado ? palette.accentInk : undefined }}>
+                {opcao.label}
+              </Small>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }

@@ -42,7 +42,23 @@ export function Dialog({
   const painel = useRef<HTMLDivElement>(null);
   const anterior = useRef<HTMLElement | null>(null);
 
-  const fechar = useCallback(() => onClose(), [onClose]);
+  /*
+   * O `onClose` fica numa referência, e não na dependência do efeito.
+   *
+   * Quem abre o diálogo quase sempre passa uma seta escrita ali mesmo
+   * (`onClose={() => setAberto(false)}`), que é uma função nova a cada render.
+   * Com ela na dependência, o efeito de baixo desmontava e remontava a cada
+   * tecla digitada — e como ele dá foco ao primeiro campo ao montar, o cursor
+   * pulava para o começo do formulário a cada dígito.
+   *
+   * A referência mantém o comportamento (sempre chama a versão mais recente) e
+   * torna `fechar` estável, que é o que o efeito precisa.
+   */
+  const aoFechar = useRef(onClose);
+  useEffect(() => {
+    aoFechar.current = onClose;
+  }, [onClose]);
+  const fechar = useCallback(() => aoFechar.current(), []);
 
   useEffect(() => {
     if (!open) return;

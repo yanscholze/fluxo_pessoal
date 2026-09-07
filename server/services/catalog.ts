@@ -59,7 +59,9 @@ export async function createAccount(userId: string, input: AccountInput, now: Da
   const [existing] = await database
     .select({ id: accounts.id })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.name, input.name)))
+    // Arquivado não reserva nome: quem saiu de cena não pode impedir o nome de
+    // voltar a ser usado. O índice parcial da migration 0019 diz o mesmo.
+    .where(and(eq(accounts.userId, userId), eq(accounts.name, input.name), isNull(accounts.archivedAt)))
     .limit(1);
   if (existing) throw duplicate("Já existe uma conta com este nome");
 
@@ -225,7 +227,14 @@ export async function createCategory(userId: string, input: CategoryInput, now: 
   const [existing] = await database
     .select({ id: categories.id })
     .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.name, input.name), eq(categories.kind, input.kind)))
+    .where(
+      and(
+        eq(categories.userId, userId),
+        eq(categories.name, input.name),
+        eq(categories.kind, input.kind),
+        isNull(categories.archivedAt),
+      ),
+    )
     .limit(1);
   if (existing) throw duplicate("Já existe uma categoria com este nome neste fluxo");
 
@@ -335,7 +344,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
   const [existing] = await database
     .select({ id: cards.id })
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.name, input.name)))
+    .where(and(eq(cards.userId, userId), eq(cards.name, input.name), isNull(cards.archivedAt)))
     .limit(1);
   if (existing) throw duplicate("Já existe um cartão com este nome");
 
@@ -447,7 +456,7 @@ export async function updateCard(
     const [homonimo] = await database
       .select({ id: cards.id })
       .from(cards)
-      .where(and(eq(cards.userId, userId), eq(cards.name, patch.name)))
+      .where(and(eq(cards.userId, userId), eq(cards.name, patch.name), isNull(cards.archivedAt)))
       .limit(1);
     if (homonimo) throw duplicate("Já existe um cartão com este nome");
   }
