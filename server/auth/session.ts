@@ -10,7 +10,7 @@
  * SHA-256 dele: um vazamento do banco não dá acesso a nenhuma conta.
  */
 
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 
 import { forbidden } from "../../core/kernel/errors.ts";
 import { SESSION_COOKIE } from "../../core/kernel/session-cookie.ts";
@@ -21,7 +21,24 @@ import { sessions, users } from "../db/schema/index.ts";
 export type SessionKind = "web" | "device";
 
 export const WEB_SESSION_DAYS = 30;
-export const DEVICE_SESSION_DAYS = 180;
+
+/**
+ * Janela de **inatividade** do aparelho, não prazo fixo.
+ *
+ * Antes eram 180 dias contados da conexão: quem usava todo dia era desconectado
+ * no sexto mês sem nenhum motivo, e um aparelho perdido continuava valendo meio
+ * ano. Contar do último uso inverte as duas coisas — quem usa não é
+ * interrompido, e o que parou de ser usado caduca em um mês.
+ */
+export const DEVICE_SESSION_DAYS = 30;
+
+/**
+ * De quanto em quanto tempo a janela é empurrada para frente.
+ *
+ * Estender a cada requisição custaria uma escrita por leitura. Uma vez por hora
+ * mantém a janela praticamente colada no último uso e deixa o custo desprezível.
+ */
+const RENOVACAO_MINIMA_MS = 3_600_000;
 
 export { SESSION_COOKIE };
 
@@ -104,10 +121,19 @@ export async function resolveSession(token: string | null, now: Date = new Date(
 
   const database = getDatabase();
   const [row] = await database
+    /*
+     * Os dois `id` precisam de apelido explícito.
+     *
+     * `sessions.id` e `users.id` chegam do SQLite com o mesmo nome de coluna, e
+     * o segundo sobrescrevia o primeiro: `sessionId` vinha com o id do
+     * **usuário**. Passou despercebido porque quase todo uso é o `userId`, que
+     * ficava certo — mas quem revogasse a sessão corrente estaria apontando
+     * para uma linha que não existe.
+     */
     .select({
-      sessionId: sessions.id,
+      sessionId: sql<string>`${sessions.id}`.as("session_id"),
       kind: sessions.kind,
-      userId: users.id,
+      userId: sql<string>`${users.id}`.as("user_id"),
       email: users.email,
       displayName: users.displayName,
     })
@@ -124,6 +150,18 @@ export async function resolveSession(token: string | null, now: Date = new Date(
 
   if (!row) return null;
 
+  // O uso empurra a validade do aparelho para frente. Sem isto a janela de
+  // inatividade não existiria: ela expiraria no mesmo dia para quem usa todo
+  // dia e para quem largou o aparelho na gaveta.
+  // O uso empurra a validade do aparelho para frente. Sem isto a janela de
+  // inatividade não existiria: expiraria no mesmo dia para quem usa todo dia e
+  // para quem largou o aparelho na gaveta.
+  //
+  // A limitação de frequência vive na própria escrita, e não numa leitura
+  // prévia: acrescentar `lastSeenAt` ao `select` com `innerJoin` embaralhava o
+  // mapeamento das colunas e `sessionId` passava a vir com o id do usuário.
+  if (row.kind === "device") await renewDeviceSession(row.sessionId, now);
+
   return {
     id: row.userId,
     email: row.email,
@@ -133,7 +171,26 @@ export async function resolveSession(token: string | null, now: Date = new Date(
   };
 }
 
-/** Marca o último uso. Escrita solta de propósito: não vale bloquear a resposta. */
+/**
+ * Marca o último uso e empurra a validade do aparelho.
+ *
+ * As duas coisas andam juntas de propósito: a validade **é** o último uso mais
+ * a janela. Gravar uma sem a outra deixaria a lista de aparelhos dizendo "visto
+ * hoje" ao lado de uma sessão que expira amanhã.
+ */
+export async function renewDeviceSession(sessionId: string, now: Date = new Date()): Promise<void> {
+  // Só escreve quando o último uso já saiu da janela de renovação. Estender a
+  // cada requisição custaria uma escrita por leitura; uma vez por hora deixa a
+  // validade praticamente colada no último uso a custo desprezível.
+  const limite = new Date(now.getTime() - RENOVACAO_MINIMA_MS).toISOString();
+
+  await getDatabase()
+    .update(sessions)
+    .set({ lastSeenAt: now.toISOString(), expiresAt: expiryFor("device", now) })
+    .where(and(eq(sessions.id, sessionId), lt(sessions.lastSeenAt, limite)));
+}
+
+/** Marca o último uso, sem mexer na validade. Para sessão de navegador. */
 export async function touchSession(sessionId: string, now: Date = new Date()): Promise<void> {
   await getDatabase()
     .update(sessions)
