@@ -35,6 +35,8 @@ export const POST = handle(async (request: Request) => {
     closingDay: input.integer("closingDay", { min: 1, max: 31 }),
     dueDay: input.integer("dueDay", { min: 1, max: 31 }),
     dueAdjustment: input.optionalChoice("dueAdjustment", ["previous", "next"] as const) ?? "next",
+    closingAdjustment:
+      input.optionalChoice("closingAdjustment", ["previous", "next", "none"] as const) ?? "previous",
     limit: input.optionalMoney("limit"),
     brand: input.optionalString("brand", { max: 40 }),
     tier: input.optionalString("tier", { max: 40 }),

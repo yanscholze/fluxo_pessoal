@@ -54,7 +54,7 @@ export const POST = handle(async (request: Request) => {
 
   const payload = {
     id: input.optionalId("id"),
-    kind: input.choice("kind", ["expense", "income", "transfer"] as const),
+    kind: input.choice("kind", ["expense", "income", "transfer", "refund"] as const),
     description: input.string("description", { max: 160 }),
     amount: input.money("amount"),
     occurredOn: input.date("occurredOn"),

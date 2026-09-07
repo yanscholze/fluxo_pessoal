@@ -60,6 +60,7 @@ type CardRow = {
   closingDay: number;
   dueDay: number;
   dueAdjustment: string;
+  closingAdjustment: string;
 };
 
 export function toPositionCard(row: CardRow): PositionCard {
@@ -71,6 +72,7 @@ export function toPositionCard(row: CardRow): PositionCard {
     closingDay: row.closingDay,
     dueDay: row.dueDay,
     dueAdjustment: row.dueAdjustment as "previous" | "next",
+    closingAdjustment: row.closingAdjustment as "previous" | "next" | "none",
   };
 }
 

@@ -30,6 +30,7 @@ import classificacoes from "./migrations/0014_subscription-labels.sql?raw";
 import cobrancaDeAssinatura from "./migrations/0015_subscription-charges.sql?raw";
 import valorRecebido from "./migrations/0016_received-amount.sql?raw";
 import categoriaDeTempo from "./migrations/0017_time-activity-and-documents.sql?raw";
+import ajusteDeFechamento from "./migrations/0018_closing-adjustment.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -111,6 +112,7 @@ const TODO_O_SQL: readonly string[] = [
   cobrancaDeAssinatura,
   valorRecebido,
   categoriaDeTempo,
+  ajusteDeFechamento,
 ];
 
 /**
@@ -197,6 +199,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 15, name: "cobranca-de-assinatura-fora-da-fila", run: fromSql(cobrancaDeAssinatura) },
   { id: 16, name: "valor-efetivamente-recebido", run: fromSql(valorRecebido) },
   { id: 17, name: "categoria-de-tempo-e-documentos", run: fromSql(categoriaDeTempo) },
+  { id: 18, name: "ajuste-de-fechamento", run: fromSql(ajusteDeFechamento) },
 ];
 
 let applied: Promise<void> | null = null;

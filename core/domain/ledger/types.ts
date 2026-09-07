@@ -40,8 +40,15 @@ export function isSameParty(left: Party, right: Party): boolean {
  * `invoice_payment` é separado de `transfer` porque tem regra própria: reduz
  * a dívida de um cartão numa competência específica e **não é despesa**.
  * Contabilizá-lo como gasto duplicaria as compras já registradas na fatura.
+ *
+ * `refund` é separado de `income` por dois motivos. O primeiro é que ele pode
+ * cair num **cartão**, e receita não pode: quando a loja devolve o dinheiro de
+ * uma compra no crédito, a dívida da fatura cai sem que entre um centavo em
+ * conta nenhuma. O segundo é de relatório: estorno é gasto que desandou, não
+ * dinheiro novo. Somá-lo à receita inflaria a renda do mês e esconderia que a
+ * despesa correspondente nunca deveria ter existido.
  */
-export type TransactionKind = "expense" | "income" | "transfer" | "invoice_payment";
+export type TransactionKind = "expense" | "income" | "transfer" | "invoice_payment" | "refund";
 
 /**
  * Situação do lançamento.

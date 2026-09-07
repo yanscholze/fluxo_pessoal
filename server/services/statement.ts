@@ -6,6 +6,7 @@
  * exibe.
  */
 
+import type { TransactionKind } from "../../core/domain/ledger/types.ts";
 import { competenceOf } from "../../core/time/competence.ts";
 import type { Competence } from "../../core/time/competence.ts";
 import { type LocalDate, firstDayOfMonth, lastDayOfMonth, todayIn } from "../../core/time/local-date.ts";
@@ -14,7 +15,7 @@ import { listTransactions } from "../repositories/ledger.ts";
 
 export type StatementRow = {
   readonly id: string;
-  readonly kind: "expense" | "income" | "transfer" | "invoice_payment";
+  readonly kind: TransactionKind;
   readonly state: "confirmed" | "planned" | "review";
   readonly description: string;
   readonly amountCents: number;

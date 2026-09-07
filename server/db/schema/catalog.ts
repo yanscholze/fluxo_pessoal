@@ -96,6 +96,13 @@ export const cards = sqliteTable(
     closingDay: integer("closing_day").notNull(),
     dueDay: integer("due_day").notNull(),
     dueAdjustment: text("due_adjustment", { enum: ["previous", "next"] }).notNull().default("next"),
+    /**
+     * Ajuste do fechamento. `none` para emissor que fecha em dia fixo mesmo
+     * quando ele cai em fim de semana — o Nubank é um deles.
+     */
+    closingAdjustment: text("closing_adjustment", { enum: ["previous", "next", "none"] })
+      .notNull()
+      .default("previous"),
 
     // Recompensas
     rewardMode: text("reward_mode", { enum: ["none", "points", "cashback", "both"] }).notNull().default("none"),

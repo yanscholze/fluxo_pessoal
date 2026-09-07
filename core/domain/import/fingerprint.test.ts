@@ -32,16 +32,40 @@ describe("identidade por FITID", () => {
     assert.equal(fingerprintOf(linha, faturaAgosto), fingerprintOf(linha, faturaSetembro));
   });
 
-  it("ignora data, descrição e valor — o emissor já garante a unicidade", () => {
+  it("ignora a data: é ela que muda quando a mesma linha volta noutra competência", () => {
     const original = row({ externalId: "FIT-1" });
-    const remendada = row({
-      externalId: "FIT-1",
-      date: localDate("2026-08-14"),
-      description: "MERCADO SAO PAULO LTDA",
-      amount: cents(-16000),
-    });
+    const outraData = row({ externalId: "FIT-1", date: localDate("2026-08-14") });
 
-    assert.equal(fingerprintOf(original, conta), fingerprintOf(remendada, conta));
+    assert.equal(fingerprintOf(original, conta), fingerprintOf(outraData, conta));
+  });
+
+  it("separa as parcelas que o emissor emitiu sob o mesmo FITID", () => {
+    // Caso real do Nubank: as nove parcelas do "Samsung - Shop.com" dividem um
+    // FITID só. Com identidade por FITID cru, oito delas voltariam como
+    // duplicadas e a dívida importada seria um nono da real.
+    const segunda = row({ externalId: "FIT-1", description: "Samsung - Shop.com", installment: { current: 2, total: 12 } });
+    const terceira = row({ externalId: "FIT-1", description: "Samsung - Shop.com", installment: { current: 3, total: 12 } });
+
+    assert.notEqual(fingerprintOf(segunda, conta), fingerprintOf(terceira, conta));
+    assert.equal(isDuplicate(terceira, conta, new Set([fingerprintOf(segunda, conta)])), false);
+  });
+
+  it("separa o estorno da compra que ele estorna", () => {
+    // O Nubank credita o estorno com o mesmo FITID do débito original. Se a
+    // identidade fosse só o FITID, o estorno entraria como duplicata da compra
+    // e a despesa estornada continuaria pesando no mês.
+    const compra = row({ externalId: "FIT-1", description: "Shopee", amount: cents(-4845) });
+    const estorno = row({ externalId: "FIT-1", description: "Estorno de Shopee", amount: cents(4845) });
+
+    assert.notEqual(fingerprintOf(compra, conta), fingerprintOf(estorno, conta));
+  });
+
+  it("separa o IOF da compra internacional que o gerou", () => {
+    // Mesmo FITID, mesmo sinal, mesma data: só descrição e valor distinguem.
+    const compra = row({ externalId: "FIT-1", description: "Anthropic Claude Sub", amount: cents(-11365) });
+    const iof = row({ externalId: "FIT-1", description: "IOF de compra internacional", amount: cents(-397) });
+
+    assert.notEqual(fingerprintOf(compra, conta), fingerprintOf(iof, conta));
   });
 
   it("separa FITIDs diferentes", () => {
@@ -167,7 +191,7 @@ describe("tolerância de arredondamento", () => {
     const candidatos = duplicateCandidates(linha, faturaAgosto);
 
     assert.equal(candidatos[0], fingerprintOf(linha, faturaAgosto));
-    assert.equal(candidatos.length, 12, "FITID + composta + 10 variantes");
+    assert.equal(candidatos.length, 22, "FITID + composta + 10 variantes de cada uma");
     assert.equal(new Set(candidatos).size, candidatos.length, "sem candidato repetido");
 
     // Mesma parcela gravada antes por um CSV, sem FITID: precisa ser encontrada.
@@ -194,9 +218,9 @@ describe("mistura de formatos", () => {
   it("mantém o FITID como identidade gravada, não o composto", () => {
     const doOfx = row({ externalId: "FIT-1" });
 
-    assert.equal(fingerprintOf(doOfx, conta), "account|acc-1|fitid|FIT-1");
+    assert.equal(fingerprintOf(doOfx, conta), "account|acc-1|fitid|FIT-1|mercado sao paulo|-15990");
     assert.deepEqual(duplicateCandidates(doOfx, conta), [
-      "account|acc-1|fitid|FIT-1",
+      "account|acc-1|fitid|FIT-1|mercado sao paulo|-15990",
       "account|acc-1|2026-08-13|mercado sao paulo|-15990",
     ]);
   });
@@ -238,7 +262,10 @@ describe("determinismo", () => {
       fingerprintOf(row({ installment: { current: 3, total: 10 } }), faturaAgosto),
       "card|card-1|2026-08|2026-08-13|mercado sao paulo|-15990|3/10",
     );
-    assert.equal(fingerprintOf(row({ externalId: "FIT-1" }), faturaAgosto), "card|card-1|fitid|FIT-1");
+    assert.equal(
+      fingerprintOf(row({ externalId: "FIT-1" }), faturaAgosto),
+      "card|card-1|fitid|FIT-1|mercado sao paulo|-15990",
+    );
   });
 
   it("isDuplicate é falso contra um conjunto vazio", () => {

@@ -60,7 +60,7 @@ describe("afastamento do legado", () => {
      * migration zero — para `legacy_recurrences` num banco a meio caminho, e a
      * migration seguinte morreu com "no such table: recurrences".
      */
-    assert.equal(TABELAS_POR_MIGRATION.length, 18, "uma entrada por migration, na ordem");
+    assert.equal(TABELAS_POR_MIGRATION.length, 19, "uma entrada por migration, na ordem");
 
     // A quinta cria as recompensas; a zero cria o núcleo. Nenhuma cria as duas.
     assert.ok(TABELAS_POR_MIGRATION[5].includes("reward_redemptions"));

@@ -16,6 +16,7 @@ const NATUREZA: Record<StatementRow["kind"], { label: string; icon: LucideIcon; 
   income: { label: "Receita", icon: ArrowUpRight, tone: "positive" },
   transfer: { label: "Transferência", icon: ArrowLeftRight, tone: "info" },
   invoice_payment: { label: "Pagamento de fatura", icon: Receipt, tone: "caution" },
+  refund: { label: "Estorno", icon: ArrowUpRight, tone: "positive" },
 };
 
 /**

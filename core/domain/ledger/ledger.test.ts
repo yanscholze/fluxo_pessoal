@@ -191,6 +191,28 @@ describe("postagem", () => {
       );
     });
 
+    it("aceita estorno entrando num cartão, ao contrário da receita", () => {
+      // Devolução de compra no crédito é o estorno mais comum que existe: a
+      // dívida da fatura cai sem que entre um centavo em conta nenhuma.
+      const entries = postTransaction(
+        lancamento({ kind: "refund", amount: cents(9588), origin: cardParty(CARTAO) }),
+      );
+
+      assert.equal(entries.length, 1);
+      assert.deepEqual(entries[0].party, cardParty(CARTAO));
+      assert.equal(entries[0].amount, cents(9588));
+    });
+
+    it("recusa estorno com conta de destino", () => {
+      assert.throws(
+        () =>
+          postTransaction(
+            lancamento({ kind: "refund", amount: cents(100), destination: accountParty(POUPANCA) }),
+          ),
+        DomainError,
+      );
+    });
+
     it("recusa transferência para a mesma conta", () => {
       assert.throws(
         () =>

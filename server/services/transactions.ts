@@ -39,7 +39,7 @@ import {
 
 export type RecordTransactionInput = {
   readonly id?: string | null;
-  readonly kind: "expense" | "income" | "transfer";
+  readonly kind: "expense" | "income" | "transfer" | "refund";
   readonly description: string;
   readonly amount: Cents;
   readonly occurredOn: LocalDate;
@@ -223,8 +223,12 @@ async function resolveOrigin(userId: string, input: RecordTransactionInput): Pro
   }
 
   if (input.cardId) {
-    if (input.kind !== "expense") {
-      throw conflict("Só despesa pode ser lançada no cartão de crédito");
+    // Estorno acompanha a despesa: a loja devolve na mesma fatura em que
+    // cobrou, e a dívida cai sem que entre dinheiro em conta nenhuma. Receita e
+    // transferência continuam de fora — cartão não recebe salário nem serve de
+    // origem de transferência.
+    if (input.kind !== "expense" && input.kind !== "refund") {
+      throw conflict("No cartão de crédito só entram despesa e estorno");
     }
     const card = await findCard(userId, input.cardId);
     if (!card) throw notFound("Cartão", input.cardId);

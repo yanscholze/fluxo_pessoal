@@ -20,6 +20,21 @@ import {
 /** Como resolver uma data que caiu em dia não útil. */
 export type BusinessDayAdjustment = "previous" | "next";
 
+/**
+ * Ajuste que admite não ajustar.
+ *
+ * Nem toda data de calendário financeiro se move. O vencimento se move — o
+ * pagamento precisa compensar num dia útil. Já o fechamento da fatura é interno
+ * ao emissor, e há emissor que fecha no dia 13 mesmo quando ele cai num
+ * domingo. Forçar o recuo nesse caso joga as compras do fim de semana para a
+ * fatura seguinte, e a fatura do app deixa de bater com a do banco.
+ *
+ * É um tipo à parte, e não um alargamento de `BusinessDayAdjustment`, porque
+ * quem agenda recorrência **precisa** cair em dia útil: oferecer `"none"` lá
+ * seria oferecer um agendamento que o banco não executa.
+ */
+export type OptionalBusinessDayAdjustment = BusinessDayAdjustment | "none";
+
 /** Feriados nacionais de data fixa, no formato `MM-DD`. */
 const FIXED_HOLIDAYS = [
   "01-01", // Confraternização Universal
@@ -92,7 +107,8 @@ export function isBusinessDay(date: LocalDate): boolean {
  * Move a data para o dia útil mais próximo na direção pedida. Devolve a
  * própria data quando ela já é dia útil.
  */
-export function adjustToBusinessDay(date: LocalDate, direction: BusinessDayAdjustment): LocalDate {
+export function adjustToBusinessDay(date: LocalDate, direction: OptionalBusinessDayAdjustment): LocalDate {
+  if (direction === "none") return date;
   const step = direction === "previous" ? -1 : 1;
   let current = date;
   // Nenhuma sequência de feriados brasileiros passa de poucos dias; o teto

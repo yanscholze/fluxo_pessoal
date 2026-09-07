@@ -301,6 +301,7 @@ export type CardInput = {
   readonly closingDay: number;
   readonly dueDay: number;
   readonly dueAdjustment?: "previous" | "next";
+  readonly closingAdjustment?: "previous" | "next" | "none";
   readonly limit?: Cents | null;
   readonly brand?: string | null;
   readonly tier?: string | null;
@@ -321,6 +322,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
+    closingAdjustment: input.closingAdjustment ?? "previous",
   });
 
   const [account] = await database
@@ -363,6 +365,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
+    closingAdjustment: input.closingAdjustment ?? "previous",
     rewardMode: input.rewardMode ?? "none",
     pointsPerDollarMilli: input.pointsPerDollarMilli ?? 0,
     cashbackBasisPoints: input.cashbackBasisPoints ?? 0,
@@ -382,6 +385,7 @@ export type CardPatch = {
   readonly closingDay?: number | null;
   readonly dueDay?: number | null;
   readonly dueAdjustment?: "previous" | "next" | null;
+  readonly closingAdjustment?: "previous" | "next" | "none" | null;
   readonly limit?: Cents | null;
   readonly brand?: string | null;
   readonly tier?: string | null;
@@ -426,6 +430,7 @@ export async function updateCard(
     closingDay: patch.closingDay ?? atual.closingDay,
     dueDay: patch.dueDay ?? atual.dueDay,
     dueAdjustment: patch.dueAdjustment ?? atual.dueAdjustment,
+    closingAdjustment: patch.closingAdjustment ?? atual.closingAdjustment,
   };
   assertValidCycle(ciclo);
 
@@ -453,6 +458,7 @@ export async function updateCard(
   if (patch.closingDay != null) campos.closingDay = patch.closingDay;
   if (patch.dueDay != null) campos.dueDay = patch.dueDay;
   if (patch.dueAdjustment) campos.dueAdjustment = patch.dueAdjustment;
+  if (patch.closingAdjustment) campos.closingAdjustment = patch.closingAdjustment;
   if (patch.limit != null) campos.limitCents = patch.limit as number;
   if (patch.brand != null) campos.brand = patch.brand;
   if (patch.tier != null) campos.tier = patch.tier;
@@ -472,7 +478,8 @@ export async function updateCard(
   const mudouOCiclo =
     ciclo.closingDay !== atual.closingDay ||
     ciclo.dueDay !== atual.dueDay ||
-    ciclo.dueAdjustment !== atual.dueAdjustment;
+    ciclo.dueAdjustment !== atual.dueAdjustment ||
+    ciclo.closingAdjustment !== atual.closingAdjustment;
 
   if (mudouOCiclo) await reagendarFaturasAbertas(userId, cardId, ciclo, now);
 }

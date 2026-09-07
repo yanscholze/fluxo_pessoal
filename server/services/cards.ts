@@ -7,6 +7,7 @@
  * devo desta fatura" sem refazer a conta em cada tela.
  */
 
+import type { OptionalBusinessDayAdjustment } from "../../core/time/brazilian-calendar.ts";
 import {
   activeCompetence,
   closingDateFor,
@@ -55,6 +56,7 @@ export type CardView = {
   readonly closingDay: number;
   readonly dueDay: number;
   readonly dueAdjustment: "previous" | "next";
+  readonly closingAdjustment: OptionalBusinessDayAdjustment;
   readonly rewardMode: "none" | "points" | "cashback" | "both";
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
@@ -181,6 +183,7 @@ function toCardView(
     closingDay: card.closingDay,
     dueDay: card.dueDay,
     dueAdjustment: card.dueAdjustment,
+    closingAdjustment: card.closingAdjustment ?? "previous",
     rewardMode: card.rewardMode,
     pointsPerDollarMilli: card.pointsPerDollarMilli,
     cashbackBasisPoints: card.cashbackBasisPoints,

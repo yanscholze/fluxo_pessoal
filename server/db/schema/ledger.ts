@@ -85,7 +85,7 @@ export const transactions = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
 
-    kind: text("kind", { enum: ["expense", "income", "transfer", "invoice_payment"] }).notNull(),
+    kind: text("kind", { enum: ["expense", "income", "transfer", "invoice_payment", "refund"] }).notNull(),
     state: text("state", { enum: ["confirmed", "planned", "review"] }).notNull().default("confirmed"),
     source: text("source", {
       enum: ["manual", "import", "recurrence", "installment", "invoice_payment", "capture"],
@@ -186,7 +186,7 @@ export const ledgerEntries = sqliteTable(
      * transferência — e quem esquecesse a junção contaria remanejamento como
      * despesa.
      */
-    kind: text("kind", { enum: ["expense", "income", "transfer", "invoice_payment"] })
+    kind: text("kind", { enum: ["expense", "income", "transfer", "invoice_payment", "refund"] })
       .notNull()
       .default("expense"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
