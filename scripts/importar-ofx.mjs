@@ -90,10 +90,10 @@ const FECHAMENTO = 12;
 const VENCIMENTO = 20;
 const AJUSTE_DE_FECHAMENTO = "none";
 
-const CONTA = { nome: "Nubank Conta", kind: "checking", instituicao: "Nu Pagamentos" };
-const CAIXINHA = { nome: "Caixinha Nubank", kind: "investment", instituicao: "Nu Pagamentos" };
-const EXTERNA = { nome: "Outras contas próprias", kind: "checking", instituicao: "Mercado Pago / XP" };
-const CARTAO = { nome: "Nubank", kind: "credit" };
+const CONTA = { nome: "Nubank Conta Corrente", kind: "checking", instituicao: "Nu Pagamentos" };
+const CAIXINHA = { nome: "Nubank Caixinha", kind: "investment", instituicao: "Nu Pagamentos" };
+const EXTERNA = { nome: "Mercado Pago e XP", kind: "checking", instituicao: "Mercado Pago / XP" };
+const CARTAO = { nome: "Nubank Cartão", kind: "credit" };
 
 /**
  * Contas do próprio usuário em outros bancos.
@@ -419,18 +419,31 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
   if (cartoes.has(CARTAO.nome)) {
     idDe.cartao = cartoes.get(CARTAO.nome);
   } else {
-    const criado = await api("/api/v1/cards", {
-      method: "POST",
-      body: {
-        name: CARTAO.nome,
-        kind: "credit",
-        paymentAccountId: idDe.conta,
-        closingDay: FECHAMENTO,
-        dueDay: VENCIMENTO,
-        closingAdjustment: AJUSTE_DE_FECHAMENTO,
-        isPrimary: true,
-      },
-    });
+    // Mesma armadilha das contas: cartão arquivado não aparece na listagem e
+    // continua segurando o nome.
+    let nome = CARTAO.nome;
+    let criado = null;
+    for (let tentativa = 1; tentativa <= 20 && criado === null; tentativa += 1) {
+      try {
+        criado = await api("/api/v1/cards", {
+          method: "POST",
+          body: {
+            name: nome,
+            kind: "credit",
+            paymentAccountId: idDe.conta,
+            closingDay: FECHAMENTO,
+            dueDay: VENCIMENTO,
+            closingAdjustment: AJUSTE_DE_FECHAMENTO,
+            isPrimary: true,
+          },
+        });
+      } catch (erro) {
+        if (!/409|duplicate/i.test(String(erro.message))) throw erro;
+        nome = `${CARTAO.nome} (${tentativa + 1})`;
+        console.log(`  nome de cartão ocupado por registro arquivado; usando "${nome}"`);
+      }
+    }
+    if (criado === null) throw new Error(`não consegui um nome livre para o cartão "${CARTAO.nome}"`);
     idDe.cartao = criado.id;
   }
 
