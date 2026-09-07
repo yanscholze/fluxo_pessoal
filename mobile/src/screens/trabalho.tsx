@@ -1,38 +1,43 @@
 /**
  * Trabalho.
  *
- * A área de projetos, que não existia no aplicativo. É a tela que se abre a
- * caminho do cliente: o que está atrasado, o que vence hoje, o que vem depois.
+ * A tela mostrava só tarefas, vindas do quadro. Quem tem projeto sem tarefa
+ * cadastrada — que é o caso comum de quem toca um trabalho sozinho — via uma
+ * tela vazia e concluía que o aplicativo não conhecia os projetos dele.
  *
- * O quadro do site tem quatro colunas lado a lado; aqui vira uma lista agrupada
- * por situação. Coluna horizontal no celular obriga a rolar de lado para
- * descobrir que existe conteúdo — e o que não se vê não é consultado.
- *
- * A ordem é por urgência, não por projeto: quem olha isso no celular quer saber
- * o que fazer agora, e agrupar por projeto esconde o atraso no meio da lista.
+ * Agora o projeto vem primeiro, com o que se pergunta sobre ele longe do
+ * computador: quanto já entrou do combinado, quantas horas foram, e quanto
+ * falta para o prazo. As tarefas vêm depois, quando existem.
  */
 
 import { useMemo } from "react";
 import { View } from "react-native";
 
-import { fetchBoard, type BoardTask } from "../net/views.ts";
+import { cents } from "@fluxo/core/kernel/money.ts";
+import { fetchBoard, fetchProjetos, type BoardTask, type ProjetoView } from "../net/views.ts";
 import { useRemoto } from "../state/remote.tsx";
-import { relativeDate } from "../ui/format.ts";
+import { Medidor } from "../ui/charts.tsx";
+import { money, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Figure, Label, Row, Small } from "../ui/primitives.tsx";
 import { TelaRemota } from "../ui/tela-remota.tsx";
 import { radius, space, usePalette } from "../ui/theme.ts";
 
-/** Rótulos das situações, na ordem em que uma tarefa caminha. */
-const SITUACOES: readonly { readonly id: string; readonly label: string }[] = [
-  { id: "todo", label: "A fazer" },
-  { id: "doing", label: "Em andamento" },
-  { id: "blocked", label: "Travada" },
-  { id: "done", label: "Concluída" },
-];
+/** Rótulo humano da situação do projeto, na ordem em que ele caminha. */
+const SITUACAO: Record<string, string> = {
+  draft: "Rascunho",
+  development: "Em desenvolvimento",
+  testing: "Em testes",
+  adjustments: "Em ajustes",
+  delivered: "Entregue",
+  archived: "Arquivado",
+};
+
+/** Milésimos de hora viram horas. O domínio guarda em milli para não arredondar. */
+const emHoras = (milli: number) => milli / 1000;
 
 export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
-  const palette = usePalette();
-  const remoto = useRemoto(fetchBoard);
+  const remoto = useRemoto(fetchProjetos);
+  const quadro = useRemoto(fetchBoard);
 
   return (
     <TelaRemota
@@ -41,114 +46,138 @@ export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
       remoto={remoto}
       onVoltar={onVoltar}
     >
-      {(dados) => <Conteudo tarefas={dados.tasks} projetos={dados.projects.length} palette={palette} />}
+      {(dados) => (
+        <>
+          <Card>
+            <Label>A receber</Label>
+            <Figure tone={dados.totals.overdueCents > 0 ? "negative" : "neutral"}>
+              {money(cents(dados.totals.pendingCents))}
+            </Figure>
+            <Small style={{ marginTop: 2 }}>
+              {dados.totals.activeProjects} projeto{dados.totals.activeProjects === 1 ? "" : "s"} ativo
+              {dados.totals.activeProjects === 1 ? "" : "s"} ·{" "}
+              {emHoras(dados.totals.weekMilli).toFixed(1)} h na semana
+              {dados.totals.overdueCents > 0
+                ? ` · ${money(cents(dados.totals.overdueCents))} vencido`
+                : ""}
+            </Small>
+          </Card>
+
+          {dados.projects.length === 0 ? (
+            <Card>
+              <Empty title="Nenhum projeto" hint="Crie no site para acompanhar aqui." />
+            </Card>
+          ) : (
+            dados.projects.map((projeto) => <CartaoDeProjeto key={projeto.id} projeto={projeto} />)
+          )}
+
+          <Pendencias tarefas={quadro.dados?.tasks ?? []} />
+        </>
+      )}
     </TelaRemota>
   );
 }
 
-function Conteudo({
-  tarefas,
-  projetos,
-  palette,
-}: {
-  tarefas: readonly BoardTask[];
-  projetos: number;
-  palette: ReturnType<typeof usePalette>;
-}) {
-  const atrasadas = useMemo(() => tarefas.filter((tarefa) => tarefa.isLate), [tarefas]);
-
-  const porSituacao = useMemo(() => {
-    const mapa = new Map<string, BoardTask[]>();
-    for (const tarefa of tarefas) {
-      const lista = mapa.get(tarefa.status) ?? [];
-      lista.push(tarefa);
-      mapa.set(tarefa.status, lista);
-    }
-    return mapa;
-  }, [tarefas]);
-
-  if (tarefas.length === 0) {
-    return <Empty title="Nenhuma tarefa" hint="Os projetos estão sem pendências cadastradas." />;
-  }
+function CartaoDeProjeto({ projeto }: { projeto: ProjetoView }) {
+  const palette = usePalette();
 
   return (
-    <>
-      <Card>
-        <Label>Pendências</Label>
-        <Figure tone={atrasadas.length > 0 ? "negative" : "neutral"}>{tarefas.length}</Figure>
-        <Small style={{ marginTop: 2 }}>
-          em {projetos} projeto{projetos === 1 ? "" : "s"}
-          {atrasadas.length > 0 ? ` · ${atrasadas.length} atrasada${atrasadas.length > 1 ? "s" : ""}` : ""}
-        </Small>
-      </Card>
-
-      {atrasadas.length > 0 ? (
-        <Card>
-          <Label style={{ marginBottom: space.xs }}>Atrasadas</Label>
-          {atrasadas.map((tarefa, indice) => (
-            <LinhaDeTarefa
-              key={tarefa.id}
-              tarefa={tarefa}
-              ultima={indice === atrasadas.length - 1}
-              palette={palette}
-            />
-          ))}
-        </Card>
-      ) : null}
-
-      {SITUACOES.map((situacao) => {
-        const lista = (porSituacao.get(situacao.id) ?? []).filter((tarefa) => !tarefa.isLate);
-        if (lista.length === 0) return null;
-
-        return (
-          <Card key={situacao.id}>
-            <Label style={{ marginBottom: space.xs }}>
-              {situacao.label} ({lista.length})
-            </Label>
-            {lista.map((tarefa, indice) => (
-              <LinhaDeTarefa
-                key={tarefa.id}
-                tarefa={tarefa}
-                ultima={indice === lista.length - 1}
-                palette={palette}
-              />
-            ))}
-          </Card>
-        );
-      })}
-    </>
-  );
-}
-
-function LinhaDeTarefa({
-  tarefa,
-  ultima,
-  palette,
-}: {
-  tarefa: BoardTask;
-  ultima: boolean;
-  palette: ReturnType<typeof usePalette>;
-}) {
-  return (
-    <Row style={ultima ? { borderBottomWidth: 0 } : undefined}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1, minWidth: 0 }}>
+    <Card>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View
           style={{
             width: 8,
             height: 8,
             borderRadius: radius.pill,
-            backgroundColor: tarefa.projectColor ?? palette.accent,
+            backgroundColor: projeto.color ?? palette.accent,
           }}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Body numberOfLines={1}>{tarefa.title}</Body>
-          <Small tone={tarefa.isLate ? "negative" : "subtle"}>
-            {tarefa.projectName}
-            {tarefa.clientName ? ` · ${tarefa.clientName}` : ""}
-            {tarefa.dueOn ? ` · ${relativeDate(tarefa.dueOn as never)}` : ""}
+          <Body strong numberOfLines={1}>
+            {projeto.name}
+          </Body>
+          <Small>
+            {projeto.clientName ?? "projeto próprio"} · {SITUACAO[projeto.status] ?? projeto.status}
+            {projeto.dueOn ? ` · prazo ${relativeDate(projeto.dueOn as never)}` : ""}
           </Small>
         </View>
       </View>
-    </Row>
+
+      {projeto.contractedCents > 0 ? (
+        <View style={{ marginTop: space.md, gap: 4 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Small>Recebido</Small>
+            <Small tone="muted">
+              {money(cents(projeto.receivedCents))} de {money(cents(projeto.contractedCents))}
+            </Small>
+          </View>
+          <Medidor valor={projeto.percentReceived} total={100} tom="positive" altura={4} />
+        </View>
+      ) : null}
+
+      {projeto.estimatedMilli > 0 ? (
+        <View style={{ marginTop: space.sm, gap: 4 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Small>Horas</Small>
+            <Small tone={projeto.overrun ? "negative" : "muted"}>
+              {emHoras(projeto.workedMilli).toFixed(1)} de {emHoras(projeto.estimatedMilli).toFixed(1)} h
+            </Small>
+          </View>
+          <Medidor
+            valor={projeto.workedMilli}
+            total={Math.max(1, projeto.estimatedMilli)}
+            tom={projeto.overrun ? "negative" : "accent"}
+            altura={4}
+          />
+        </View>
+      ) : null}
+
+      {projeto.openTasks > 0 ? (
+        <Small style={{ marginTop: space.sm }}>
+          {projeto.openTasks} pendência{projeto.openTasks === 1 ? "" : "s"}
+        </Small>
+      ) : null}
+    </Card>
+  );
+}
+
+/** As tarefas abertas, com as atrasadas primeiro. */
+function Pendencias({ tarefas }: { tarefas: readonly BoardTask[] }) {
+  const palette = usePalette();
+  const abertas = useMemo(
+    () =>
+      [...tarefas]
+        .filter((tarefa) => tarefa.status !== "done")
+        .sort((esquerda, direita) => Number(direita.isLate) - Number(esquerda.isLate)),
+    [tarefas],
+  );
+
+  if (abertas.length === 0) return null;
+
+  return (
+    <Card>
+      <Label style={{ marginBottom: space.xs }}>Pendências ({abertas.length})</Label>
+      {abertas.map((tarefa, indice) => (
+        <Row key={tarefa.id} style={indice === abertas.length - 1 ? { borderBottomWidth: 0 } : undefined}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1, minWidth: 0 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: radius.pill,
+                backgroundColor: tarefa.projectColor ?? palette.accent,
+              }}
+            />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Body numberOfLines={1}>{tarefa.title}</Body>
+              <Small tone={tarefa.isLate ? "negative" : "subtle"}>
+                {tarefa.projectName}
+                {tarefa.dueOn ? ` · ${relativeDate(tarefa.dueOn as never)}` : ""}
+              </Small>
+            </View>
+          </View>
+        </Row>
+      ))}
+    </Card>
   );
 }

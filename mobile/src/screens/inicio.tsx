@@ -9,8 +9,18 @@
  * anterior virou uma pilha de cartões iguais em que nada saltava: com oito
  * caixas idênticas, a leitura vira busca.
  *
- * Nenhum número é calculado aqui. Todos vêm de `useLedger`, derivados com o
- * mesmo domínio que o site usa.
+ * Nenhum número é calculado aqui, e nenhum é derivado no aparelho.
+ *
+ * Antes eram derivados do razão sincronizado, chamando a mesma função de
+ * domínio que o site chama. Mesma função, entradas diferentes: o sync carrega
+ * lançamento e mais nada, então o aparelho não sabia quais categorias ficam
+ * fora da folga nem que o vale é bolso à parte. O site dizia R$ 951,27 e o
+ * celular dizia -R$ 2.556,47 para o mesmo dinheiro, no mesmo dia — e o usuário
+ * não tinha como saber qual acreditar.
+ *
+ * Agora o painel é o do servidor, o mesmo que o site desenha. O razão local
+ * continua servindo para o extrato sem rede e para enfileirar lançamento
+ * offline; a **conta** vem de um lugar só.
  */
 
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
@@ -19,9 +29,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { competenceOf, formatShort } from "@fluxo/core/time/competence.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
 import { type Cents, cents } from "@fluxo/core/kernel/money.ts";
+import { fetchDashboard } from "../net/views.ts";
 import { useLedger } from "../state/ledger.tsx";
+import { useRemoto } from "../state/remote.tsx";
 import { useConnectedSession } from "../state/session.tsx";
-import { FaixaDeIndicadores, GraficoDeCategorias, GraficoMensal, Medidor, Sparkbars } from "../ui/charts.tsx";
+import { FaixaDeIndicadores, GraficoDeCategorias, GraficoMensal, Sparkbars } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
 import { Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
@@ -35,25 +47,35 @@ export function InicioScreen({
 }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
-  const { overview, charts, transactions, cards, sync, synchronize } = useLedger();
+  const { charts, transactions, sync, synchronize } = useLedger();
+  const painel = useRemoto(fetchDashboard);
+  const dados = painel.dados;
 
   const hoje = todayIn();
   const competencia = competenceOf(hoje);
   const recentes = transactions.filter((item) => item.occurredOn <= hoje).slice(0, 6);
 
-  const aVencer = [...cards]
-    .map((card) => overview?.cards.find((resumo) => resumo.card.id === card.id))
-    .filter((resumo): resumo is NonNullable<typeof resumo> => Boolean(resumo) && resumo!.outstanding > 0)
-    .sort((esquerda, direita) => esquerda.dueDate.localeCompare(direita.dueDate));
+  const aVencer = (dados?.cards ?? [])
+    .filter((cartao) => (cartao.currentInvoice?.outstandingCents ?? 0) > 0)
+    .sort((esquerda, direita) =>
+      (esquerda.currentInvoice?.dueDate ?? "").localeCompare(direita.currentInvoice?.dueDate ?? ""),
+    );
 
-  const negativo = overview !== null && overview.free < 0;
+  const negativo = dados !== null && dados.freeToSpend.amountCents < 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl * 2 }}
         refreshControl={
-          <RefreshControl refreshing={sync.running} onRefresh={() => void synchronize()} tintColor={palette.accent} />
+          <RefreshControl
+            refreshing={sync.running || painel.carregando}
+            onRefresh={() => {
+              void synchronize();
+              painel.recarregar();
+            }}
+            tintColor={palette.accent}
+          />
         }
       >
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -98,9 +120,11 @@ export function InicioScreen({
           </Pressable>
         </View>
 
-        {sync.offline ? (
+        {sync.offline || painel.offline ? (
           <Notice tone="caution">
-            Sem conexão. Os lançamentos ficam salvos aqui e sobem quando a rede voltar.
+            Sem conexão. Os lançamentos ficam salvos aqui e sobem quando a rede voltar — mas os
+            números acima são calculados no servidor, e sem alcançá-lo eles ficam em branco em vez
+            de mostrar uma conta que talvez já não valha.
           </Notice>
         ) : null}
 
@@ -138,7 +162,7 @@ export function InicioScreen({
               { color: negativo ? palette.negative : palette.ink, marginTop: space.xs },
             ]}
           >
-            {overview ? money(overview.free) : "—"}
+            {dados ? money(cents(dados.freeToSpend.amountCents)) : "—"}
           </Texto>
           <Small style={{ marginTop: space.xs }}>
             {negativo
@@ -150,7 +174,7 @@ export function InicioScreen({
             <View style={{ flex: 1 }}>
               <Label>Em conta</Label>
               <Texto style={[type.figureSm, { color: palette.ink, marginTop: 2 }]}>
-                {overview ? money(overview.balance) : "—"}
+                {dados ? money(cents(dados.freeToSpend.liquidBalanceCents)) : "—"}
               </Texto>
             </View>
             <View
@@ -159,7 +183,7 @@ export function InicioScreen({
             <View style={{ flex: 1 }}>
               <Label>Faturas em aberto</Label>
               <Texto style={[type.figureSm, { color: palette.inkMuted, marginTop: 2 }]}>
-                {overview ? money(overview.freeToSpend.openInvoices) : "—"}
+                {dados ? money(cents(dados.freeToSpend.openInvoicesCents)) : "—"}
               </Texto>
             </View>
           </FaixaDeIndicadores>
@@ -169,13 +193,21 @@ export function InicioScreen({
             Mostrar parcelas que não fecham com o total é pior do que não
             mostrar nada — o usuário confere, não bate, e para de confiar.
           */}
-          {overview ? (
-            <Small style={{ marginTop: space.md }}>
-              Medido no dia mais apertado até {relativeDate(overview.freeToSpend.horizonEnd)}
-              {overview.freeToSpend.pendingIncome > 0
-                ? ` · ${money(overview.freeToSpend.pendingIncome)} a receber no período`
-                : ""}
-            </Small>
+          {dados ? (
+            <>
+              <Small style={{ marginTop: space.md }}>
+                Medido no dia mais apertado até {relativeDate(dados.freeToSpend.horizonEnd as never)}
+                {dados.freeToSpend.pendingIncomeCents > 0
+                  ? ` · ${money(cents(dados.freeToSpend.pendingIncomeCents))} a receber no período`
+                  : ""}
+              </Small>
+              {/* O vale ao lado, nunca somado: ele compra comida e nada mais. */}
+              {dados.benefitFreeToSpend ? (
+                <Small style={{ marginTop: 4 }}>
+                  e mais {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação
+                </Small>
+              ) : null}
+            </>
           ) : null}
         </View>
 
@@ -226,13 +258,13 @@ export function InicioScreen({
             <View style={{ flex: 1 }}>
               <Small tone="positive">Entrou este mês</Small>
               <Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 2 }]}>
-                {overview ? money(overview.income) : "—"}
+                {dados ? money(cents(dados.monthFlow.incomeCents)) : "—"}
               </Texto>
             </View>
             <View style={{ flex: 1 }}>
               <Small tone="negative">Saiu este mês</Small>
               <Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 2 }]}>
-                {overview ? money(overview.expense) : "—"}
+                {dados ? money(cents(dados.monthFlow.expenseCents)) : "—"}
               </Texto>
             </View>
           </FaixaDeIndicadores>
@@ -257,30 +289,20 @@ export function InicioScreen({
           <Card>
             <Label>Faturas em aberto</Label>
             <View style={{ gap: space.md, marginTop: space.md }}>
-              {aVencer.map((resumo) => (
-                <View key={resumo.card.id} style={{ gap: space.sm }}>
+              {aVencer.map((cartao) => (
+                <View key={cartao.id} style={{ gap: space.sm }}>
                   <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
                     <Texto style={[type.body, { flex: 1, color: palette.ink }]} numberOfLines={1}>
-                      {resumo.card.name}
+                      {cartao.name}
                     </Texto>
                     <Texto style={[type.bodyStrong, { color: palette.ink }]}>
-                      {money(resumo.outstanding)}
+                      {money(cents(cartao.currentInvoice?.outstandingCents ?? 0))}
                     </Texto>
                   </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                    <Small style={{ flex: 1 }}>
-                      vence {relativeDate(resumo.dueDate)} · fecha em {resumo.daysToClosing} dia
-                      {resumo.daysToClosing === 1 ? "" : "s"}
-                    </Small>
-                  </View>
-                  {resumo.available !== null && resumo.card.limit > 0 ? (
-                    <Medidor
-                      valor={resumo.card.limit - resumo.available}
-                      total={resumo.card.limit}
-                      tom="caution"
-                      altura={4}
-                    />
-                  ) : null}
+                  <Small>
+                    vence {relativeDate((cartao.currentInvoice?.dueDate ?? "") as never)} · fecha em{" "}
+                    {cartao.daysUntilClosing} dia{cartao.daysUntilClosing === 1 ? "" : "s"}
+                  </Small>
                 </View>
               ))}
             </View>

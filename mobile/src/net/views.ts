@@ -315,3 +315,116 @@ export const fetchInvestimentos = (c: Credenciais) => buscar<InvestimentosView>(
 export const fetchRecompensas = (c: Credenciais) => buscar<RecompensasView>("/api/v1/rewards", c);
 export const fetchViagens = (c: Credenciais) => buscar<ViagensView>("/api/v1/trips", c);
 export const fetchAutomacoes = (c: Credenciais) => buscar<readonly AutomacaoView[]>("/api/v1/receipt-rules", c);
+
+// --- painel ------------------------------------------------------------------
+
+/**
+ * O painel, calculado no servidor.
+ *
+ * O aplicativo tinha o seu próprio: derivava "livre para gastar" do razão
+ * sincronizado, chamando a mesma função de domínio que o site chama. Mesma
+ * função, entradas diferentes — o sync carrega lançamento e mais nada, então o
+ * aparelho não sabia quais categorias ficam fora da folga nem que o vale é um
+ * bolso à parte. O resultado foi o site dizendo R$ 951,27 e o celular dizendo
+ * -R$ 2.556,47 para o mesmo dinheiro, no mesmo dia.
+ *
+ * Número que o usuário compara entre duas telas precisa vir de um lugar só. O
+ * razão local continua servindo para ver o extrato sem rede e para enfileirar
+ * lançamento offline; a **conta** é do servidor.
+ */
+export type DashboardView = {
+  readonly today: string;
+  readonly competence: string;
+  readonly freeToSpend: {
+    readonly amountCents: number;
+    readonly liquidBalanceCents: number;
+    readonly pendingIncomeCents: number;
+    readonly openInvoicesCents: number;
+    readonly otherCommitmentsCents: number;
+    readonly lowestOn: string;
+    readonly windowStart: string;
+    readonly windowEnd: string;
+    readonly horizonEnd: string;
+  };
+  readonly benefitFreeToSpend: { readonly amountCents: number; readonly liquidBalanceCents: number } | null;
+  readonly position: {
+    readonly currentBalanceCents: number;
+    readonly committedCents: number;
+    readonly investmentsCents: number;
+    readonly netWorthCents: number;
+  };
+  readonly monthFlow: {
+    readonly incomeCents: number;
+    readonly expenseCents: number;
+    readonly netCents: number;
+  };
+  readonly categorySpend: readonly {
+    readonly categoryId: string | null;
+    readonly name: string;
+    readonly color: string;
+    readonly amountCents: number;
+    readonly percent: number;
+  }[];
+  readonly cards: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly kind: string;
+    readonly color: string;
+    readonly daysUntilClosing: number;
+    readonly currentInvoice: {
+      readonly competence: string;
+      readonly closingDate: string;
+      readonly dueDate: string;
+      readonly outstandingCents: number;
+      readonly isSettled: boolean;
+    } | null;
+  }[];
+  readonly upcoming: readonly {
+    readonly date: string;
+    readonly description: string;
+    readonly amountCents: number;
+    readonly kind: string;
+  }[];
+  readonly cashflow: readonly {
+    readonly competence: string;
+    readonly inflowCents: number;
+    readonly outflowCents: number;
+  }[];
+};
+
+export const fetchDashboard = (c: Credenciais) => buscar<DashboardView>("/api/v1/dashboard", c);
+
+// --- projetos ----------------------------------------------------------------
+
+export type ProjetoView = {
+  readonly id: string;
+  readonly name: string;
+  readonly clientName: string | null;
+  readonly status: string;
+  readonly color: string | null;
+  readonly dueOn: string | null;
+  readonly openTasks: number;
+  readonly contractedCents: number;
+  readonly receivedCents: number;
+  readonly pendingCents: number;
+  readonly overdueCents: number;
+  readonly percentReceived: number;
+  readonly workedMilli: number;
+  readonly estimatedMilli: number;
+  readonly overrun: boolean;
+};
+
+export type ProjetosView = {
+  readonly projects: readonly ProjetoView[];
+  readonly totals: {
+    readonly activeProjects: number;
+    readonly contractedCents: number;
+    readonly receivedCents: number;
+    readonly pendingCents: number;
+    readonly overdueCents: number;
+    readonly lateProjects: number;
+    readonly weekMilli: number;
+  };
+};
+
+export const fetchProjetos = (c: Credenciais) => buscar<ProjetosView>("/api/v1/projects", c);
