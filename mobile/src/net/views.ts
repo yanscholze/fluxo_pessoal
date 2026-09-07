@@ -1,0 +1,226 @@
+/**
+ * As visões que o servidor calcula e o aplicativo só desenha.
+ *
+ * Nenhuma delas passa pelo sync: o protocolo carrega lançamento e nada mais
+ * (`core/domain/sync/protocol.ts`). Isso não é limitação a contornar — é a
+ * decisão que impede duas respostas para a mesma pergunta. Saúde, patrimônio,
+ * parcelamento e relatório dependem de projeção, ciclo de fatura e política de
+ * exclusão; recalcular tudo isso no aparelho criaria um segundo número, e o
+ * usuário não teria como saber qual acreditar.
+ *
+ * O preço é honesto: sem rede, estas telas dizem que não sabem, em vez de
+ * mostrar um número velho com cara de atual.
+ *
+ * Os tipos aqui declaram **o que o aplicativo consome**, não o que o servidor
+ * devolve. Copiar a definição inteira do serviço acoplaria o aparelho a campos
+ * que ele nunca desenha, e cada campo novo no servidor viraria uma atualização
+ * obrigatória do aplicativo.
+ */
+
+import { call } from "./client.ts";
+
+// --- saúde -------------------------------------------------------------------
+
+export type HealthSignal = {
+  readonly key: string;
+  readonly title: string;
+  readonly status: "bom" | "atencao" | "critico";
+  readonly detail: string;
+};
+
+export type AgendaEvent = {
+  readonly date: string;
+  readonly description: string;
+  readonly amountCents: number;
+  readonly direction: "in" | "out";
+  readonly kind: "recorrencia" | "fatura" | "parcela" | "previsto";
+};
+
+export type HealthView = {
+  readonly today: string;
+  readonly freeToSpendCents: number;
+  readonly reserve: {
+    readonly currentCents: number;
+    readonly targetCents: number;
+    readonly percent: number;
+    readonly monthsCovered: number;
+  };
+  readonly savingsRatePercent: number;
+  readonly commitment: { readonly percent: number; readonly committedCents: number };
+  readonly debts: {
+    readonly cardDebtCents: number;
+    readonly overdueInvoices: number;
+    readonly openInstallmentsCents: number;
+  };
+  readonly netWorthCents: number;
+  readonly signals: readonly HealthSignal[];
+  readonly agenda: readonly AgendaEvent[];
+};
+
+// --- patrimônio --------------------------------------------------------------
+
+export type HoldingView = {
+  readonly id: string;
+  readonly name: string;
+  readonly institution: string;
+  readonly kind: string;
+  readonly color: string;
+  readonly balanceCents: number;
+  readonly sharePercent: number;
+};
+
+export type NetWorthView = {
+  readonly netWorthCents: number;
+  readonly assetsCents: number;
+  readonly liabilitiesCents: number;
+  readonly liquidCents: number;
+  readonly investedCents: number;
+  readonly holdings: readonly HoldingView[];
+  readonly liabilities: readonly { readonly id: string; readonly name: string; readonly amountCents: number }[];
+  readonly history: readonly { readonly competence: string; readonly netCents: number }[];
+  readonly changeCents: number;
+  readonly changePercent: number | null;
+};
+
+// --- parcelamentos -----------------------------------------------------------
+
+export type InstallmentPlanView = {
+  readonly planId: string;
+  readonly label: string;
+  readonly cardName: string;
+  readonly totalAmount: number;
+  readonly paidAmount: number;
+  readonly openAmount: number;
+  readonly paidCount: number;
+  readonly totalCount: number;
+  readonly overdueCount: number;
+  readonly percentPaid: number;
+  readonly nextDueDate: string | null;
+  readonly isSettled: boolean;
+};
+
+export type InstallmentsView = {
+  readonly today: string;
+  readonly active: readonly InstallmentPlanView[];
+  readonly settled: readonly InstallmentPlanView[];
+  readonly totals: {
+    readonly totalCents: number;
+    readonly paidCents: number;
+    readonly openCents: number;
+    readonly percentPaid: number;
+  };
+  readonly commitment: readonly { readonly competence: string; readonly amountCents: number }[];
+};
+
+// --- planejamento ------------------------------------------------------------
+
+export type RecurrenceView = {
+  readonly id: string;
+  readonly kind: "expense" | "income" | "transfer";
+  readonly description: string;
+  readonly amountCents: number;
+  readonly scheduleLabel: string;
+  readonly isActive: boolean;
+  readonly originName: string;
+  readonly categoryName: string | null;
+  readonly next: { readonly date: string; readonly amountCents: number } | null;
+  /** Ocorrência da competência corrente ainda não confirmada. */
+  readonly pending: { readonly competence: string; readonly date: string; readonly amountCents: number } | null;
+};
+
+export type PlanningView = {
+  readonly today: string;
+  readonly competence: string;
+  readonly recurrences: readonly RecurrenceView[];
+  readonly projection: readonly {
+    readonly competence: string;
+    readonly incomeCents: number;
+    readonly committedCents: number;
+    readonly freeCents: number;
+  }[];
+  readonly subscriptions: {
+    readonly activeCount: number;
+    readonly monthlyCents: number;
+    readonly yearlyCents: number;
+    readonly next7DaysCents: number;
+    readonly upcoming: readonly {
+      readonly recurrenceId: string;
+      readonly description: string;
+      readonly date: string;
+      readonly amountCents: number;
+    }[];
+  };
+};
+
+// --- relatório ---------------------------------------------------------------
+
+export type ReportPeriod = "mes" | "3m" | "6m" | "12m" | "todos";
+
+export type CategoryBreakdown = {
+  readonly categoryId: string | null;
+  readonly name: string;
+  readonly color: string;
+  readonly amountCents: number;
+  readonly percent: number;
+  readonly transactionCount: number;
+};
+
+export type ReportView = {
+  readonly period: ReportPeriod;
+  readonly indicators: {
+    readonly incomeCents: number;
+    readonly expenseCents: number;
+    readonly netCents: number;
+    readonly savingsRatePercent: number;
+    readonly averageMonthlyExpenseCents: number;
+    readonly transactionCount: number;
+  };
+  readonly monthly: readonly {
+    readonly competence: string;
+    readonly incomeCents: number;
+    readonly expenseCents: number;
+    readonly netCents: number;
+  }[];
+  readonly expensesByCategory: readonly CategoryBreakdown[];
+  readonly incomeByCategory: readonly CategoryBreakdown[];
+  readonly insights: readonly string[];
+};
+
+// --- trabalho ----------------------------------------------------------------
+
+export type BoardTask = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectColor: string | null;
+  readonly clientName: string | null;
+  readonly title: string;
+  readonly kind: string;
+  readonly priority: string;
+  readonly status: string;
+  readonly dueOn: string | null;
+  readonly billable: boolean;
+  readonly isLate: boolean;
+};
+
+export type BoardView = {
+  readonly today: string;
+  readonly tasks: readonly BoardTask[];
+  readonly projects: readonly { readonly id: string; readonly name: string; readonly color: string | null }[];
+};
+
+// --- chamadas ----------------------------------------------------------------
+
+type Credenciais = { readonly baseUrl: string; readonly token: string };
+
+const buscar = <T>(caminho: string, { baseUrl, token }: Credenciais): Promise<T> =>
+  call<T>(caminho, { baseUrl, token });
+
+export const fetchHealth = (c: Credenciais) => buscar<HealthView>("/api/v1/health", c);
+export const fetchNetWorth = (c: Credenciais) => buscar<NetWorthView>("/api/v1/networth", c);
+export const fetchInstallments = (c: Credenciais) => buscar<InstallmentsView>("/api/v1/installments", c);
+export const fetchPlanning = (c: Credenciais) => buscar<PlanningView>("/api/v1/planning", c);
+export const fetchBoard = (c: Credenciais) => buscar<BoardView>("/api/v1/work/board", c);
+
+export const fetchReport = (c: Credenciais, periodo: ReportPeriod = "6m") =>
+  buscar<ReportView>(`/api/v1/reports?periodo=${periodo}`, c);
