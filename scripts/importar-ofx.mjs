@@ -90,7 +90,7 @@ const FECHAMENTO = 12;
 const VENCIMENTO = 20;
 const AJUSTE_DE_FECHAMENTO = "none";
 
-const CONTA = { nome: "Nubank", kind: "checking", instituicao: "Nu Pagamentos" };
+const CONTA = { nome: "Nubank Conta", kind: "checking", instituicao: "Nu Pagamentos" };
 const CAIXINHA = { nome: "Caixinha Nubank", kind: "investment", instituicao: "Nu Pagamentos" };
 const EXTERNA = { nome: "Outras contas próprias", kind: "checking", instituicao: "Mercado Pago / XP" };
 const CARTAO = { nome: "Nubank", kind: "credit" };
@@ -388,18 +388,32 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
       idDe[chave] = contas.get(spec.nome);
       continue;
     }
-    const criada = await api("/api/v1/accounts", {
-      method: "POST",
-      body: {
-        name: spec.nome,
-        kind: spec.kind,
-        institution: spec.instituicao,
-        includeInTotals: true,
-        ...(abertura ? { openingBalance: dinheiro(abertura) } : {}),
-      },
-    });
+    // Nome ocupado por conta **arquivada** não aparece na listagem, mas o
+    // cadastro recusa mesmo assim. Sem esta saída, uma importação anterior já
+    // desfeita bloqueia a próxima por causa de um nome que ninguém mais vê.
+    let nome = spec.nome;
+    let criada = null;
+    for (let tentativa = 1; tentativa <= 20 && criada === null; tentativa += 1) {
+      try {
+        criada = await api("/api/v1/accounts", {
+          method: "POST",
+          body: {
+            name: nome,
+            kind: spec.kind,
+            institution: spec.instituicao,
+            includeInTotals: true,
+            ...(abertura ? { openingBalance: dinheiro(abertura) } : {}),
+          },
+        });
+      } catch (erro) {
+        if (!/409|duplicate/i.test(String(erro.message))) throw erro;
+        nome = `${spec.nome} (${tentativa + 1})`;
+        console.log(`  nome ocupado por registro arquivado; usando "${nome}"`);
+      }
+    }
+    if (criada === null) throw new Error(`não consegui um nome livre para "${spec.nome}"`);
     idDe[chave] = criada.id;
-    contas.set(spec.nome, criada.id);
+    contas.set(nome, criada.id);
   }
 
   if (cartoes.has(CARTAO.nome)) {
@@ -423,9 +437,23 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
   idDe.categorias = async (kind, nome) => {
     const chave = `${kind}:${nome}`;
     if (categorias.has(chave)) return categorias.get(chave);
-    const criada = await api("/api/v1/categories", { method: "POST", body: { name: nome, kind } });
-    categorias.set(chave, criada.id);
-    return criada.id;
+
+    // Categoria arquivada não vem na listagem, mas continua ocupando o nome no
+    // índice único. Uma importação anterior desfeita deixa esses nomes presos,
+    // e sem esta saída a importação inteira morre na primeira colisão.
+    let usado = nome;
+    for (let tentativa = 1; tentativa <= 20; tentativa += 1) {
+      try {
+        const criada = await api("/api/v1/categories", { method: "POST", body: { name: usado, kind } });
+        categorias.set(chave, criada.id);
+        if (usado !== nome) console.log(`  categoria "${nome}" estava arquivada; criada como "${usado}"`);
+        return criada.id;
+      } catch (erro) {
+        if (!/409|duplicate/i.test(String(erro.message))) throw erro;
+        usado = `${nome} ${tentativa + 1}`;
+      }
+    }
+    throw new Error(`não consegui um nome livre para a categoria "${nome}"`);
   };
 
   return idDe;
