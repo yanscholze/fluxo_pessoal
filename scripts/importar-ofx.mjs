@@ -36,8 +36,29 @@ const aplicar = args.includes("--aplicar");
 const indiceUrl = args.indexOf("--url");
 const base = indiceUrl >= 0 && (args[indiceUrl + 1] ?? "").startsWith("http") ? args[indiceUrl + 1] : "http://localhost:5173";
 
+/**
+ * Saldo real da caixinha hoje, em reais (`--caixinha 3223,68`).
+ *
+ * Os arquivos mostram só o principal — quanto foi aplicado menos quanto foi
+ * resgatado. O rendimento o Nubank credita **dentro** da caixinha, e o extrato
+ * da conta nunca o enxerga. A caixinha também já tinha saldo antes da janela
+ * exportada: o primeiro movimento de janeiro é um resgate, e não se resgata de
+ * uma conta vazia.
+ *
+ * Informado o saldo de hoje, a abertura sai por diferença. Os dois pedaços —
+ * o que já havia e o que rendeu — ficam somados num número só, porque os
+ * arquivos não dão como separá-los.
+ */
+const indiceCaixinha = args.indexOf("--caixinha");
+const saldoDaCaixinha =
+  indiceCaixinha >= 0 && args[indiceCaixinha + 1]
+    ? Math.round(Number(args[indiceCaixinha + 1].replace(/\./g, "").replace(",", ".")) * 100)
+    : null;
+
 if (!pasta) {
-  console.error("uso: node --experimental-strip-types scripts/importar-ofx.mjs <pasta> [--url URL] [--aplicar]");
+  console.error(
+    "uso: node --experimental-strip-types scripts/importar-ofx.mjs <pasta> [--url URL] [--caixinha VALOR] [--aplicar]",
+  );
   process.exit(64);
 }
 
@@ -329,6 +350,18 @@ async function autenticar() {
  * Nubank. Se o saldo real for outro, é um número só para corrigir no app, e
  * nenhum outro saldo depende dele.
  */
+/**
+ * Principal da caixinha: aplicado menos resgatado, dentro da janela importada.
+ */
+function principalDaCaixinha(resultado, idCaixinha) {
+  return resultado.entries.reduce((total, entrada) => {
+    if (entrada.kind !== "transfer") return total;
+    const entrou = entrada.destination?.kind === "account" && entrada.destination.id === idCaixinha;
+    const saiu = entrada.origin.kind === "account" && entrada.origin.id === idCaixinha;
+    return total + (entrou ? entrada.amount : 0) - (saiu ? entrada.amount : 0);
+  }, 0);
+}
+
 function aberturaDasContasProprias(resultado, idExterna) {
   return resultado.entries.reduce((total, entrada) => {
     if (entrada.kind !== "transfer") return total;
@@ -569,7 +602,7 @@ function alocarPagamentos(resultado) {
   return { alocados, sobras };
 }
 
-async function gravar(resultado, futuras, idDe) {
+async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela) {
   let criados = 0;
   const { alocados, sobras } = alocarPagamentos(resultado);
   if (sobras.length) {
@@ -586,6 +619,32 @@ async function gravar(resultado, futuras, idDe) {
   const primeiro = [...resultado.entries.filter((e) => e.kind !== "invoice_payment"), ...futuras].sort((a, b) =>
     a.occurredOn.localeCompare(b.occurredOn),
   );
+
+  // O lucro entra primeiro, na data de abertura da janela.
+  //
+  // Ele é o que a caixinha rendeu — e o que ela já tinha — antes de o Fluxo
+  // começar a acompanhar. Poderia virar saldo de abertura da conta, mas aí
+  // sumiria do extrato: o usuário veria o patrimônio certo sem nenhuma linha
+  // explicando de onde ele veio. Como lançamento, ele aparece.
+  //
+  // A data é o início do período, e não o fim, porque a caixinha já tinha
+  // saldo quando a janela começa: o primeiro movimento de janeiro é um
+  // resgate, e lançar o lucro no fim deixaria o histórico negativo até lá.
+  if (lucroDaCaixinha > 0) {
+    await api("/api/v1/transactions", {
+      method: "POST",
+      body: {
+        kind: "income",
+        description: "Rendimento da caixinha anterior ao Fluxo",
+        amount: dinheiro(lucroDaCaixinha),
+        occurredOn: inicioDaJanela,
+        state: "confirmed",
+        accountId: idDe.caixinha,
+        categoryId: await idDe.categorias("income", "Rendimentos"),
+      },
+    });
+    criados += 1;
+  }
 
   for (const entrada of primeiro) {
     const nomeCategoria = categoriaDe(entrada.kind, entrada.description);
@@ -660,8 +719,30 @@ const resultado = reconcile(fontes, config);
 assertComplete(fontes, resultado);
 console.log("✅ nenhuma linha se perdeu na conciliação");
 
+/** Primeiro dia coberto pelos arquivos: onde o lucro anterior é ancorado. */
+const inicioDaJanela = resultado.entries
+  .map((e) => e.occurredOn)
+  .sort()[0];
+
+const principalCaixinha = principalDaCaixinha(resultado, "caixinha");
+const aberturaCaixinha = saldoDaCaixinha === null ? 0 : saldoDaCaixinha - principalCaixinha;
+
 const futuras = projetarParcelas(resultado);
 const saldosOk = relatar(resultado, futuras);
+
+console.log("\n=== CAIXINHA ===");
+console.log(`  principal na janela (aplicado − resgatado): ${brl(principalCaixinha)}`);
+if (saldoDaCaixinha === null) {
+  console.log(`  saldo real não informado: a caixinha vai encerrar em ${brl(principalCaixinha)},`);
+  console.log("  abaixo do real. Use --caixinha VALOR para fechar o saldo exato.");
+} else {
+  console.log(`  saldo real informado:                      ${brl(saldoDaCaixinha)}`);
+  console.log(`  lucro a lançar:                            ${brl(aberturaCaixinha)}`);
+  if (aberturaCaixinha < 0) {
+    console.error("\n❌ o saldo informado é menor que o principal aplicado. Confira o valor.");
+    process.exit(1);
+  }
+}
 
 if (!aplicar) {
   console.log("\nsimulação — nada foi gravado. Use --aplicar para importar de verdade.");
@@ -700,5 +781,5 @@ if ((jaExiste ?? []).length > 0) {
 
 const aberturaExterna = aberturaDasContasProprias(resultado, "externa");
 const idDe = await garantirCatalogo(aberturaConta, aberturaExterna);
-const criados = await gravar(resultado, futuras, idDe);
+const criados = await gravar(resultado, futuras, idDe, aberturaCaixinha, inicioDaJanela);
 console.log(`\n✅ ${criados} lançamentos criados.`);
