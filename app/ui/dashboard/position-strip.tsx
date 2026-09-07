@@ -15,12 +15,15 @@ import { Coins, Landmark, PiggyBank, TrendingUp } from "../icons.tsx";
 export function PositionStrip({
   position,
   monthFlow,
+  className,
 }: {
   position: Dashboard["position"];
   monthFlow: Dashboard["monthFlow"];
+  className?: string;
 }) {
   return (
     <MetricStrip
+      className={className}
       metrics={[
         {
           label: "Saldo hoje",

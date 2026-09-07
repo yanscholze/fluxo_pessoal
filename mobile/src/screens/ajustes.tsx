@@ -32,7 +32,7 @@ export function AjustesScreen({
   const conectado = state.status === "conectado" ? state : null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
           <Pressable onPress={onVoltar} hitSlop={12} accessibilityRole="button" accessibilityLabel="Voltar">

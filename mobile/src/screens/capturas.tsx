@@ -82,7 +82,7 @@ export function CapturasScreen({ onVoltar }: { onVoltar: () => void }) {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}
         refreshControl={

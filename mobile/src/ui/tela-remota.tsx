@@ -41,7 +41,7 @@ export function TelaRemota<T>({
   const palette = usePalette();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
         refreshControl={

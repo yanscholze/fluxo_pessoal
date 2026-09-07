@@ -53,7 +53,7 @@ export function CartoesScreen() {
   const emAberto = cents(credito.reduce<number>((soma, item) => soma + item.outstanding, 0));
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView
         contentContainerStyle={{ paddingVertical: space.lg, paddingBottom: space.xxl }}
         refreshControl={

@@ -224,3 +224,94 @@ export const fetchBoard = (c: Credenciais) => buscar<BoardView>("/api/v1/work/bo
 
 export const fetchReport = (c: Credenciais, periodo: ReportPeriod = "6m") =>
   buscar<ReportView>(`/api/v1/reports?periodo=${periodo}`, c);
+
+// --- contas, metas, investimentos, recompensas, viagens, automações ---------
+
+export type ContaView = {
+  readonly id: string;
+  readonly name: string;
+  readonly institution: string;
+  readonly kind: string;
+  readonly color: string;
+  readonly balanceCents: number;
+  readonly includeInTotals: boolean;
+};
+
+export type MetaView = {
+  readonly goalId: string;
+  readonly name: string;
+  readonly target: number;
+  readonly current: number;
+  readonly remaining: number;
+  readonly percent: number;
+  readonly isAchieved: boolean;
+  readonly monthsRemaining: number | null;
+  readonly color: string;
+  readonly accountName: string | null;
+};
+
+export type MetasView = {
+  readonly goals: readonly MetaView[];
+  readonly totals: { readonly target: number; readonly current: number; readonly percent: number };
+};
+
+export type InvestimentoView = {
+  readonly id: string;
+  readonly name: string;
+  readonly institution: string;
+  readonly assetClass: string;
+  readonly principalCents: number;
+  readonly currentValueCents: number;
+  readonly yieldCents: number;
+  readonly yieldPercent: number;
+  readonly sharePercent: number;
+};
+
+export type InvestimentosView = {
+  readonly investments: readonly InvestimentoView[];
+  readonly totals: {
+    readonly principalCents: number;
+    readonly currentValueCents: number;
+    readonly yieldCents: number;
+    readonly yieldPercent: number;
+  };
+  readonly byClass: readonly { readonly label: string; readonly valueCents: number; readonly percent: number }[];
+};
+
+export type RecompensaView = {
+  readonly cardId: string;
+  readonly cardName: string;
+  readonly balance: {
+    readonly pointsBalance?: number;
+    readonly cashbackCents?: number;
+    readonly pointsEarned?: number;
+  };
+};
+
+export type RecompensasView = { readonly cards: readonly RecompensaView[] };
+
+export type ViagemView = {
+  readonly id: string;
+  readonly name: string;
+  readonly startsOn: string | null;
+  readonly endsOn: string | null;
+  readonly spentCents: number;
+  readonly budgetCents: number | null;
+};
+
+export type ViagensView = { readonly trips: readonly ViagemView[] };
+
+export type AutomacaoView = {
+  readonly id: string;
+  readonly payerName: string;
+  readonly target: string;
+  readonly isActive?: boolean;
+  readonly lastMatchedAt?: string | null;
+};
+
+export const fetchContas = (c: Credenciais) => buscar<readonly ContaView[]>("/api/v1/accounts", c);
+export const fetchMetas = (c: Credenciais) => buscar<MetasView>("/api/v1/goals", c);
+export const fetchInvestimentos = (c: Credenciais) => buscar<InvestimentosView>("/api/v1/investments", c);
+export const fetchRecompensas = (c: Credenciais) => buscar<RecompensasView>("/api/v1/rewards", c);
+export const fetchViagens = (c: Credenciais) => buscar<ViagensView>("/api/v1/trips", c);
+export const fetchAutomacoes = (c: Credenciais) => buscar<readonly AutomacaoView[]>("/api/v1/receipt-rules", c);

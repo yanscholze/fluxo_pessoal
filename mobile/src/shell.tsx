@@ -1,32 +1,37 @@
 /**
- * Casca do aplicativo: cinco abas, uma pilha por aba, e a folha de lançamento.
+ * Casca do aplicativo: grupo embaixo, tela em cima.
  *
- * A navegação continua escrita à mão. O que mudou foi a forma: antes era um
- * `useState` com um único valor de aba, o que bastava para quatro telas e
- * quebrava na quinta — não havia como abrir "Patrimônio" a partir de "Carteira"
- * e voltar para onde se estava.
+ * A estrutura é a mesma do site — classe e subclasse. Lá o menu lateral tem
+ * sete títulos com seus itens dentro; aqui a barra de baixo escolhe o grupo e um
+ * cartão no topo escolhe a tela dentro dele. É a mesma árvore, dobrada para
+ * caber numa mão.
  *
- * Agora cada aba tem sua própria pilha. Trocar de aba preserva onde você estava
- * dentro dela, que é o comportamento que todo aplicativo de celular tem e cuja
- * ausência se sente como perda de trabalho.
+ * Antes eram quatro abas planas, uma tela cada, e tudo o que não coubesse nelas
+ * simplesmente não existia no aplicativo. Com dois níveis, dezoito telas cabem
+ * em cinco destinos sem que nenhuma fique inalcançável.
  *
- * Continua sem biblioteca de navegação: o que uma resolveria aqui — deep
- * linking, transições configuráveis, histórico entre abas — este aplicativo não
- * usa. Trocar isso por três dependências seria peso sem retorno.
+ * Continua sem biblioteca de navegação. O que uma resolveria — deep linking,
+ * histórico entre abas, transições configuráveis — este aplicativo não usa.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { cents } from "@fluxo/core/kernel/money.ts";
 import { AjustesScreen } from "./screens/ajustes.tsx";
 import { CapturasScreen } from "./screens/capturas.tsx";
 import { CartoesScreen } from "./screens/cartoes.tsx";
 import { ExtratoScreen } from "./screens/extrato.tsx";
-import { HubScreen, ResumoDoHub } from "./screens/hub.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
+import {
+  AutomacoesScreen,
+  ContasScreen,
+  InvestimentosScreen,
+  MetasScreen,
+  RecompensasScreen,
+  ViagensScreen,
+} from "./screens/listas.tsx";
 import { OrcamentosScreen } from "./screens/orcamentos.tsx";
 import { ParcelamentosScreen } from "./screens/parcelamentos.tsx";
 import { PatrimonioScreen } from "./screens/patrimonio.tsx";
@@ -35,69 +40,123 @@ import { RelatoriosScreen } from "./screens/relatorios.tsx";
 import { SaudeScreen } from "./screens/saude.tsx";
 import { TrabalhoScreen } from "./screens/trabalho.tsx";
 import { useLedger } from "./state/ledger.tsx";
-import { Figure, Small, Texto } from "./ui/primitives.tsx";
-import { money } from "./ui/format.ts";
+import { Texto } from "./ui/primitives.tsx";
 import { elevation, radius, space, type, usePalette } from "./ui/theme.ts";
 
-type Aba = "inicio" | "extrato" | "carteira" | "planos" | "trabalho";
-
-/** Toda tela que pode ser empilhada sobre uma aba. */
-type Rota =
+type Tela =
+  | "painel"
   | "saude"
   | "relatorios"
-  | "ajustes"
-  | "capturas"
+  | "lancamentos"
+  | "contas"
   | "cartoes"
-  | "patrimonio"
   | "parcelamentos"
+  | "recorrencias"
   | "orcamentos"
-  | "planejamento";
+  | "metas"
+  | "patrimonio"
+  | "investimentos"
+  | "recompensas"
+  | "viagens"
+  | "trabalho"
+  | "automacoes"
+  | "capturas"
+  | "configuracoes";
+
+type Grupo = {
+  readonly id: string;
+  readonly label: string;
+  readonly telas: readonly { readonly id: Tela; readonly label: string }[];
+};
 
 /**
- * Cinco destinos, um por pergunta.
+ * Os cinco grupos, espelhando as classes do site.
  *
- * "Praticamente tudo o que o desktop tem" não significa vinte abas: significa
- * que nada do desktop fica inalcançável. As vinte e nove rotas do site cabem em
- * cinco perguntas, e o resto vive empilhado atrás delas.
+ * O site tem sete títulos; aqui "Análise" entra em Início — relatório responde
+ * a mesma pergunta que o painel, só com mais história — e "Trabalho" divide o
+ * último grupo com o que o site chama de "Sistema".
+ *
+ * Automações saíram de dentro das configurações. Automação não é preferência de
+ * aparência: é uma regra que mexe no dinheiro sozinha, e quem tem uma ativa
+ * precisa alcançá-la sem caçar num menu de ajustes.
  */
-const ABAS: readonly { readonly id: Aba; readonly label: string }[] = [
-  { id: "inicio", label: "Início" },
-  { id: "extrato", label: "Extrato" },
-  { id: "carteira", label: "Carteira" },
-  { id: "planos", label: "Planos" },
-  { id: "trabalho", label: "Trabalho" },
+const GRUPOS: readonly Grupo[] = [
+  {
+    id: "inicio",
+    label: "Início",
+    telas: [
+      { id: "painel", label: "Painel" },
+      { id: "saude", label: "Saúde" },
+      { id: "relatorios", label: "Relatórios" },
+    ],
+  },
+  {
+    id: "movimento",
+    label: "Movimento",
+    telas: [
+      { id: "lancamentos", label: "Lançamentos" },
+      { id: "contas", label: "Contas" },
+      { id: "cartoes", label: "Cartões" },
+      { id: "parcelamentos", label: "Parcelamentos" },
+    ],
+  },
+  {
+    id: "planos",
+    label: "Planos",
+    telas: [
+      { id: "recorrencias", label: "Recorrências" },
+      { id: "orcamentos", label: "Orçamentos" },
+      { id: "metas", label: "Metas" },
+    ],
+  },
+  {
+    id: "patrimonio",
+    label: "Patrimônio",
+    telas: [
+      { id: "patrimonio", label: "Visão geral" },
+      { id: "investimentos", label: "Investimentos" },
+      { id: "recompensas", label: "Recompensas" },
+      { id: "viagens", label: "Viagens" },
+    ],
+  },
+  {
+    id: "mais",
+    label: "Mais",
+    telas: [
+      { id: "trabalho", label: "Trabalho" },
+      { id: "automacoes", label: "Automações" },
+      { id: "capturas", label: "Capturas" },
+      { id: "configuracoes", label: "Ajustes" },
+    ],
+  },
 ];
 
 export function Shell() {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const { transactions, sync, overview } = useLedger();
+  const { transactions, sync } = useLedger();
 
-  const [aba, setAba] = useState<Aba>("inicio");
-  const [pilhas, setPilhas] = useState<Record<Aba, Rota[]>>({
-    inicio: [],
-    extrato: [],
-    carteira: [],
-    planos: [],
-    trabalho: [],
-  });
+  const [grupoId, setGrupoId] = useState(GRUPOS[0].id);
+  /**
+   * A tela escolhida dentro de cada grupo.
+   *
+   * Guardada por grupo, e não uma só: voltar para "Movimento" depois de passar
+   * por "Planos" devolve a pessoa a "Contas" se era ali que ela estava. Perder
+   * isso faz cada troca de grupo parecer que o aplicativo recomeçou.
+   */
+  const [telaPorGrupo, setTelaPorGrupo] = useState<Record<string, Tela>>(
+    Object.fromEntries(GRUPOS.map((grupo) => [grupo.id, grupo.telas[0].id])),
+  );
 
   const [editando, setEditando] = useState<string | null>(null);
   const [folhaAberta, setFolhaAberta] = useState(false);
 
+  const grupo = GRUPOS.find((candidato) => candidato.id === grupoId) ?? GRUPOS[0];
+  const tela = telaPorGrupo[grupo.id] ?? grupo.telas[0].id;
+
   const emEdicao = useMemo(
     () => (editando ? (transactions.find((item) => item.id === editando) ?? null) : null),
     [editando, transactions],
-  );
-
-  const empilhar = useCallback(
-    (rota: Rota) => setPilhas((atual) => ({ ...atual, [aba]: [...atual[aba], rota] })),
-    [aba],
-  );
-
-  const desempilhar = useCallback(
-    () => setPilhas((atual) => ({ ...atual, [aba]: atual[aba].slice(0, -1) })),
-    [aba],
   );
 
   function abrirLancamento(id: string | null) {
@@ -105,68 +164,35 @@ export function Shell() {
     setFolhaAberta(true);
   }
 
-  function fecharLancamento() {
-    setFolhaAberta(false);
-    setEditando(null);
+  function irPara(destino: Tela) {
+    const dono = GRUPOS.find((candidato) => candidato.telas.some((item) => item.id === destino));
+    if (!dono) return;
+    setGrupoId(dono.id);
+    setTelaPorGrupo((atual) => ({ ...atual, [dono.id]: destino }));
   }
-
-  const topo = pilhas[aba].at(-1) ?? null;
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
       <View style={{ flex: 1 }}>
-        {topo ? (
-          <Empilhada rota={topo} onVoltar={desempilhar} onAbrir={empilhar} />
-        ) : aba === "inicio" ? (
-          <InicioScreen
-            onOpenTransaction={abrirLancamento}
-            onAbrirAjustes={() => empilhar("ajustes")}
+        {/*
+          O seletor só aparece quando há escolha a fazer.
+
+          Um grupo de uma tela só ganharia um cartão que não faz nada — ruído
+          ocupando o topo da tela mais valiosa do aplicativo.
+        */}
+        {grupo.telas.length > 1 ? (
+          <SeletorDeTela
+            grupo={grupo}
+            ativa={tela}
+            onEscolher={(destino) => setTelaPorGrupo((atual) => ({ ...atual, [grupo.id]: destino }))}
           />
-        ) : aba === "extrato" ? (
-          <ExtratoScreen onOpenTransaction={abrirLancamento} />
-        ) : aba === "carteira" ? (
-          <HubScreen
-            titulo="Carteira"
-            descricao="Quanto tenho e quanto devo."
-            onAbrir={(id) => empilhar(id as Rota)}
-            resumo={
-              <ResumoDoHub rotulo="Em conta">
-                <Figure>{money(overview?.balance ?? cents(0))}</Figure>
-                <Small style={{ marginTop: 2 }}>
-                  {money(overview?.committed ?? cents(0))} já com dono no cartão
-                </Small>
-              </ResumoDoHub>
-            }
-            destinos={[
-              { id: "cartoes", titulo: "Cartões", descricao: "Fatura do mês, limite e o que vem depois." },
-              { id: "parcelamentos", titulo: "Parcelamentos", descricao: "O que já foi comprado e ainda chega." },
-              { id: "patrimonio", titulo: "Patrimônio", descricao: "O que sobra depois de tirar o que se deve." },
-              { id: "saude", titulo: "Saúde financeira", descricao: "O diagnóstico, não o saldo." },
-            ]}
-          />
-        ) : aba === "planos" ? (
-          <HubScreen
-            titulo="Planos"
-            descricao="O que você combinou consigo mesmo."
-            onAbrir={(id) => empilhar(id as Rota)}
-            destinos={[
-              { id: "orcamentos", titulo: "Orçamento", descricao: "Quanto ainda dá para gastar em cada coisa." },
-              { id: "planejamento", titulo: "Recorrências e assinaturas", descricao: "O que se repete todo mês." },
-              { id: "relatorios", titulo: "Relatórios", descricao: "Para onde o dinheiro foi." },
-            ]}
-          />
-        ) : (
-          <TrabalhoScreen />
-        )}
+        ) : null}
+
+        <View style={{ flex: 1 }}>
+          <Conteudo tela={tela} onAbrirLancamento={abrirLancamento} onIrPara={irPara} />
+        </View>
       </View>
 
-      {/*
-        A barra: cinco destinos e a ação flutuando acima, à direita.
-
-        Com número ímpar de abas o botão não cabe mais no meio da barra, que era
-        onde ficava. À direita ele continua na zona natural do polegar e libera o
-        quinto destino — que é o que faltava para a área de trabalho existir aqui.
-      */}
       <View
         style={{
           flexDirection: "row",
@@ -177,23 +203,31 @@ export function Shell() {
           paddingBottom: insets.bottom,
         }}
       >
-        {ABAS.map((item) => (
-          <ItemDeAba
+        {GRUPOS.map((item) => (
+          <ItemDeGrupo
             key={item.id}
-            item={item}
-            ativo={item.id === aba}
+            label={item.label}
+            ativo={item.id === grupo.id}
             alerta={item.id === "inicio" && sync.unresolved > 0}
             onPress={() => {
-              // Tocar na aba já ativa volta para a raiz dela: é o gesto que todo
-              // aplicativo tem e o único jeito de sair de uma pilha funda sem
-              // apertar "voltar" várias vezes.
-              if (item.id === aba) setPilhas((atual) => ({ ...atual, [aba]: [] }));
-              else setAba(item.id);
+              // Tocar no grupo já ativo volta para a primeira tela dele — o
+              // mesmo gesto de "voltar ao começo" que toda barra de abas tem.
+              if (item.id === grupo.id) {
+                setTelaPorGrupo((atual) => ({ ...atual, [item.id]: item.telas[0].id }));
+              } else {
+                setGrupoId(item.id);
+              }
             }}
           />
         ))}
       </View>
 
+      {/*
+        A ação flutua acima da barra, à direita.
+
+        Com cinco grupos ela não cabe mais no meio, que era onde ficava. À
+        direita continua na zona natural do polegar e libera o quinto destino.
+      */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Novo lançamento"
@@ -219,61 +253,157 @@ export function Shell() {
         visible={folhaAberta}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={fecharLancamento}
+        onRequestClose={() => {
+          setFolhaAberta(false);
+          setEditando(null);
+        }}
       >
-        <LancamentoScreen existing={emEdicao} onClose={fecharLancamento} />
+        <LancamentoScreen
+          existing={emEdicao}
+          onClose={() => {
+            setFolhaAberta(false);
+            setEditando(null);
+          }}
+        />
       </Modal>
     </View>
   );
 }
 
-/** Resolve a tela que está no topo da pilha da aba corrente. */
-function Empilhada({
-  rota,
-  onVoltar,
-  onAbrir,
+/** Resolve a tela escolhida. */
+function Conteudo({
+  tela,
+  onAbrirLancamento,
+  onIrPara,
 }: {
-  rota: Rota;
-  onVoltar: () => void;
-  onAbrir: (rota: Rota) => void;
+  tela: Tela;
+  onAbrirLancamento: (id: string | null) => void;
+  onIrPara: (tela: Tela) => void;
 }) {
-  switch (rota) {
+  switch (tela) {
+    case "painel":
+      return <InicioScreen onOpenTransaction={onAbrirLancamento} onAbrirAjustes={() => onIrPara("configuracoes")} />;
     case "saude":
-      return <SaudeScreen onVoltar={onVoltar} />;
+      return <SaudeScreen />;
     case "relatorios":
-      return <RelatoriosScreen onVoltar={onVoltar} />;
-    case "patrimonio":
-      return <PatrimonioScreen onVoltar={onVoltar} />;
-    case "parcelamentos":
-      return <ParcelamentosScreen onVoltar={onVoltar} />;
-    case "planejamento":
-      return <PlanejamentoScreen onVoltar={onVoltar} />;
+      return <RelatoriosScreen />;
+    case "lancamentos":
+      return <ExtratoScreen onOpenTransaction={onAbrirLancamento} />;
+    case "contas":
+      return <ContasScreen />;
     case "cartoes":
       return <CartoesScreen />;
+    case "parcelamentos":
+      return <ParcelamentosScreen />;
+    case "recorrencias":
+      return <PlanejamentoScreen />;
     case "orcamentos":
       return <OrcamentosScreen />;
+    case "metas":
+      return <MetasScreen />;
+    case "patrimonio":
+      return <PatrimonioScreen />;
+    case "investimentos":
+      return <InvestimentosScreen />;
+    case "recompensas":
+      return <RecompensasScreen />;
+    case "viagens":
+      return <ViagensScreen />;
+    case "trabalho":
+      return <TrabalhoScreen />;
+    case "automacoes":
+      return <AutomacoesScreen />;
     case "capturas":
-      return <CapturasScreen onVoltar={onVoltar} />;
-    case "ajustes":
-      return <AjustesScreen onAbrirCapturas={() => onAbrir("capturas")} onVoltar={onVoltar} />;
+      return <CapturasScreen onVoltar={() => onIrPara("painel")} />;
+    case "configuracoes":
+      return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("painel")} />;
   }
 }
 
 /**
- * Um destino da barra.
+ * O cartão que escolhe a tela dentro do grupo.
  *
- * Sem ícone, e isso continua deliberado: cinco palavras curtas cabem e não
- * deixam dúvida, enquanto um ícone de "planos" ou de "carteira" precisa ser
- * aprendido. O ponto do alerta fica ao lado do rótulo em vez de virar um selo
- * numerado — a informação útil é "tem algo esperando", não quantos.
+ * Rola na horizontal porque o grupo maior tem quatro itens e um deles seria
+ * cortado num aparelho estreito — e item cortado é item que não existe. A pilha
+ * de rolagem começa alinhada à esquerda para que o primeiro, que é o mais usado,
+ * esteja sempre visível.
  */
-function ItemDeAba({
-  item,
+function SeletorDeTela({
+  grupo,
+  ativa,
+  onEscolher,
+}: {
+  grupo: Grupo;
+  ativa: Tela;
+  onEscolher: (tela: Tela) => void;
+}) {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={{
+        paddingTop: insets.top + space.sm,
+        paddingBottom: space.sm,
+        backgroundColor: palette.surface,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: palette.line,
+      }}
+    >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: space.lg, gap: 6 }}
+      >
+        {grupo.telas.map((item) => {
+          const selecionada = item.id === ativa;
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: selecionada }}
+              onPress={() => onEscolher(item.id)}
+              style={{
+                paddingHorizontal: space.md,
+                paddingVertical: space.sm,
+                borderRadius: radius.pill,
+                backgroundColor: selecionada ? palette.accent : palette.surfaceSunken,
+              }}
+            >
+              <Texto
+                style={[
+                  type.bodySm,
+                  {
+                    color: selecionada ? palette.accentInk : palette.inkMuted,
+                    fontWeight: selecionada ? "600" : "400",
+                  },
+                ]}
+              >
+                {item.label}
+              </Texto>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * Um grupo da barra de baixo.
+ *
+ * Sem ícone: cinco palavras curtas cabem e não deixam dúvida, enquanto um ícone
+ * de "planos" ou de "mais" precisa ser aprendido. O ponto do alerta fica ao lado
+ * do rótulo em vez de virar selo numerado — a informação útil é "tem algo
+ * esperando", não quantos.
+ */
+function ItemDeGrupo({
+  label,
   ativo,
   alerta,
   onPress,
 }: {
-  item: { id: Aba; label: string };
+  label: string;
   ativo: boolean;
   alerta: boolean;
   onPress: () => void;
@@ -301,12 +431,10 @@ function ItemDeAba({
             { color: ativo ? palette.accent : palette.inkSubtle, fontWeight: ativo ? "600" : "400" },
           ]}
         >
-          {item.label}
+          {label}
         </Texto>
         {alerta ? (
-          <View
-            style={{ width: 5, height: 5, borderRadius: radius.pill, backgroundColor: palette.caution }}
-          />
+          <View style={{ width: 5, height: 5, borderRadius: radius.pill, backgroundColor: palette.caution }} />
         ) : null}
       </View>
 

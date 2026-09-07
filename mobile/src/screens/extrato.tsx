@@ -97,7 +97,7 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
   }, [transactions, filtro, busca, nomeDaCategoria]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, gap: space.md }}>
         <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
           <Texto style={[type.title, { color: palette.ink }]}>Extrato</Texto>

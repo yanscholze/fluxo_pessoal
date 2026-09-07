@@ -58,10 +58,23 @@ export default async function VisaoGeral() {
       />
 
       <Stack gap="lg">
-        {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
-        <FreeToSpend data={dashboard.freeToSpend} benefit={dashboard.benefitFreeToSpend} today={dashboard.today} />
+        {/*
+          A pergunta principal e os números que a sustentam, lado a lado.
 
-        <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
+          Empilhados, a faixa de indicadores empurrava todo o resto do painel
+          para baixo da dobra — e ela é contexto do "livre para gastar", não um
+          bloco independente. Ao lado, a resposta e a sua origem entram no mesmo
+          olhar. Só a partir de `xl` há largura para isso; abaixo disso a faixa
+          volta a ficar embaixo, que é onde ela cabe.
+        */}
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]">
+          <FreeToSpend data={dashboard.freeToSpend} benefit={dashboard.benefitFreeToSpend} today={dashboard.today} />
+          <PositionStrip
+            position={dashboard.position}
+            monthFlow={dashboard.monthFlow}
+            className="xl:grid-cols-1"
+          />
+        </div>
 
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">
