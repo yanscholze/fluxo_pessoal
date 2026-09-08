@@ -63,14 +63,22 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
   const [observacao, setObservacao] = useState(row.notes ?? "");
 
   /**
-   * Parcela e pagamento de fatura não se editam pelo extrato.
+   * A parcela se classifica, mas não se remonta.
    *
-   * Uma parcela isolada não tem existência própria: mudar o valor dela faria a
-   * soma deixar de bater com o total da compra. O pagamento de fatura carrega a
-   * amarração com a competência quitada. Nos dois casos a API recusa, e
-   * oferecer o botão seria prometer o que não se cumpre.
+   * Mudar o valor ou a data de uma parcela isolada faria a soma deixar de bater
+   * com o total da compra, e o plano passaria a descrever uma dívida que não
+   * existe. Mas **categoria** é outra coisa: ela diz se aquilo é consumo do mês
+   * ou empréstimo que alguém vai devolver, e é isso que decide se a compra pesa
+   * no livre para gastar.
+   *
+   * Enquanto a parcela era intocável, quem empresta o cartão não tinha saída:
+   * a compra dos outros pesava no orçamento dele para sempre.
+   *
+   * O pagamento de fatura continua fora: ele carrega a amarração com a
+   * competência quitada, e não há nada nele para classificar.
    */
-  const editavel = !row.installmentLabel && row.kind !== "invoice_payment";
+  const parcela = Boolean(row.installmentLabel);
+  const editavel = row.kind !== "invoice_payment";
 
   /*
    * A transferência é a única que tem destino, e a única em que ele importa:
@@ -130,6 +138,17 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
   }
 
   function salvar() {
+    // Numa parcela só vai o que classifica. Mandar o resto faria a API recusar
+    // a edição inteira, mesmo quando os valores são idênticos aos atuais.
+    if (parcela) {
+      void chamar("PATCH", {
+        description: descricao,
+        categoryId: categoria || null,
+        notes: observacao.trim() || null,
+      });
+      return;
+    }
+
     const [tipo, id] = origem.split(":");
     void chamar("PATCH", {
       description: descricao,
@@ -201,7 +220,14 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {parcela ? (
+            <Notice tone="info">
+              {row.installmentLabel} de um parcelamento. Valor, data e origem vêm do plano — aqui dá
+              para mudar a categoria, a descrição e a observação.
+            </Notice>
+          ) : null}
+
+          <div className={parcela ? "hidden" : "grid gap-4 sm:grid-cols-2"}>
             <Field label="Valor" htmlFor={`valor-${row.id}`}>
               <MoneyInput
                 id={`valor-${row.id}`}
@@ -224,6 +250,7 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
             <Field
               label={row.kind === "transfer" ? "Sai de" : "Pago com"}
               htmlFor={`origem-${row.id}`}
+              className={parcela ? "hidden" : undefined}
             >
               <Select
                 id={`origem-${row.id}`}
@@ -282,6 +309,7 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
             label="Situação"
             htmlFor={`situacao-${row.id}`}
             hint="Previsto não conta no saldo; confirmado, sim."
+            className={parcela ? "hidden" : undefined}
           >
             <Select
               id={`situacao-${row.id}`}

@@ -34,6 +34,7 @@ import {
   findTransaction,
   loadLedger,
   saveTransactionBatch,
+  reclassifyTransaction,
   softDeleteTransaction,
 } from "../repositories/ledger.ts";
 
@@ -502,6 +503,39 @@ export async function payInvoice(
 // ---------------------------------------------------------------------------
 // Exclusão
 // ---------------------------------------------------------------------------
+
+/**
+ * Muda como um lançamento é **classificado**, e nada além disso.
+ *
+ * Existe para a parcela de um parcelamento, que não pode passar pelo caminho
+ * normal de edição sem se soltar do plano. Categoria e observação não afetam a
+ * dívida — dizem se aquilo é consumo do mês ou empréstimo que alguém devolve,
+ * e é justamente essa distinção que decide se a compra pesa no livre para
+ * gastar.
+ */
+export async function reclassify(
+  userId: string,
+  transactionId: string,
+  patch: {
+    categoryId?: string | null;
+    description?: string;
+    notes?: string | null;
+    setCategory?: boolean;
+    setNotes?: boolean;
+  },
+): Promise<boolean> {
+  const existing = await findTransaction(userId, transactionId);
+  if (!existing) return false;
+  if (patch.setCategory && patch.categoryId) {
+    // Reaproveita a mesma checagem do caminho normal: categoria de saída para
+    // despesa, de entrada para receita. Duas validações divergiriam.
+    await assertCategory(userId, {
+      kind: existing.kind,
+      categoryId: patch.categoryId,
+    } as RecordTransactionInput);
+  }
+  return reclassifyTransaction(userId, transactionId, patch);
+}
 
 export async function removeTransaction(
   userId: string,

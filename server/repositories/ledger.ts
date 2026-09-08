@@ -236,6 +236,53 @@ function buildSaveStatements(transaction: Transaction, options: PersistOptions) 
  * permanece marcado para que a sincronização propague a exclusão aos outros
  * dispositivos.
  */
+/**
+ * Reclassifica um lançamento sem reescrevê-lo.
+ *
+ * O caminho normal de edição regrava a transação inteira — é o que faz mudar a
+ * data mover a competência e a fatura junto, sem ninguém precisar lembrar de
+ * recalcular. Para uma **parcela**, esse mesmo caminho é destrutivo: ele zera
+ * `installment_plan_id`, troca a origem `installment` por `manual` e re-deduz a
+ * competência. A parcela sairia do plano, e o plano ficaria descrevendo uma
+ * dívida da qual falta um pedaço.
+ *
+ * Aqui só mudam os três campos que dizem **o que aquilo é**, e nenhum deles
+ * participa do razão: a movimentação não é reescrita, o valor não muda, a
+ * competência fica onde estava.
+ */
+export async function reclassifyTransaction(
+  userId: string,
+  transactionId: string,
+  patch: {
+    categoryId?: string | null;
+    description?: string;
+    notes?: string | null;
+    setCategory?: boolean;
+    setNotes?: boolean;
+  },
+): Promise<boolean> {
+  const database = getDatabase();
+  const now = new Date().toISOString();
+
+  const campos: Record<string, unknown> = { updatedAt: now, version: sql`${transactions.version} + 1` };
+  if (patch.description !== undefined) campos.description = patch.description;
+  if (patch.setCategory) campos.categoryId = patch.categoryId ?? null;
+  if (patch.setNotes) campos.notes = patch.notes ?? null;
+
+  const resultado = await database
+    .update(transactions)
+    .set(campos)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    );
+
+  return Boolean(resultado);
+}
+
 export async function softDeleteTransaction(
   userId: string,
   transactionId: string,
