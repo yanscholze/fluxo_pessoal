@@ -83,6 +83,19 @@ export const PATCH = handle(async (request: Request) => {
 
   const input = read(await readJson(request));
 
+  /*
+   * Campo ausente é "não mexe"; campo enviado vazio é "apague".
+   *
+   * `optionalReference` e `optionalString` devolvem `null` nos dois casos —
+   * eles respondem "há valor utilizável aqui?", não "o cliente falou deste
+   * campo?". Sem `provided`, o `?? atual` abaixo preserva o valor antigo
+   * também quando o usuário pediu para remover, e a opção "Sem categoria" da
+   * tela de edição vira promessa quebrada: some do formulário e volta ao
+   * recarregar.
+   */
+  const limpaCategoria = input.provided("categoryId");
+  const limpaObservacao = input.provided("notes");
+
   const description = input.optionalString("description", { max: 160 });
   const amount = input.optionalMoney("amount");
   const occurredOn = input.optionalDate("occurredOn");
@@ -113,14 +126,14 @@ export const PATCH = handle(async (request: Request) => {
     amount: amount ?? atual.amount,
     occurredOn: occurredOn ?? atual.occurredOn,
     state: state ?? atual.state,
-    categoryId: categoryId ?? atual.categoryId,
+    categoryId: categoryId ?? (limpaCategoria ? null : atual.categoryId),
     accountId: origemInformada ? accountId : origemAtual.accountId,
     cardId: origemInformada ? cardId : origemAtual.cardId,
     destinationAccountId:
       destinationAccountId ??
       (atual.destination?.kind === "account" ? atual.destination.accountId : null),
     tripId: tripId ?? atual.tripId,
-    notes: notes ?? atual.notes,
+    notes: notes ?? (limpaObservacao ? null : atual.notes),
   });
 
   return json({ data: { id: ids[0], competence } });

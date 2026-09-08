@@ -29,11 +29,24 @@ export type AlertSeverity = "urgente" | "atencao" | "informativo";
 
 export type Alert = {
   /**
-   * Identidade estável do alerta.
+   * Identidade do alerta, e do **episódio** dele.
    *
-   * O mesmo problema tem sempre a mesma chave, dia após dia. É o que permite
-   * ao cliente lembrar que já notificou isto e não repetir a cada abertura —
-   * a diferença entre um aplicativo que avisa e um que persegue.
+   * O cliente guarda as chaves que já notificou e nunca repete uma. Isso é o
+   * que separa avisar de perseguir — e, se a chave for constante demais, é
+   * também o que mata o aviso: `capturas-pendentes` sem discriminador algum
+   * interromperia o usuário **uma vez na vida da instalação** e ficaria mudo
+   * para sempre, porque a condição volta mas a chave não muda.
+   *
+   * Então cada chave carrega o que define seu episódio, e a escolha do
+   * discriminador é a escolha da cadência:
+   *
+   * - o que é diário carrega a data (`capturas-pendentes-2026-09-08`);
+   * - o que é mensal carrega a competência (`livre-negativo-2026-09`);
+   * - o que pertence a um documento carrega o documento
+   *   (`fatura-vencida-2026-09-21`).
+   *
+   * A regra prática: se a mesma condição pode voltar a merecer um aviso, o que
+   * mudou entre as duas vezes precisa estar na chave.
    */
   readonly key: string;
   readonly severity: AlertSeverity;
@@ -58,6 +71,8 @@ export type AlertInput = {
   /** Faturas vencidas, com o total devido. */
   readonly overdueInvoices: number;
   readonly overdueInvoiceCents: number;
+  /** Vencimento da mais antiga em atraso. Identifica o episódio do alerta. */
+  readonly oldestOverdueDueDate?: LocalDate | null;
   /** A próxima fatura a vencer, se houver alguma em aberto. */
   readonly nextInvoice: {
     readonly cardName: string;
@@ -158,7 +173,9 @@ export function buildAlerts(input: AlertInput): readonly Alert[] {
   // --- o que já está atrasado -------------------------------------------
   if (input.overdueInvoices > 0) {
     alertas.push({
-      key: "fatura-vencida",
+      // A fatura mais antiga em atraso identifica o episódio: quitar aquela e
+      // atrasar outra é um problema novo, e merece um aviso novo.
+      key: `fatura-vencida-${input.oldestOverdueDueDate ?? input.today}`,
       severity: "urgente",
       title: input.overdueInvoices === 1 ? "Fatura vencida" : "Faturas vencidas",
       body: `${reais(input.overdueInvoiceCents)} em ${input.overdueInvoices} fatura${
@@ -173,7 +190,15 @@ export function buildAlerts(input: AlertInput): readonly Alert[] {
     const dias = daysBetween(input.today, input.nextInvoice.dueDate);
     if (dias >= 0 && dias <= JANELA_DA_FATURA) {
       alertas.push({
-        key: `fatura-vence-${input.nextInvoice.dueDate}`,
+        /*
+         * O aviso de véspera e o do próprio dia são episódios diferentes.
+         *
+         * Com a chave só no vencimento, o aviso de três dias antes consumia a
+         * chave e o do dia do vencimento — o único que ainda dá para agir —
+         * era descartado como repetido. A severidade sobe de `atencao` para
+         * `urgente` justamente ali, e é o que o sufixo registra.
+         */
+        key: `fatura-vence-${input.nextInvoice.dueDate}-${dias === 0 ? "hoje" : "vespera"}`,
         severity: dias === 0 ? "urgente" : "atencao",
         title: `Fatura do ${input.nextInvoice.cardName} vence ${diaEm(dias)}`,
         body: `${reais(input.nextInvoice.amountCents)} a pagar.`,
@@ -205,7 +230,9 @@ export function buildAlerts(input: AlertInput): readonly Alert[] {
   // --- a folga do mês -----------------------------------------------------
   if (input.freeToSpendCents < 0) {
     alertas.push({
-      key: "livre-negativo",
+      // Uma vez por mês: o mês é o episódio. Repetir todo dia que a folga está
+      // negativa não acrescenta informação, só desgasta.
+      key: `livre-negativo-${input.today.slice(0, 7)}`,
       severity: "urgente",
       title: "O mês não fecha",
       body: `Faltam ${reais(Math.abs(input.freeToSpendCents))} para cobrir o que já está comprometido.`,
@@ -217,7 +244,7 @@ export function buildAlerts(input: AlertInput): readonly Alert[] {
   ) {
     const porcento = Math.round((input.committedCents / input.incomeThisMonthCents) * 100);
     alertas.push({
-      key: "comprometimento-alto",
+      key: `comprometimento-alto-${input.today.slice(0, 7)}`,
       severity: "atencao",
       title: `${porcento}% da renda já está comprometida`,
       body: `${reais(input.committedCents)} de ${reais(input.incomeThisMonthCents)}. Sobram ${reais(
@@ -230,7 +257,14 @@ export function buildAlerts(input: AlertInput): readonly Alert[] {
   // --- o que espera uma conferência ---------------------------------------
   if (input.pendingCaptures > 0) {
     alertas.push({
-      key: "capturas-pendentes",
+      /*
+       * Uma vez por dia, e não uma por captura.
+       *
+       * Pela contagem, cada compra nova viraria uma notificação — é o cartão
+       * apitando duas vezes. Pela data, o lembrete chega no máximo uma vez por
+       * dia enquanto houver fila, que é o ritmo de quem confere lançamento.
+       */
+      key: `capturas-pendentes-${input.today}`,
       severity: "atencao",
       title:
         input.pendingCaptures === 1

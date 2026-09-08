@@ -92,6 +92,10 @@ export async function buildAlertsView(userId: string, now: Date = new Date()): P
     committedCents: painel.position.committedCents,
     overdueInvoices: faturas.overdue.length,
     overdueInvoiceCents: faturas.overdueCents,
+    oldestOverdueDueDate:
+      [...faturas.overdue].sort((esquerda, direita) =>
+        esquerda.dueDate.localeCompare(direita.dueDate),
+      )[0]?.dueDate ?? null,
     nextInvoice: faturas.next,
     incomeToday:
       recebidoHoje.length > 0

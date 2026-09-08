@@ -34,12 +34,6 @@ import { Notice } from "../../ui/primitives.tsx";
 type Modo = null | "editar" | "apagar";
 type Opcoes = Statement["options"];
 
-/** Converte "1.234,56" no inteiro de centavos que a API espera. */
-function centavosDe(texto: string): number {
-  const limpo = texto.replace(/\./g, "").replace(",", ".");
-  return Math.round(Number(limpo) * 100);
-}
-
 export function RowActions({ row, options }: { row: StatementRow; options: Opcoes }) {
   const router = useRouter();
   const [modo, setModo] = useState<Modo>(null);
@@ -91,10 +85,18 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
   );
 
   /*
-   * Transferência sai sempre de conta. Um cartão de crédito não transfere
-   * dinheiro — ele empresta, e isso é outra natureza de lançamento.
+   * Despesa e estorno vivem em cartão; o resto, não.
+   *
+   * A transferência sai sempre de conta — um cartão de crédito não transfere
+   * dinheiro, ele empresta. O estorno, sim: é a devolução de uma compra, e a
+   * compra estava no cartão.
+   *
+   * Deixá-lo de fora era pior que esconder uma opção: num estorno com origem
+   * em cartão, nenhuma opção do seletor casava com o valor atual, o campo
+   * renderizava a primeira conta da lista, e salvar mudava a origem do
+   * lançamento sem que ninguém tivesse pedido.
    */
-  const podeSerCartao = row.kind === "expense";
+  const podeSerCartao = row.kind === "expense" || row.kind === "refund";
 
   function fechar() {
     setModo(null);
@@ -131,7 +133,19 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
     const [tipo, id] = origem.split(":");
     void chamar("PATCH", {
       description: descricao,
-      amount: centavosDe(valor),
+      /*
+       * O valor vai como texto, do jeito que foi digitado.
+       *
+       * A conversão morava aqui e era ingênua: removia todo ponto antes de
+       * trocar a vírgula, então "1234.56" — colado de qualquer lugar — virava
+       * R$ 1.234.560,00. E campo vazio virava zero, gravado em silêncio como
+       * se fosse um lançamento de R$ 0,00.
+       *
+       * `parseMoney`, na borda do servidor, já entende centavo inteiro,
+       * decimal e texto em pt-BR, e é o mesmo parser que o resto do produto
+       * usa. Um parser só, no lugar onde o dado entra.
+       */
+      amount: valor,
       occurredOn: data,
       state: situacao,
       // String vazia é "sem categoria", e `null` é o que a API entende por

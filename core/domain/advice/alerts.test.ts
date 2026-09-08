@@ -113,7 +113,7 @@ describe("alertas", () => {
 
     const perto = { ...proxima, dueDate: localDate("2026-09-10") };
     const alertas = buildAlerts(entrada({ nextInvoice: perto }));
-    assert.equal(alertas[0].key, "fatura-vence-2026-09-10");
+    assert.equal(alertas[0].key, "fatura-vence-2026-09-10-vespera");
     assert.equal(alertas[0].severity, "atencao");
   });
 
@@ -154,31 +154,96 @@ describe("alertas", () => {
   it("mês que não fecha vence o aviso de comprometimento", () => {
     const alertas = buildAlerts(entrada({ freeToSpendCents: -20_000, committedCents: 390_000 }));
     assert.equal(alertas.filter((a) => a.screen === "saude").length, 1);
-    assert.equal(alertas[0].key, "livre-negativo");
+    assert.equal(alertas[0].key, "livre-negativo-2026-09");
   });
 
   it("comprometimento alto só aparece com renda conhecida", () => {
     const semRenda = buildAlerts(entrada({ incomeThisMonthCents: 0, committedCents: 300_000 }));
     assert.equal(
-      semRenda.some((a) => a.key === "comprometimento-alto"),
+      semRenda.some((a) => a.key.startsWith("comprometimento-alto")),
       false,
       "sem renda não há percentual — dividir por zero seria inventar diagnóstico",
     );
 
     const comRenda = buildAlerts(entrada({ incomeThisMonthCents: 400_000, committedCents: 300_000 }));
-    const alerta = comRenda.find((a) => a.key === "comprometimento-alto");
+    const alerta = comRenda.find((a) => a.key.startsWith("comprometimento-alto"));
     assert.ok(alerta);
     assert.match(alerta.title, /75%/);
   });
 
-  it("a chave da fatura muda com o vencimento, e a das capturas não", () => {
-    // A chave é o que o cliente usa para não repetir a notificação. A da
-    // fatura precisa mudar quando a fatura muda; a das capturas, não — senão
-    // cada compra nova viraria um aviso.
+  it("a captura avisa uma vez por dia, não uma por compra", () => {
+    // A chave é o que o cliente usa para não repetir a notificação. Pela
+    // contagem, cada compra nova viraria um aviso — o cartão apitando duas
+    // vezes. Pela data, no máximo um lembrete por dia enquanto houver fila.
     const umaCaptura = buildAlerts(entrada({ pendingCaptures: 1 }))[0];
     const tresCapturas = buildAlerts(entrada({ pendingCaptures: 3 }))[0];
     assert.equal(umaCaptura.key, tresCapturas.key);
     assert.notEqual(umaCaptura.title, tresCapturas.title);
+
+    const amanha = buildAlerts(
+      entrada({ pendingCaptures: 3, today: localDate("2026-09-09") }),
+    )[0];
+    assert.notEqual(amanha.key, tresCapturas.key, "amanhã é outro episódio");
+  });
+
+  it("nenhuma chave é constante — senão o alerta avisa uma vez na vida", () => {
+    /*
+     * O defeito que este teste tranca. O celular guarda as chaves já
+     * notificadas e nunca repete uma; uma chave sem discriminador nenhum
+     * interromperia o usuário na primeira vez e ficaria muda para sempre,
+     * porque a condição volta mas a chave não muda.
+     */
+    const setembro = buildAlerts(
+      entrada({
+        today: localDate("2026-09-08"),
+        pendingCaptures: 2,
+        freeToSpendCents: -1_000,
+        committedCents: 390_000,
+        overdueInvoices: 1,
+        overdueInvoiceCents: 20_000,
+        oldestOverdueDueDate: localDate("2026-08-20"),
+      }),
+    );
+    const outubro = buildAlerts(
+      entrada({
+        today: localDate("2026-10-08"),
+        pendingCaptures: 2,
+        freeToSpendCents: -1_000,
+        committedCents: 390_000,
+        overdueInvoices: 1,
+        overdueInvoiceCents: 20_000,
+        oldestOverdueDueDate: localDate("2026-09-20"),
+      }),
+    );
+
+    assert.ok(setembro.length >= 3);
+    assert.equal(setembro.length, outubro.length);
+    for (const [indice, alerta] of setembro.entries()) {
+      assert.notEqual(
+        alerta.key,
+        outubro[indice].key,
+        `"${alerta.key}" se repete de um mês para o outro e nunca mais avisaria`,
+      );
+    }
+  });
+
+  it("o aviso do dia do vencimento não é engolido pelo da véspera", () => {
+    const vespera = buildAlerts(
+      entrada({
+        today: localDate("2026-09-18"),
+        nextInvoice: { cardName: "Nubank UV", dueDate: localDate("2026-09-20"), amountCents: 80_000 },
+      }),
+    )[0];
+    const noDia = buildAlerts(
+      entrada({
+        today: localDate("2026-09-20"),
+        nextInvoice: { cardName: "Nubank UV", dueDate: localDate("2026-09-20"), amountCents: 80_000 },
+      }),
+    )[0];
+
+    assert.equal(vespera.severity, "atencao");
+    assert.equal(noDia.severity, "urgente");
+    assert.notEqual(vespera.key, noDia.key, "mesma chave suprimiria o aviso do dia");
   });
 
   it("singular e plural saem certos", () => {

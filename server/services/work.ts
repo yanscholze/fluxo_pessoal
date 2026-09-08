@@ -787,6 +787,13 @@ export async function unlinkedIncome(
       and(
         eq(transactions.userId, userId),
         eq(transactions.kind, "income"),
+        // Só o que entrou de verdade.
+        //
+        // Receita prevista é projeção — salário do mês que vem, parcela ainda
+        // por receber. Ordenadas por data decrescente, elas encabeçam a lista e
+        // viram a opção pré-selecionada: um clique distraído daria a parcela
+        // como recebida contra dinheiro que ainda não existe.
+        eq(transactions.state, "confirmed"),
         isNull(transactions.deletedAt),
       ),
     )

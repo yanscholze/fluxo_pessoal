@@ -21,7 +21,7 @@
  * Sem `--aplicar` ele só mostra o que faria.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -297,6 +297,17 @@ if (naoEncontrados.length > 0) {
 }
 
 console.log(`${aApagar.length} lançamentos casados; nenhum sobrou de fora.`);
+
+/*
+ * Cópia do que vai sair, antes de sair.
+ *
+ * O apagamento é lógico e a API não expõe desfazer. Se algo der errado entre a
+ * remoção e a criação dos planos, este arquivo é o que permite reconstruir à
+ * mão — e custa uma escrita em disco.
+ */
+const backup = join(pasta, `parcelas-removidas-${resultado.entries.length}.json`);
+writeFileSync(backup, JSON.stringify(aApagar, null, 2));
+console.log(`cópia do que será removido: ${backup}`);
 
 let apagados = 0;
 for (const alvo of aApagar) {
