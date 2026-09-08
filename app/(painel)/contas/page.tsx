@@ -16,6 +16,7 @@
 
 import { lastDay } from "../../../core/time/competence.ts";
 import { type AccountView, buildAccountsView } from "../../../server/services/accounts.ts";
+import { BalanceCheck } from "./balance-check.tsx";
 import { currentUser } from "../../auth-context.ts";
 import { ChartFrame, LineChart, chartColor } from "../../ui/charts.tsx";
 import {
@@ -274,11 +275,23 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
               <Previsto conta={conta} />
             </Td>
             <Td align="right">
-              <Amount
-                cents={conta.balanceCents}
-                currency={conta.currency}
-                tone={conta.balanceCents < 0 ? "negative" : "neutral"}
-              />
+              {/*
+                O acerto fica junto do saldo, e não num menu.
+                É a resposta para a única pergunta que se faz olhando esta
+                coluna: "isto bate com o meu banco?".
+              */}
+              <span className="flex items-center justify-end gap-2">
+                <Amount
+                  cents={conta.balanceCents}
+                  currency={conta.currency}
+                  tone={conta.balanceCents < 0 ? "negative" : "neutral"}
+                />
+                <BalanceCheck
+                  accountId={conta.id}
+                  accountName={conta.name}
+                  balanceCents={conta.balanceCents}
+                />
+              </span>
             </Td>
           </Tr>
         ))}
