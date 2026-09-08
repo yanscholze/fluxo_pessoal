@@ -216,22 +216,36 @@ console.log(`cartão: ${cartao.name}`);
  * tripla é única o bastante dentro de um cartão — duas compras iguais, no
  * mesmo dia, pelo mesmo valor, seriam de fato indistinguíveis, e nesse caso
  * apagar qualquer uma das duas dá no mesmo.
+ *
+ * A leitura é **mês a mês**, e não por trimestre.
+ *
+ * A primeira versão montava o fim da janela como `mês+2` seguido de "-31" e
+ * produzia "2026-06-31" e "2026-09-31" — datas que não existem. `parseLocalDate`
+ * as recusa e devolve `null`, e a rota trata `null` como *sem filtro*: metade
+ * das janelas do ano vinha sem limite superior, com o teto de 500 cortando
+ * lançamentos que o casamento precisava encontrar. Num script que apaga dado
+ * real, esse é o tipo de erro que só aparece depois do estrago.
+ *
+ * Mês a mês nenhuma janela chega perto do teto e nenhuma data precisa ser
+ * calculada: o primeiro dia do mês seguinte, menos um dia, é sempre válido.
  */
-/*
- * A listagem tem teto de 500 por chamada e não oferece cursor — só recorte por
- * data. Um ano por vez cobre com folga: nem o mês mais movimentado chega perto
- * do teto, e a janela vai de 2025 até as projeções de 2028.
- */
+function ultimoDiaDoMes(ano, mes) {
+  // Dia 0 do mês seguinte é o último dia deste. `Date.UTC` normaliza mês 13.
+  return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+}
+
 const porChave = new Map();
 let lidos = 0;
 for (let ano = 2025; ano <= 2028; ano += 1) {
-  for (let mes = 1; mes <= 12; mes += 3) {
-    const de = `${ano}-${String(mes).padStart(2, "0")}-01`;
-    const ate =
-      mes === 10 ? `${ano}-12-31` : `${ano}-${String(mes + 2).padStart(2, "0")}-31`;
+  for (let mes = 1; mes <= 12; mes += 1) {
+    const dd = String(mes).padStart(2, "0");
+    const de = `${ano}-${dd}-01`;
+    const ate = `${ano}-${dd}-${String(ultimoDiaDoMes(ano, mes)).padStart(2, "0")}`;
     const pagina = await api(`/api/v1/transactions?from=${de}&to=${ate}&limit=500`);
     if (pagina.length === 500) {
-      console.warn(`  ⚠ ${de}..${ate} veio no teto de 500; pode faltar lançamento`);
+      console.error(`  ✗ ${de}..${ate} veio no teto de 500: a leitura está incompleta.`);
+      console.error("    Abortando antes de apagar qualquer coisa.");
+      process.exit(1);
     }
     lidos += pagina.length;
     for (const linha of pagina) {
@@ -245,24 +259,51 @@ for (let ano = 2025; ano <= 2028; ano += 1) {
 }
 console.log(`${lidos} lançamentos lidos, ${porChave.size} chaves de cartão sem plano`);
 
-let apagados = 0;
-let naoEncontrados = 0;
+/*
+ * Casar tudo ANTES de apagar qualquer coisa.
+ *
+ * Apagar e criar no mesmo laço deixa um estado intermediário em que parte das
+ * parcelas já saiu do razão e nenhum plano existe ainda. Se o casamento falhar
+ * no meio — descrição que não bate, parcela que nunca foi gravada — o script
+ * morre com a fatura furada e sem como voltar: não há transação nem desfazer.
+ *
+ * Resolvendo primeiro, a falha acontece com o banco intacto e o operador vê
+ * exatamente o que não bateu.
+ */
+const aApagar = [];
+const naoEncontrados = [];
 
 for (const plano of planos) {
   for (const parcela of plano.todas) {
     const chave = `${parcela.occurredOn}|${parcela.amount}|${parcela.description.slice(0, 160).trim().toLowerCase()}`;
     const candidatos = porChave.get(chave);
     if (!candidatos?.length) {
-      naoEncontrados += 1;
+      naoEncontrados.push(
+        `${parcela.occurredOn} ${brl(parcela.amount).padStart(13)} ${parcela.installment.current}/${parcela.installment.total} ${parcela.description}`,
+      );
       continue;
     }
-    const alvo = candidatos.shift();
-    await api(`/api/v1/transactions/${alvo.id}`, { method: "DELETE" });
-    apagados += 1;
+    aApagar.push(candidatos.shift());
   }
 }
 
-console.log(`${apagados} lançamentos removidos, ${naoEncontrados} não localizados`);
+if (naoEncontrados.length > 0) {
+  console.error(`\n✗ ${naoEncontrados.length} parcelas não foram encontradas no razão:`);
+  for (const linha of naoEncontrados.slice(0, 20)) console.error(`   ${linha}`);
+  if (naoEncontrados.length > 20) console.error(`   … e mais ${naoEncontrados.length - 20}`);
+  console.error("\nNada foi apagado. Ou o razão não tem estas parcelas, ou a chave de casamento");
+  console.error("mudou (descrição, valor ou data). Resolva antes de rodar de novo.");
+  process.exit(1);
+}
+
+console.log(`${aApagar.length} lançamentos casados; nenhum sobrou de fora.`);
+
+let apagados = 0;
+for (const alvo of aApagar) {
+  await api(`/api/v1/transactions/${alvo.id}`, { method: "DELETE" });
+  apagados += 1;
+}
+console.log(`${apagados} lançamentos removidos`);
 
 let criados = 0;
 for (const plano of planos) {

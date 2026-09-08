@@ -68,6 +68,55 @@ export type AlertInput = {
   readonly incomeToday: { readonly description: string; readonly amountCents: number } | null;
 };
 
+/**
+ * Uma fatura em aberto, como o alerta precisa vê-la.
+ *
+ * Vem do painel, mas **sem** a classificação dele. O painel chama de "vencida"
+ * toda competência anterior à ativa que ainda deve — o que é a definição certa
+ * para ocupar limite de crédito, e a errada para avisar alguém.
+ */
+export type OpenInvoice = {
+  readonly cardName: string;
+  readonly dueDate: LocalDate;
+  readonly amountCents: number;
+};
+
+/**
+ * Separa o que está atrasado do que ainda vai vencer.
+ *
+ * Existe porque o painel não faz essa distinção e não precisa fazer: para
+ * calcular limite disponível, uma fatura fechada e não paga é dívida, ponto.
+ * Para **avisar**, a diferença é tudo.
+ *
+ * O cartão do usuário fecha no dia 12 e vence no 20. Entre os dias 13 e 20 a
+ * fatura de setembro já saiu da competência ativa — que passou a ser outubro —
+ * e o painel a lista entre as vencidas. Um alerta que confiasse nessa lista
+ * anunciaria "Fatura vencida", em vermelho, por oito dias por mês, sobre uma
+ * fatura rigorosamente em dia. Um aviso que mente uma vez é desligado; e junto
+ * com ele morre o aviso de véspera, que é o que de fato salva o pagamento.
+ *
+ * O corte é a data de vencimento contra hoje, e nada mais.
+ */
+export function classifyInvoices(
+  invoices: readonly OpenInvoice[],
+  today: LocalDate,
+): {
+  readonly overdue: readonly OpenInvoice[];
+  readonly overdueCents: number;
+  readonly next: OpenInvoice | null;
+} {
+  const overdue = invoices.filter((invoice) => invoice.dueDate < today);
+  const aVencer = [...invoices]
+    .filter((invoice) => invoice.dueDate >= today)
+    .sort((esquerda, direita) => esquerda.dueDate.localeCompare(direita.dueDate));
+
+  return {
+    overdue,
+    overdueCents: overdue.reduce((soma, invoice) => soma + invoice.amountCents, 0),
+    next: aVencer[0] ?? null,
+  };
+}
+
 /** Dentro de quantos dias uma fatura a vencer passa a merecer aviso. */
 const JANELA_DA_FATURA = 3;
 

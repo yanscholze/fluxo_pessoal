@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { localDate } from "../../time/local-date.ts";
-import { type AlertInput, buildAlerts } from "./alerts.ts";
+import { type AlertInput, buildAlerts, classifyInvoices } from "./alerts.ts";
 
 function entrada(overrides: Partial<AlertInput> = {}): AlertInput {
   return {
@@ -18,6 +18,71 @@ function entrada(overrides: Partial<AlertInput> = {}): AlertInput {
     ...overrides,
   };
 }
+
+describe("classificação de faturas", () => {
+  const fatura = (dueDate: string, amountCents = 50_000, cardName = "Nubank UV") => ({
+    cardName,
+    dueDate: localDate(dueDate),
+    amountCents,
+  });
+
+  it("fechada e ainda não vencida não é fatura vencida", () => {
+    /*
+     * O caso que motivou esta função. O cartão fecha dia 12 e vence dia 20.
+     * No dia 15 a fatura de setembro já saiu da competência ativa, e o painel
+     * a devolve na lista de "overdue" — mas ela vence só dia 20.
+     */
+    const resultado = classifyInvoices([fatura("2026-09-20")], localDate("2026-09-15"));
+
+    assert.equal(resultado.overdue.length, 0, "não passou do vencimento");
+    assert.equal(resultado.overdueCents, 0);
+    assert.equal(resultado.next?.dueDate, "2026-09-20");
+  });
+
+  it("no próprio dia do vencimento ainda dá para pagar", () => {
+    const resultado = classifyInvoices([fatura("2026-09-20")], localDate("2026-09-20"));
+    assert.equal(resultado.overdue.length, 0);
+    assert.equal(resultado.next?.dueDate, "2026-09-20");
+  });
+
+  it("no dia seguinte, sim", () => {
+    const resultado = classifyInvoices([fatura("2026-09-20")], localDate("2026-09-21"));
+    assert.equal(resultado.overdue.length, 1);
+    assert.equal(resultado.overdueCents, 50_000);
+    assert.equal(resultado.next, null);
+  });
+
+  it("a próxima é a mais próxima entre todos os cartões", () => {
+    const resultado = classifyInvoices(
+      [
+        fatura("2026-10-20", 90_000, "Nubank UV"),
+        fatura("2026-09-25", 12_000, "Mercado Pago"),
+        fatura("2026-11-05", 30_000, "XP Infinite"),
+      ],
+      localDate("2026-09-15"),
+    );
+
+    assert.equal(resultado.next?.cardName, "Mercado Pago");
+  });
+
+  it("soma o vencido de cartões diferentes", () => {
+    const resultado = classifyInvoices(
+      [fatura("2026-08-20", 40_000, "Nubank UV"), fatura("2026-09-05", 15_000, "Mercado Pago")],
+      localDate("2026-09-15"),
+    );
+
+    assert.equal(resultado.overdue.length, 2);
+    assert.equal(resultado.overdueCents, 55_000);
+    assert.equal(resultado.next, null, "não há nenhuma a vencer");
+  });
+
+  it("sem fatura nenhuma não inventa próxima", () => {
+    const resultado = classifyInvoices([], localDate("2026-09-15"));
+    assert.deepEqual(resultado.overdue, []);
+    assert.equal(resultado.overdueCents, 0);
+    assert.equal(resultado.next, null);
+  });
+});
 
 describe("alertas", () => {
   it("cala a boca quando não há nada a dizer", () => {
