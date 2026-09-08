@@ -27,8 +27,7 @@ const MAX_PARCELAS = 96;
 
 export const POST = handle(async (request: Request) => {
   const user = await requireUser(request);
-  const body = await readJson(request);
-  const input = read(body);
+  const input = read(await readJson(request));
 
   const payload = {
     cardId: input.reference("cardId"),
@@ -39,12 +38,7 @@ export const POST = handle(async (request: Request) => {
     purchaseDate: input.date("purchaseDate"),
   };
 
-  const cru = (body as Record<string, unknown>).parcels;
-  if (!Array.isArray(cru) || cru.length === 0 || cru.length > MAX_PARCELAS) {
-    throw validationError("Informe as parcelas do plano", [
-      { path: "parcels", message: `Envie de 1 a ${MAX_PARCELAS} parcelas` },
-    ]);
-  }
+  const cru = input.list("parcels", { min: 1, max: MAX_PARCELAS });
 
   // As parcelas são validadas à mão: o leitor de entrada trabalha sobre campos
   // do corpo, não sobre itens de uma lista, e forçá-lo a isso esconderia qual

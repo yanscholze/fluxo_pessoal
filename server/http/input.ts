@@ -51,7 +51,38 @@ export class InputReader {
    * seria impossível pela API.
    */
   provided(path: string): boolean {
+    // Registra a leitura: perguntar se a chave veio **é** lê-la. Sem isto, uma
+    // rota que só consulta `provided` para um campo teria esse campo recusado
+    // por `done()` como não reconhecido.
+    this.lidos.add(path);
     return Object.hasOwn(this.body, path);
+  }
+
+  /**
+   * Uma lista, ainda crua.
+   *
+   * O leitor valida campo a campo, e um item de lista não é um campo do corpo.
+   * Forçá-lo a isso esconderia **qual** item está errado, que é justamente o
+   * que quem importa dezenas de parcelas precisa saber — então a rota valida os
+   * itens à mão e diz o índice.
+   *
+   * O que este método garante é o contorno: que veio lista, que o tamanho cabe,
+   * e — o motivo de ele existir — que o campo entra em `lidos`. Ler
+   * `body.parcels` direto, como a rota de parcelamento fazia, deixa a chave
+   * invisível para o leitor: `done()` a denuncia como "campo não reconhecido" e
+   * a rota devolve 400 em **toda** chamada, inclusive nas corretas.
+   */
+  list(path: string, options: { min?: number; max?: number } = {}): unknown[] {
+    const value = this.raw(path);
+    if (!Array.isArray(value)) {
+      this.fail(path, "Envie uma lista");
+      return [];
+    }
+    const min = options.min ?? 0;
+    const max = options.max ?? Number.MAX_SAFE_INTEGER;
+    if (value.length < min) this.fail(path, `Envie ao menos ${min} ${min === 1 ? "item" : "itens"}`);
+    if (value.length > max) this.fail(path, `Envie no máximo ${max} itens`);
+    return value;
   }
 
   string(path: string, options: { max?: number; min?: number } = {}): string {
