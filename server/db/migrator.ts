@@ -33,6 +33,7 @@ import categoriaDeTempo from "./migrations/0017_time-activity-and-documents.sql?
 import ajusteDeFechamento from "./migrations/0018_closing-adjustment.sql?raw";
 import nomeLivre from "./migrations/0019_nome-livre-apos-arquivar.sql?raw";
 import fotoDoCartao from "./migrations/0020_foto-do-cartao.sql?raw";
+import saldoAnteriorDePontos from "./migrations/0021_saldo-anterior-de-pontos.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -117,6 +118,7 @@ const TODO_O_SQL: readonly string[] = [
   ajusteDeFechamento,
   nomeLivre,
   fotoDoCartao,
+  saldoAnteriorDePontos,
 ];
 
 /**
@@ -206,6 +208,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 18, name: "ajuste-de-fechamento", run: fromSql(ajusteDeFechamento) },
   { id: 19, name: "nome-livre-apos-arquivar", run: fromSql(nomeLivre) },
   { id: 20, name: "foto-do-cartao", run: fromSql(fotoDoCartao) },
+  { id: 21, name: "saldo-anterior-de-pontos", run: fromSql(saldoAnteriorDePontos) },
 ];
 
 let applied: Promise<void> | null = null;

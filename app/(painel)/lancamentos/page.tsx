@@ -90,7 +90,7 @@ export default async function Lancamentos({
           ]}
         />
 
-        <StatementList rows={statement.rows} />
+        <StatementList rows={statement.rows} options={statement.options} />
       </Stack>
     </Page>
   );

@@ -43,6 +43,7 @@ export const PATCH = handle(async (request: Request) => {
     pointsPerDollarMilli: input.optionalInteger("pointsPerDollarMilli", { min: 0, max: 1_000_000 }),
     cashbackBasisPoints: input.optionalInteger("cashbackBasisPoints", { min: 0, max: 10_000 }),
     pointsGoal: input.optionalInteger("pointsGoal", { min: 0 }),
+    pointsOpeningMilli: input.optionalInteger("pointsOpeningMilli", { min: 0 }),
     manualUsdRateMicros: input.optionalInteger("manualUsdRateMicros", { min: 0 }),
   };
   input.done();

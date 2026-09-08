@@ -37,6 +37,7 @@ import { ParcelamentosScreen } from "./screens/parcelamentos.tsx";
 import { PatrimonioScreen } from "./screens/patrimonio.tsx";
 import { PlanejamentoScreen } from "./screens/planejamento.tsx";
 import { RelatoriosScreen } from "./screens/relatorios.tsx";
+import { AvisosScreen } from "./screens/avisos.tsx";
 import { SaudeScreen } from "./screens/saude.tsx";
 import { TrabalhoScreen } from "./screens/trabalho.tsx";
 import { useLedger } from "./state/ledger.tsx";
@@ -45,6 +46,7 @@ import { elevation, radius, space, type, usePalette } from "./ui/theme.ts";
 
 type Tela =
   | "painel"
+  | "avisos"
   | "saude"
   | "relatorios"
   | "lancamentos"
@@ -86,6 +88,7 @@ const GRUPOS: readonly Grupo[] = [
     label: "Início",
     telas: [
       { id: "painel", label: "Painel" },
+      { id: "avisos", label: "Avisos" },
       { id: "saude", label: "Saúde" },
       { id: "relatorios", label: "Relatórios" },
     ],
@@ -283,6 +286,8 @@ function Conteudo({
   switch (tela) {
     case "painel":
       return <InicioScreen onOpenTransaction={onAbrirLancamento} onAbrirAjustes={() => onIrPara("configuracoes")} />;
+    case "avisos":
+      return <AvisosScreen onVoltar={() => onIrPara("painel")} />;
     case "saude":
       return <SaudeScreen />;
     case "relatorios":

@@ -3,6 +3,17 @@
 /**
  * Regras por app.
  *
+ * **O vínculo entre o listener e o dinheiro é o pacote do app.** Uma
+ * notificação chega dizendo quem a enviou (`com.nu.production`, por exemplo) e
+ * quanto foi; ela não diz de qual conta ou de qual cartão saiu — nenhum banco
+ * põe isso no texto. É esta tabela que completa a informação: para cada app,
+ * qual conta usar quando a compra for débito, qual cartão quando for crédito, e
+ * em que categoria cair por padrão.
+ *
+ * Sem regra, a captura entra na fila sem origem e espera a conferência. Com
+ * regra, ela chega pronta — e é por isso que preencher isto uma vez muda a
+ * experiência de "conferir tudo" para "conferir o que fugiu do padrão".
+ *
  * O padrão é ignorar. Ler notificação de todo app instalado seria invasivo, e
  * a lista de bancos conhecidos já cobre o caso comum sem o usuário configurar
  * nada — estas regras existem para o que ficou de fora.
@@ -23,6 +34,8 @@ export function SourceRules({
 }) {
   const router = useRouter();
   const [criando, setCriando] = useState(false);
+  /** O app cuja ligação está aberta para edição. Um por vez. */
+  const [editando, setEditando] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const cartoes = options.cards.filter((card) => card.kind === "credit");
@@ -56,36 +69,125 @@ export function SourceRules({
       {sources.length ? (
         <ul className="mb-4 border-t border-line">
           {sources.map((fonte) => (
-            <li
-              key={fonte.id}
-              className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-2.5 last:border-0"
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-body text-ink">
-                  {fonte.label ?? fonte.sourceApp}
-                  <Badge tone={fonte.action === "allow" ? "positive" : "neutral"}>
-                    {fonte.action === "allow" ? "lendo" : "ignorando"}
-                  </Badge>
-                </p>
-                <p className="truncate text-caption text-ink-subtle">{fonte.sourceApp}</p>
+            <li key={fonte.id} className="border-b border-line py-2.5 last:border-0">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-body text-ink">
+                    {fonte.label ?? fonte.sourceApp}
+                    <Badge tone={fonte.action === "allow" ? "positive" : "neutral"}>
+                      {fonte.action === "allow" ? "lendo" : "ignorando"}
+                    </Badge>
+                  </p>
+                  <p className="truncate text-caption text-ink-subtle">{fonte.sourceApp}</p>
+                  {/*
+                    A ligação aparece escrita, e não só nos campos do formulário.
+                    Ela é a resposta para "de qual conta esta compra vai sair",
+                    e essa pergunta se faz olhando a lista, antes de abrir nada.
+                  */}
+                  <p className="mt-0.5 truncate text-caption text-ink-muted">
+                    {descreverLigacao(fonte, options)}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditando(editando === fonte.id ? null : fonte.id)}
+                    className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken"
+                  >
+                    {editando === fonte.id ? "Fechar" : "Onde cai"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      salvar({
+                        sourceApp: fonte.sourceApp,
+                        label: fonte.label,
+                        action: fonte.action === "allow" ? "ignore" : "allow",
+                        defaultAccountId: fonte.defaultAccountId,
+                        defaultCardId: fonte.defaultCardId,
+                        defaultCategoryId: fonte.defaultCategoryId,
+                      })
+                    }
+                    className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken"
+                  >
+                    {fonte.action === "allow" ? "Parar de ler" : "Passar a ler"}
+                  </button>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  salvar({
-                    sourceApp: fonte.sourceApp,
-                    label: fonte.label,
-                    action: fonte.action === "allow" ? "ignore" : "allow",
-                    defaultAccountId: fonte.defaultAccountId,
-                    defaultCardId: fonte.defaultCardId,
-                    defaultCategoryId: fonte.defaultCategoryId,
-                  })
-                }
-                className="rounded-md border border-line px-3 py-1.5 text-caption text-ink-muted hover:bg-surface-sunken"
-              >
-                {fonte.action === "allow" ? "Parar de ler" : "Passar a ler"}
-              </button>
+              {editando === fonte.id ? (
+                <form
+                  onSubmit={(evento) => {
+                    evento.preventDefault();
+                    const dados = new FormData(evento.currentTarget);
+                    salvar({
+                      sourceApp: fonte.sourceApp,
+                      label: fonte.label,
+                      action: fonte.action,
+                      defaultCategoryId: dados.get("defaultCategoryId") || null,
+                      defaultAccountId: dados.get("defaultAccountId") || null,
+                      defaultCardId: dados.get("defaultCardId") || null,
+                    });
+                    setEditando(null);
+                  }}
+                  className="mt-3 grid gap-3 rounded-md border border-line bg-surface-sunken p-3 sm:grid-cols-3"
+                >
+                  <Campo rotulo="Conta padrão" dica="Quando a notificação diz débito ou Pix">
+                    <select
+                      name="defaultAccountId"
+                      defaultValue={fonte.defaultAccountId ?? ""}
+                      className={entrada}
+                    >
+                      <option value="">Nenhuma</option>
+                      {options.accounts.map((conta) => (
+                        <option key={conta.id} value={conta.id}>
+                          {conta.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Campo>
+                  <Campo rotulo="Cartão padrão" dica="Quando a notificação diz crédito">
+                    <select
+                      name="defaultCardId"
+                      defaultValue={fonte.defaultCardId ?? ""}
+                      className={entrada}
+                    >
+                      <option value="">Nenhum</option>
+                      {cartoes.map((cartao) => (
+                        <option key={cartao.id} value={cartao.id}>
+                          {cartao.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Campo>
+                  <Campo rotulo="Categoria padrão">
+                    <select
+                      name="defaultCategoryId"
+                      defaultValue={fonte.defaultCategoryId ?? ""}
+                      className={entrada}
+                    >
+                      <option value="">Nenhuma</option>
+                      {options.categories
+                        .filter((categoria) => categoria.kind === "expense")
+                        .map((categoria) => (
+                          <option key={categoria.id} value={categoria.id}>
+                            {categoria.name}
+                          </option>
+                        ))}
+                    </select>
+                  </Campo>
+
+                  <div className="sm:col-span-3">
+                    <button
+                      type="submit"
+                      className="inline-flex h-9 items-center rounded-md bg-accent px-3.5 text-body-sm font-medium text-accent-ink hover:bg-accent-hover"
+                    >
+                      Salvar ligação
+                    </button>
+                  </div>
+                </form>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -182,6 +284,31 @@ export function SourceRules({
       )}
     </div>
   );
+}
+
+/**
+ * A ligação em uma frase.
+ *
+ * "crédito em XP Infinite · débito em Conta corrente · categoria Alimentação"
+ * diz de relance o que três campos de formulário só dizem depois de abertos.
+ */
+function descreverLigacao(
+  fonte: CapturesView["sources"][number],
+  options: CapturesView["options"],
+): string {
+  const cartao = options.cards.find((item) => item.id === fonte.defaultCardId)?.name;
+  const conta = options.accounts.find((item) => item.id === fonte.defaultAccountId)?.name;
+  const categoria = options.categories.find((item) => item.id === fonte.defaultCategoryId)?.name;
+
+  const partes = [
+    cartao ? `crédito em ${cartao}` : null,
+    conta ? `débito em ${conta}` : null,
+    categoria ? `categoria ${categoria}` : null,
+  ].filter(Boolean);
+
+  return partes.length
+    ? partes.join(" · ")
+    : "sem conta nem cartão definidos — a captura entra na fila sem origem";
 }
 
 const entrada =

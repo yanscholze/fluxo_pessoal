@@ -200,7 +200,13 @@ export default async function Relatorios({
                           <span className="ml-1.5 text-caption text-ink-subtle">{percent(item.percent)}</span>
                         </span>
                       </div>
-                      <Meter value={item.amountCents} total={maiorCategoria} tone="accent" size="sm" label={item.name} />
+                      <Meter
+                        value={item.amountCents}
+                        total={maiorCategoria}
+                        color={item.color ?? VIZ[i % VIZ.length]}
+                        size="sm"
+                        label={item.name}
+                      />
                     </li>
                   ))}
                 </ul>

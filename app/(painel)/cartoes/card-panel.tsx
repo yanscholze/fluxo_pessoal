@@ -68,6 +68,7 @@ export function CardPanel({
           pointsPerDollarMilli: card.pointsPerDollarMilli,
           cashbackBasisPoints: card.cashbackBasisPoints,
           pointsGoal: card.pointsGoal,
+    pointsOpeningMilli: card.pointsOpeningMilli,
         }}
       />
 

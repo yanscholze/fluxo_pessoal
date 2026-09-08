@@ -1,4 +1,4 @@
-import type { StatementRow } from "../../../server/services/statement.ts";
+import type { Statement, StatementRow } from "../../../server/services/statement.ts";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { dateShort, money } from "../../ui/format.ts";
 import {
@@ -31,7 +31,13 @@ const NATUREZA: Record<StatementRow["kind"], { label: string; icon: LucideIcon; 
  * descrição, a data e o valor nunca somem: sem uma delas a linha deixa de ser
  * um lançamento.
  */
-export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
+export function StatementList({
+  rows,
+  options,
+}: {
+  rows: readonly StatementRow[];
+  options: Statement["options"];
+}) {
   if (!rows.length) {
     return (
       <Panel>
@@ -154,7 +160,7 @@ export function StatementList({ rows }: { rows: readonly StatementRow[] }) {
               {/* Corrigir e apagar ficam na linha, e a coluna não some no
                   celular: é justamente lá que o valor é digitado com pressa. */}
               <Td align="right">
-                <RowActions row={row} />
+                <RowActions row={row} options={options} />
               </Td>
             </Tr>
           );

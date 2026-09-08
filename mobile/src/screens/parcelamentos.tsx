@@ -10,7 +10,8 @@
  * sabendo que devo tanto, quanto disso cai em cada mês que vem.
  */
 
-import { View } from "react-native";
+import { useState } from "react";
+import { Pressable, View } from "react-native";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { fetchInstallments } from "../net/views.ts";
@@ -24,6 +25,15 @@ import { space, usePalette } from "../ui/theme.ts";
 export function ParcelamentosScreen({ onVoltar }: { onVoltar?: () => void }) {
   const palette = usePalette();
   const remoto = useRemoto(fetchInstallments);
+  /**
+   * Quitado fica escondido por padrão.
+   *
+   * A pergunta desta tela é "quanto ainda falta". Um plano já pago não responde
+   * a ela e, acumulado ao longo do ano, empurra os que importam para fora da
+   * primeira tela. Fica atrás de um toque, não apagado — quem quer conferir o
+   * que terminou também tem para onde ir.
+   */
+  const [mostrarQuitados, setMostrarQuitados] = useState(false);
 
   return (
     <TelaRemota
@@ -102,18 +112,34 @@ export function ParcelamentosScreen({ onVoltar }: { onVoltar?: () => void }) {
 
           {dados.settled.length > 0 ? (
             <Card>
-              <Label style={{ marginBottom: space.xs }}>Quitados ({dados.settled.length})</Label>
-              {dados.settled.slice(0, 8).map((plano, indice) => (
-                <Row
-                  key={plano.planId}
-                  style={indice === Math.min(7, dados.settled.length - 1) ? { borderBottomWidth: 0 } : undefined}
-                >
-                  <Body muted numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
-                    {plano.label}
-                  </Body>
-                  <Small tone="positive">{money(cents(plano.totalAmount))}</Small>
-                </Row>
-              ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: mostrarQuitados }}
+                onPress={() => setMostrarQuitados((atual) => !atual)}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <Label>Quitados ({dados.settled.length})</Label>
+                <Small tone="muted">{mostrarQuitados ? "ocultar" : "mostrar"}</Small>
+              </Pressable>
+
+              {mostrarQuitados
+                ? dados.settled.map((plano, indice) => (
+                    <Row
+                      key={plano.planId}
+                      style={indice === dados.settled.length - 1 ? { borderBottomWidth: 0 } : undefined}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Body muted numberOfLines={1}>
+                          {plano.label}
+                        </Body>
+                        <Small>
+                          {plano.cardName} · {plano.totalCount} parcela{plano.totalCount === 1 ? "" : "s"}
+                        </Small>
+                      </View>
+                      <Small tone="positive">{money(cents(plano.totalAmount))}</Small>
+                    </Row>
+                  ))
+                : null}
             </Card>
           ) : null}
         </>

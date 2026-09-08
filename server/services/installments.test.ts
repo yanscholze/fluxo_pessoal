@@ -65,6 +65,27 @@ describe("compra parcelada", () => {
     assert.equal(compra.ids.length, 3, "uma transação por parcela");
   });
 
+  it("plano que perdeu todas as parcelas some da tela", async () => {
+    /*
+     * O cabeçalho do plano sobrevive ao apagamento das compras. Sem este
+     * filtro a tela mostrava dezenas de "quitados" de R$ 0,00 — restos de uma
+     * importação desfeita — e o que ainda está sendo pago ficava embaixo
+     * deles.
+     */
+    const alvo = await ambiente();
+    const compra = await comprarParcelado(alvo.userId, alvo.cartaoId, alvo.categoriaId, 30_000, 3);
+
+    const { removeTransaction } = await import("./transactions.ts");
+    for (const id of compra.ids) await removeTransaction(alvo.userId, id);
+
+    const { buildInstallmentsView } = await import("./installments.ts");
+    const view = await buildInstallmentsView(alvo.userId, AGORA);
+
+    assert.equal(view.active.length, 0);
+    assert.equal(view.settled.length, 0, "plano vazio não é plano quitado");
+    assert.equal(view.totals.totalCents, 0, "e não infla o total");
+  });
+
   it("cada parcela cai numa competência consecutiva", async () => {
     const alvo = await ambiente();
     await comprarParcelado(alvo.userId, alvo.cartaoId, alvo.categoriaId, 30_000, 3);

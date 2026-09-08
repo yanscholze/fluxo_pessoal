@@ -23,6 +23,19 @@ export type RewardConfig = {
   /** Cashback em pontos-base: 150 = 1,5%. */
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  /**
+   * Pontos que o cartão já tinha antes do Fluxo começar a acompanhar, em
+   * milésimos.
+   *
+   * Ninguém abre um app de finanças no mesmo dia em que abre o cartão. Sem
+   * este campo o saldo mostrado seria só o que o Fluxo viu, e ficaria abaixo
+   * do saldo do emissor para sempre — um número que nunca fecha é um número em
+   * que não se confia.
+   *
+   * Entra no saldo fechado, e não no pendente: pontos anteriores já estão
+   * disponíveis para resgate; não há fatura aberta que os segure.
+   */
+  readonly pointsOpeningMilli: number;
   /** Cotação de contingência do cartão, em micros: 5_430_000 = R$ 5,43. */
   readonly manualUsdRateMicros: number;
 };
@@ -90,7 +103,7 @@ export type Redemption = {
 };
 
 export type RewardBalance = {
-  /** Pontos acumulados em faturas já fechadas, menos resgates. */
+  /** Saldo anterior + pontos de faturas já fechadas, menos resgates. */
   readonly pointsMilli: number;
   readonly cashbackCents: Cents;
   /** O que ainda está numa fatura aberta e por isso não pode ser resgatado. */
@@ -138,7 +151,7 @@ export function rewardBalance(
     .filter((item) => item.kind === "cashback")
     .reduce((soma, item) => soma + item.amount, 0);
 
-  const pontos = Math.max(0, pontosFechados - pontosResgatados);
+  const pontos = Math.max(0, config.pointsOpeningMilli + pontosFechados - pontosResgatados);
 
   return {
     pointsMilli: pontos,

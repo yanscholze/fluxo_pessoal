@@ -657,9 +657,33 @@ async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela)
   // uma fatura que ainda não tem nada dentro. Por isso os pagamentos vão por
   // último, e entre si em ordem de data — cada um confere o saldo da conta na
   // data em que aconteceu, e esse saldo depende dos anteriores.
-  const primeiro = [...resultado.entries.filter((e) => e.kind !== "invoice_payment"), ...futuras].sort((a, b) =>
-    a.occurredOn.localeCompare(b.occurredOn),
-  );
+  /*
+   * As parcelas viram plano; o resto vira lançamento solto.
+   *
+   * A primeira versão gravava cada parcela como uma despesa independente. A
+   * fatura fechava certo, mas a tela de parcelamentos nascia vazia e não havia
+   * como saber quanto faltava de nada — a informação de "parcela 4 de 6"
+   * simplesmente não existia no banco.
+   *
+   * O plano é montado com as parcelas de verdade: as que a fatura cobrou, com
+   * o valor e a competência que o emissor usou, mais as projetadas à frente.
+   * O total é a soma delas, não o valor original da compra, porque parcela
+   * anterior ao período exportado nunca chegou aqui.
+   */
+  const planos = new Map();
+  const soltos = [];
+
+  for (const entrada of [...resultado.entries.filter((e) => e.kind !== "invoice_payment"), ...futuras]) {
+    if (entrada.kind === "expense" && entrada.origin.kind === "card" && entrada.installment && entrada.externalId) {
+      const chave = `${entrada.externalId}|${entrada.installment.total}`;
+      if (!planos.has(chave)) planos.set(chave, []);
+      planos.get(chave).push(entrada);
+    } else {
+      soltos.push(entrada);
+    }
+  }
+
+  const primeiro = soltos.sort((a, b) => a.occurredOn.localeCompare(b.occurredOn));
 
   // O lucro entra primeiro, na data de abertura da janela.
   //
@@ -710,6 +734,33 @@ async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela)
       },
     });
     criados += 1;
+  }
+
+  for (const [, parcelas] of planos) {
+    parcelas.sort((a, b) => a.installment.current - b.installment.current);
+    const primeira = parcelas[0];
+    const nomeCategoria = categoriaDe("expense", primeira.description);
+    const categoryId = nomeCategoria ? await idDe.categorias("expense", nomeCategoria) : null;
+
+    await api("/api/v1/installments/plan", {
+      method: "POST",
+      body: {
+        cardId: idDe.cartao,
+        description: primeira.description.slice(0, 160),
+        ...(categoryId ? { categoryId } : {}),
+        totalAmount: dinheiro(parcelas.reduce((soma, p) => soma + p.amount, 0)),
+        installmentCount: primeira.installment.total,
+        purchaseDate: primeira.occurredOn,
+        parcels: parcelas.map((p) => ({
+          number: p.installment.current,
+          amountCents: p.amount,
+          occurredOn: p.occurredOn,
+          competence: p.competence,
+          state: p.planejada ? "planned" : "confirmed",
+        })),
+      },
+    });
+    criados += parcelas.length;
   }
 
   for (const pagamento of alocados) {

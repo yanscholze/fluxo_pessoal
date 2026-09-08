@@ -68,6 +68,7 @@ export type CardToEdit = {
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  readonly pointsOpeningMilli: number;
 };
 
 function reais(centavos: number): string {
@@ -135,6 +136,7 @@ export function NewCard({
           ? {
               pointsPerDollarMilli: Math.round(Number(dados.get("pontosPorDolar") ?? 0) * 1000),
               pointsGoal: Number(dados.get("metaDePontos") ?? 0) || null,
+              pointsOpeningMilli: Math.round(Number(dados.get("saldoDePontos") ?? 0) * 1000),
             }
           : {}),
         ...(recompensa === "cashback" || recompensa === "both"
@@ -398,6 +400,21 @@ export function NewCard({
                       min={0}
                       defaultValue={card?.pointsGoal || ""}
                       placeholder="40000"
+                      className="tabular"
+                    />
+                  </Field>
+                  <Field
+                    label="Saldo anterior"
+                    htmlFor="card-points-opening"
+                    hint="Pontos que o cartão já tinha antes do Fluxo"
+                  >
+                    <Input
+                      id="card-points-opening"
+                      name="saldoDePontos"
+                      type="number"
+                      min={0}
+                      defaultValue={card?.pointsOpeningMilli ? card.pointsOpeningMilli / 1000 : ""}
+                      placeholder="0"
                       className="tabular"
                     />
                   </Field>

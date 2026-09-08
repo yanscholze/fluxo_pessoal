@@ -43,8 +43,9 @@ import {
   projects,
   proposals,
   timeEntries,
+  transactions,
 } from "../db/schema/index.ts";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   type PaymentRow,
   type ProjectRow,
@@ -668,6 +669,131 @@ export async function receivePayment(
   });
 
   return { transactionId: ids[0] };
+}
+
+/**
+ * Dá baixa na parcela **apontando para uma receita que já existe**.
+ *
+ * `receivePayment` cria o lançamento; este não. A diferença importa quando o
+ * dinheiro entrou antes de o Fluxo saber do projeto — pagamento importado do
+ * extrato, ou registrado à mão na pressa. Ali a receita já está no razão, e
+ * criar outra dobraria a renda do mês, o patrimônio e o livre para gastar.
+ *
+ * O valor da baixa é o do lançamento, não o da parcela: quem manda sobre
+ * quanto entrou é o extrato.
+ */
+export async function linkPaymentToTransaction(
+  userId: string,
+  paymentId: string,
+  transactionId: string,
+  now: Date = new Date(),
+): Promise<{ transactionId: string; amountCents: number }> {
+  const database = getDatabase();
+
+  const [parcela] = await database
+    .select()
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.id, paymentId)))
+    .limit(1);
+  if (!parcela) throw notFound("Parcela", paymentId);
+  if (parcela.receivedOn) throw conflict("Esta parcela já foi recebida");
+
+  const [lancamento] = await database
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!lancamento) throw notFound("Lançamento", transactionId);
+
+  if (lancamento.kind !== "income") {
+    throw validationError("Só uma receita pode quitar uma parcela", [
+      { path: "transactionId", message: "O lançamento escolhido não é uma receita" },
+    ]);
+  }
+
+  // Uma receita quita uma parcela só. Sem esta checagem, o mesmo depósito
+  // daria baixa em duas parcelas e o projeto pareceria pago em dobro.
+  const [jaUsado] = await database
+    .select({ id: projectPayments.id })
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.transactionId, transactionId)))
+    .limit(1);
+  if (jaUsado) throw conflict("Este lançamento já quita outra parcela");
+
+  await database
+    .update(projectPayments)
+    .set({
+      receivedOn: lancamento.occurredOn as LocalDate,
+      receivedAmountCents:
+        lancamento.amountCents === parcela.amountCents ? null : lancamento.amountCents,
+      transactionId,
+      updatedAt: now.toISOString(),
+    })
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.id, paymentId)));
+
+  await recordEvent({
+    id: newId(now.getTime()),
+    userId,
+    projectId: parcela.projectId,
+    kind: "payment",
+    summary: `Recebido: ${parcela.description}`,
+    occurredAt: now.toISOString(),
+  });
+
+  return { transactionId, amountCents: lancamento.amountCents };
+}
+
+/**
+ * As receitas que ainda não quitaram parcela nenhuma.
+ *
+ * É a lista que a tela oferece na hora de vincular. Filtrar aqui, e não na
+ * tela, é o que impede oferecer um lançamento já usado — e o erro que viria
+ * depois, no meio do gesto.
+ */
+export async function unlinkedIncome(
+  userId: string,
+  limite = 60,
+): Promise<
+  readonly {
+    readonly id: string;
+    readonly description: string;
+    readonly occurredOn: string;
+    readonly amountCents: number;
+  }[]
+> {
+  const database = getDatabase();
+
+  const usados = await database
+    .select({ transactionId: projectPayments.transactionId })
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), isNotNull(projectPayments.transactionId)));
+  const jaVinculados = new Set(usados.map((linha) => linha.transactionId).filter(Boolean) as string[]);
+
+  const linhas = await database
+    .select({
+      id: transactions.id,
+      description: transactions.description,
+      occurredOn: transactions.occurredOn,
+      amountCents: transactions.amountCents,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.kind, "income"),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .orderBy(desc(transactions.occurredOn))
+    .limit(limite + jaVinculados.size);
+
+  return linhas.filter((linha) => !jaVinculados.has(linha.id)).slice(0, limite);
 }
 
 // ---------------------------------------------------------------------------

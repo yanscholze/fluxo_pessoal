@@ -323,6 +323,7 @@ export type CardInput = {
   readonly pointsPerDollarMilli?: number | null;
   readonly cashbackBasisPoints?: number | null;
   readonly pointsGoal?: number | null;
+  readonly pointsOpeningMilli?: number | null;
   readonly manualUsdRateMicros?: number | null;
 };
 
@@ -381,6 +382,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     pointsPerDollarMilli: input.pointsPerDollarMilli ?? 0,
     cashbackBasisPoints: input.cashbackBasisPoints ?? 0,
     pointsGoal: input.pointsGoal ?? 0,
+    pointsOpeningMilli: input.pointsOpeningMilli ?? 0,
     manualUsdRateMicros: input.manualUsdRateMicros ?? 0,
     color: input.color ?? "#6b7280",
     isPrimary,
@@ -406,6 +408,7 @@ export type CardPatch = {
   readonly pointsPerDollarMilli?: number | null;
   readonly cashbackBasisPoints?: number | null;
   readonly pointsGoal?: number | null;
+  readonly pointsOpeningMilli?: number | null;
   readonly manualUsdRateMicros?: number | null;
 };
 
@@ -479,6 +482,7 @@ export async function updateCard(
   if (patch.pointsPerDollarMilli != null) campos.pointsPerDollarMilli = patch.pointsPerDollarMilli;
   if (patch.cashbackBasisPoints != null) campos.cashbackBasisPoints = patch.cashbackBasisPoints;
   if (patch.pointsGoal != null) campos.pointsGoal = patch.pointsGoal;
+  if (patch.pointsOpeningMilli != null) campos.pointsOpeningMilli = patch.pointsOpeningMilli;
   if (patch.manualUsdRateMicros != null) campos.manualUsdRateMicros = patch.manualUsdRateMicros;
 
   await database

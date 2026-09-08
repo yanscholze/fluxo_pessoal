@@ -110,6 +110,8 @@ export const cards = sqliteTable(
     pointsPerDollarMilli: integer("points_per_dollar_milli").notNull().default(0),
     cashbackBasisPoints: integer("cashback_basis_points").notNull().default(0),
     pointsGoal: integer("points_goal").notNull().default(0),
+    /** Pontos que o cartão já tinha antes do Fluxo, em milésimos. */
+    pointsOpeningMilli: integer("points_opening_milli").notNull().default(0),
     /** Cotação de contingência quando a PTAX não está disponível, em micros. */
     manualUsdRateMicros: integer("manual_usd_rate_micros").notNull().default(0),
 

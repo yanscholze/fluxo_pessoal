@@ -23,6 +23,16 @@ export type StatementRow = {
   readonly competence: Competence;
   readonly categoryName: string | null;
   readonly categoryColor: string | null;
+  /*
+   * Os identificadores acompanham os nomes porque a linha não é só leitura:
+   * quem corrige um lançamento precisa ver a categoria e a origem **atuais**
+   * já escolhidas no formulário. Mandar só o nome obrigaria a tela a procurar
+   * de volta pelo texto — e dois cartões podem se chamar quase igual.
+   */
+  readonly categoryId: string | null;
+  readonly originId: string;
+  readonly destinationId: string | null;
+  readonly notes: string | null;
   /** Onde o dinheiro saiu ou entrou, já com nome legível. */
   readonly originName: string;
   readonly originKind: "account" | "card";
@@ -93,6 +103,12 @@ export async function buildStatement(
       competence: transaction.competence,
       categoryName: category?.name ?? null,
       categoryColor: category?.color ?? null,
+      categoryId: transaction.categoryId,
+      originId:
+        transaction.origin.kind === "account" ? transaction.origin.accountId : transaction.origin.cardId,
+      destinationId:
+        transaction.destination?.kind === "account" ? transaction.destination.accountId : null,
+      notes: transaction.notes,
       originName: origin,
       originKind: transaction.origin.kind,
       destinationName: destination,

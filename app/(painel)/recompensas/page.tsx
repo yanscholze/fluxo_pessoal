@@ -85,6 +85,17 @@ export default async function Recompensas() {
                           + {pontos(cartao.balance.pendingPointsMilli)} na fatura aberta, ainda não creditados
                         </p>
                       ) : null}
+                      {/*
+                        O saldo anterior aparece nomeado, e não diluído no total.
+                        É o único pedaço do número que o Fluxo não apurou — quem
+                        confere contra o extrato do emissor precisa saber quanto
+                        veio de fora.
+                      */}
+                      {cartao.config.pointsOpeningMilli > 0 ? (
+                        <p className="mt-1 text-caption text-ink-subtle">
+                          inclui {pontos(cartao.config.pointsOpeningMilli)} anteriores ao Fluxo
+                        </p>
+                      ) : null}
                       {cartao.config.pointsGoal > 0 ? (
                         <div className="mt-3">
                           <Meter

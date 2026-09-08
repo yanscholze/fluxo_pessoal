@@ -62,6 +62,8 @@ export type CardView = {
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  /** Pontos anteriores ao Fluxo, em milésimos. */
+  readonly pointsOpeningMilli: number;
   readonly manualUsdRateMicros: number;
   readonly usedLimitCents: number;
   readonly availableLimitCents: number;
@@ -190,6 +192,7 @@ function toCardView(
     pointsPerDollarMilli: card.pointsPerDollarMilli,
     cashbackBasisPoints: card.cashbackBasisPoints,
     pointsGoal: card.pointsGoal,
+    pointsOpeningMilli: card.pointsOpeningMilli,
     manualUsdRateMicros: card.manualUsdRateMicros,
     usedLimitCents: usado,
     availableLimitCents:
