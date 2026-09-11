@@ -15,8 +15,8 @@ import { accountBalance, cardDebtAsOf } from "../../core/domain/ledger/balance.t
 import { computeFinancialPosition } from "../../core/domain/position/financial-position.ts";
 import { type Competence, competenceOf, series, shift } from "../../core/time/competence.ts";
 import { type LocalDate, lastDayOfMonth, todayIn } from "../../core/time/local-date.ts";
-import { listAccounts, listCards } from "../repositories/catalog.ts";
-import { loadLedger } from "../repositories/ledger.ts";
+import { freeToSpendExclusions, listAccounts, listCards } from "../repositories/catalog.ts";
+import { categoriesFrom, loadLedger, transactionIndex } from "../repositories/ledger.ts";
 
 export type HoldingView = {
   readonly id: string;
@@ -66,13 +66,37 @@ const HISTORY_MONTHS = 12;
 
 export async function buildNetWorthView(userId: string, now: Date = new Date()): Promise<NetWorthView> {
   const today = todayIn(now);
-  const [accounts, cards, entries] = await Promise.all([
+  const [accounts, cards, entries, excludedCategoryIds, index] = await Promise.all([
     listAccounts(userId),
     listCards(userId),
     loadLedger(userId),
+    freeToSpendExclusions(userId),
+    transactionIndex(userId),
   ]);
+  const categoryByTransaction = categoriesFrom(index);
 
-  const position = computeFinancialPosition({ accounts, cards, entries, today });
+  /*
+   * A mesma política do painel.
+   *
+   * Empréstimo de cartão é dívida com o emissor e valor a receber de quem
+   * pediu: os dois se anulam, e o patrimônio não muda por emprestar o cartão.
+   * Sem passar a política aqui, esta tela mostraria um patrimônio menor que o
+   * do painel — o mesmo dinheiro, dois números, e nenhuma forma de saber qual
+   * está certo.
+   */
+  const excluida = (entry: { transactionId: string }) => {
+    const categoryId = categoryByTransaction.get(entry.transactionId) ?? null;
+    return categoryId !== null && excludedCategoryIds.has(categoryId);
+  };
+
+  const position = computeFinancialPosition({
+    accounts,
+    cards,
+    entries,
+    today,
+    categoryByTransaction,
+    policy: { excludedCategoryIds },
+  });
 
   const ativas = accounts.filter((account) => account.archivedAt === null && account.includeInTotals);
   const emReais = ativas.filter((account) => account.currency === "BRL");
@@ -107,12 +131,12 @@ export async function buildNetWorthView(userId: string, now: Date = new Date()):
       name: card.name,
       kind: "card" as const,
       // Mesmo critério do total: dívida realizada, não parcela futura.
-      amountCents: cardDebtAsOf(entries, card.id, today),
+      amountCents: cardDebtAsOf(entries, card.id, today, excluida),
     }))
     .filter((passivo) => passivo.amountCents > 0)
     .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);
 
-  const history = historico(accounts, cards, entries, today);
+  const history = historico(accounts, cards, entries, today, excluida);
   const primeiro = history[0]?.netCents ?? 0;
   const ultimo = history[history.length - 1]?.netCents ?? position.netWorth;
 
@@ -146,6 +170,8 @@ function historico(
   cards: Awaited<ReturnType<typeof listCards>>,
   entries: Awaited<ReturnType<typeof loadLedger>>,
   today: LocalDate,
+  /** O mesmo recorte do total: sem ele o gráfico contradiz o número acima. */
+  excluida: (entry: { transactionId: string }) => boolean,
 ): NetWorthPoint[] {
   const competencias = series(shift(competenceOf(today), -(HISTORY_MONTHS - 1)), HISTORY_MONTHS);
   const ativas = accounts.filter((account) => account.includeInTotals && account.currency === "BRL");
@@ -163,7 +189,7 @@ function historico(
 
     let liabilitiesCents = 0;
     for (const card of credito) {
-      liabilitiesCents += cardDebtAsOf(entries, card.id, corte);
+      liabilitiesCents += cardDebtAsOf(entries, card.id, corte, excluida);
     }
 
     return { competence, assetsCents, liabilitiesCents, netCents: assetsCents - liabilitiesCents };

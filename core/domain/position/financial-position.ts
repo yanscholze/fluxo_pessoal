@@ -336,10 +336,23 @@ export function computeFinancialPosition(input: PositionInput): FinancialPositio
    * É o mesmo critério que a série histórica usa, o que faz o último ponto do
    * gráfico finalmente falar a mesma língua dos anteriores.
    */
+  /*
+   * O empréstimo de cartão sai do passivo, pela mesma razão que sai da folga.
+   *
+   * Ele é dívida com o emissor e valor a receber de quem pediu, na mesma
+   * quantia. Somar só a metade devida faria o patrimônio cair a cada favor —
+   * e o dono via o próprio patrimônio piorar por comprar para os outros.
+   */
+  const politica = input.policy ?? NO_EXCLUSIONS;
+  const excluida = (entry: LedgerEntry) => {
+    const categoryId = input.categoryByTransaction?.get(entry.transactionId) ?? null;
+    return categoryId !== null && politica.excludedCategoryIds.has(categoryId);
+  };
+
   const totalDebt = sum(
     input.cards
       .filter((card) => card.kind === "credit")
-      .map((card) => cardDebtAsOf(input.entries, card.id, input.today)),
+      .map((card) => cardDebtAsOf(input.entries, card.id, input.today, excluida)),
   );
 
   return {

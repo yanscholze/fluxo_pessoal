@@ -201,16 +201,32 @@ export function cardDebtAsOf(
   entries: readonly LedgerEntry[],
   cardId: string,
   asOf: LocalDate,
+  /**
+   * Cobrança que não é dívida do dono.
+   *
+   * Compra feita no cartão dele para outra pessoa é dívida com o emissor **e**
+   * valor a receber de quem pediu, na mesma quantia: as duas se anulam, e o
+   * patrimônio não muda por emprestar o cartão. Somar só a metade devida faria
+   * o patrimônio afundar a cada favor prestado.
+   *
+   * O predicado entra aqui, e não em cada chamador, porque três telas
+   * respondem "quanto devo" — o patrimônio, a lista de passivos e a série
+   * histórica. Cada uma com a própria conta seria três respostas para a mesma
+   * pergunta, e nenhuma forma de saber qual mente.
+   *
+   * O pagamento da fatura continua contando: só a cobrança é descartada.
+   * Descontar os dois lados deixaria a dívida do dono maior do que é.
+   */
+  excluded?: (entry: LedgerEntry) => boolean,
 ): Cents {
-  return clampToZero(
-    negate(
-      balance(entries, {
-        party: { kind: "card", cardId },
-        states: CONFIRMED,
-        upTo: asOf,
-      }),
-    ),
-  );
+  const filter = { party: { kind: "card", cardId } as const, states: CONFIRMED, upTo: asOf };
+  let total = 0;
+  for (const entry of entries) {
+    if (!matches(entry, filter)) continue;
+    if (excluded && entry.amount < 0 && excluded(entry)) continue;
+    total += entry.amount;
+  }
+  return clampToZero(negate(total as Cents));
 }
 
 /**
