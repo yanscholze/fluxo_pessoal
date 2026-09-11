@@ -554,4 +554,120 @@ describe("dívida do cartão numa data passada", () => {
     assert.equal(cardDebtAsOf(entries, CARTAO, localDate("2026-09-19")), 20000, "véspera do pagamento");
     assert.equal(cardDebtAsOf(entries, CARTAO, localDate("2026-09-20")), 0, "no dia do pagamento");
   });
+
+  it("cobrança emprestada sai da dívida, mas só o que ainda está em aberto", () => {
+    /*
+     * O erro que este teste tranca, e que eu cometi.
+     *
+     * A primeira versão subtraía **toda** cobrança excluída do saldo líquido do
+     * cartão. Numa competência já quitada a cobrança e o pagamento se anularam
+     * dentro desse saldo, então descontar de novo tirava duas vezes: com
+     * faturas pagas no histórico, a dívida de um cartão que devia cinco mil
+     * reais zerava, e o patrimônio subia sozinho.
+     *
+     * Aqui agosto está pago e setembro está aberto. O empréstimo de agosto não
+     * pode descontar nada; o de setembro desconta.
+     */
+    const emprestada = new Set(["emp-agosto", "emp-setembro"]);
+    const excluida = (entry: { transactionId: string }) => emprestada.has(entry.transactionId);
+
+    const entries = [
+      // Agosto: R$ 300 de consumo + R$ 200 emprestado, fatura paga por inteiro.
+      ...razao(
+        lancamento({
+          id: "consumo-agosto",
+          kind: "expense",
+          amount: cents(30000),
+          origin: cardParty(CARTAO),
+          occurredOn: localDate("2026-08-05"),
+          competence: competence("2026-08"),
+        }),
+      ),
+      ...razao(
+        lancamento({
+          id: "emp-agosto",
+          kind: "expense",
+          amount: cents(20000),
+          origin: cardParty(CARTAO),
+          occurredOn: localDate("2026-08-06"),
+          competence: competence("2026-08"),
+        }),
+      ),
+      ...razao(
+        lancamento({
+          id: "pagamento-agosto",
+          kind: "invoice_payment",
+          amount: cents(50000),
+          origin: accountParty(CONTA),
+          destination: cardParty(CARTAO),
+          occurredOn: localDate("2026-08-20"),
+          competence: competence("2026-08"),
+        }),
+      ),
+      // Setembro: R$ 400 de consumo + R$ 600 emprestado, nada pago.
+      ...razao(
+        lancamento({
+          id: "consumo-setembro",
+          kind: "expense",
+          amount: cents(40000),
+          origin: cardParty(CARTAO),
+          occurredOn: localDate("2026-09-05"),
+          competence: competence("2026-09"),
+        }),
+      ),
+      ...razao(
+        lancamento({
+          id: "emp-setembro",
+          kind: "expense",
+          amount: cents(60000),
+          origin: cardParty(CARTAO),
+          occurredOn: localDate("2026-09-06"),
+          competence: competence("2026-09"),
+        }),
+      ),
+    ];
+
+    const hoje = localDate("2026-09-10");
+
+    assert.equal(cardDebtAsOf(entries, CARTAO, hoje), 100000, "sem recorte, deve os mil de setembro");
+    assert.equal(
+      cardDebtAsOf(entries, CARTAO, hoje, excluida),
+      40000,
+      "só os R$ 400 de consumo de setembro são dívida dele",
+    );
+  });
+
+  it("cobrança emprestada nunca desconta mais do que a fatura deve", () => {
+    // Fatura paga pela metade: o desconto para no que falta, senão a dívida
+    // ficaria negativa e o patrimônio inflaria.
+    const excluida = (entry: { transactionId: string }) => entry.transactionId === "emprestada";
+
+    const entries = [
+      ...razao(
+        lancamento({
+          id: "emprestada",
+          kind: "expense",
+          amount: cents(100000),
+          origin: cardParty(CARTAO),
+          occurredOn: localDate("2026-09-05"),
+          competence: competence("2026-09"),
+        }),
+      ),
+      ...razao(
+        lancamento({
+          id: "pagamento-parcial",
+          kind: "invoice_payment",
+          amount: cents(70000),
+          origin: accountParty(CONTA),
+          destination: cardParty(CARTAO),
+          occurredOn: localDate("2026-09-08"),
+          competence: competence("2026-09"),
+        }),
+      ),
+    ];
+
+    const hoje = localDate("2026-09-10");
+    assert.equal(cardDebtAsOf(entries, CARTAO, hoje), 30000);
+    assert.equal(cardDebtAsOf(entries, CARTAO, hoje, excluida), 0, "nunca abaixo de zero");
+  });
 });

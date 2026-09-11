@@ -213,20 +213,54 @@ export function cardDebtAsOf(
    * respondem "quanto devo" — o patrimônio, a lista de passivos e a série
    * histórica. Cada uma com a própria conta seria três respostas para a mesma
    * pergunta, e nenhuma forma de saber qual mente.
-   *
-   * O pagamento da fatura continua contando: só a cobrança é descartada.
-   * Descontar os dois lados deixaria a dívida do dono maior do que é.
    */
   excluded?: (entry: LedgerEntry) => boolean,
 ): Cents {
-  const filter = { party: { kind: "card", cardId } as const, states: CONFIRMED, upTo: asOf };
-  let total = 0;
+  const bruto = clampToZero(
+    negate(
+      balance(entries, {
+        party: { kind: "card", cardId },
+        states: CONFIRMED,
+        upTo: asOf,
+      }),
+    ),
+  );
+
+  if (!excluded || bruto === 0) return bruto;
+
+  /*
+   * O desconto é limitado ao que **ainda está em aberto**, competência por
+   * competência.
+   *
+   * A tentação é subtrair toda cobrança excluída do saldo líquido, e ela está
+   * errada: numa competência já quitada a cobrança e o pagamento se anularam
+   * dentro do próprio saldo. Descontar de novo tiraria duas vezes — e, com
+   * nove faturas pagas no histórico, isso zerava a dívida inteira de um cartão
+   * que devia cinco mil reais.
+   *
+   * Por competência, o teto é o que falta pagar nela. Fatura quitada tem teto
+   * zero e não desconta nada.
+   */
+  const excluidoPorCompetencia = new Map<Competence, number>();
   for (const entry of entries) {
-    if (!matches(entry, filter)) continue;
-    if (excluded && entry.amount < 0 && excluded(entry)) continue;
-    total += entry.amount;
+    if (entry.party.kind !== "card" || entry.party.cardId !== cardId) continue;
+    if (entry.state !== "confirmed") continue;
+    if (entry.effectiveOn > asOf) continue;
+    if (entry.amount >= 0) continue;
+    if (!excluded(entry)) continue;
+    excluidoPorCompetencia.set(
+      entry.competence,
+      (excluidoPorCompetencia.get(entry.competence) ?? 0) - entry.amount,
+    );
   }
-  return clampToZero(negate(total as Cents));
+
+  let desconto = 0;
+  for (const [competence, excluido] of excluidoPorCompetencia) {
+    const { outstanding } = invoiceTotals(entries, cardId, competence);
+    desconto += Math.min(excluido, Math.max(0, outstanding));
+  }
+
+  return clampToZero((bruto - desconto) as Cents);
 }
 
 /**
