@@ -51,6 +51,13 @@ export function RecurrenceActions({
     recurrence.cardId ? `cartao:${recurrence.cardId}` : `conta:${recurrence.accountId ?? ""}`,
   );
   const [categoria, setCategoria] = useState(recurrence.categoryId ?? "");
+  /*
+   * O modo de valor é o campo mais fácil de errar no cadastro, e o mais caro:
+   * `per_business_day` multiplica o valor pelos dias úteis do mês. Um seguro de
+   * R$ 91,50 cadastrado assim projeta R$ 1.921,50 e derruba a conta de quanto
+   * sobra — e até agora ele era imutável.
+   */
+  const [modoDoValor, setModoDoValor] = useState(recurrence.amountMode);
 
   const categoriasVisiveis = options.categories.filter((item) =>
     recurrence.kind === "income" ? item.kind === "income" : item.kind === "expense",
@@ -88,6 +95,7 @@ export function RecurrenceActions({
       amount: valor,
       scheduleDay: Number(dia) || recurrence.scheduleDay,
       interval: intervalo,
+      amountMode: modoDoValor,
       ...(tipo === "cartao" ? { cardId: id } : { accountId: id }),
       categoryId: categoria || null,
     });
@@ -179,6 +187,25 @@ export function RecurrenceActions({
             </Field>
           </div>
 
+          <Field
+            label="Como o valor é calculado"
+            htmlFor={`rec-modo-${recurrence.id}`}
+            hint={
+              modoDoValor === "fixed"
+                ? "O valor acima, igual todo mês."
+                : "O valor acima multiplicado pelos dias úteis do mês — é como funciona vale-alimentação."
+            }
+          >
+            <Select
+              id={`rec-modo-${recurrence.id}`}
+              value={modoDoValor}
+              onChange={(evento) => setModoDoValor(evento.target.value as typeof modoDoValor)}
+            >
+              <option value="fixed">Valor fixo</option>
+              <option value="per_business_day">Valor por dia útil</option>
+            </Select>
+          </Field>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Sai de" htmlFor={`rec-origem-${recurrence.id}`}>
               <Select
@@ -217,11 +244,12 @@ export function RecurrenceActions({
             </Field>
           </div>
 
-          {recurrence.amountMode !== "fixed" ? (
+          {recurrence.amountMode !== "fixed" && modoDoValor !== "fixed" ? (
             <Notice tone="caution">
-              Esta regra usa <strong>valor por dia útil</strong>: o valor acima é multiplicado pelos
-              dias úteis do mês. Para um valor fixo, apague e cadastre de novo — a próxima ocorrência
-              hoje seria {money(recurrence.next?.amountCents ?? recurrence.amountCents)}.
+              Hoje esta regra projeta{" "}
+              <strong>{money(recurrence.next?.amountCents ?? recurrence.amountCents)}</strong> por
+              mês, não {money(recurrence.amountCents)}. Se o valor é sempre o mesmo, troque para
+              “Valor fixo”.
             </Notice>
           ) : null}
 

@@ -33,6 +33,11 @@ export const PATCH = handle(async (request: Request) => {
     amount: input.optionalMoney("amount"),
     scheduleDay: input.optionalInteger("scheduleDay", { min: 1, max: 31 }),
     interval: input.optionalChoice("interval", ["monthly", "yearly"] as const),
+    amountMode: input.optionalChoice("amountMode", ["fixed", "per_business_day"] as const),
+    scheduleMode: input.optionalChoice("scheduleMode", [
+      "day_of_month",
+      "business_day_of_month",
+    ] as const),
     cardId: input.optionalReference("cardId"),
     accountId: input.optionalReference("accountId"),
     categoryId: input.optionalReference("categoryId"),
@@ -50,6 +55,8 @@ export const PATCH = handle(async (request: Request) => {
     campos.amount !== null ||
     campos.scheduleDay !== null ||
     campos.interval !== null ||
+    campos.amountMode !== null ||
+    campos.scheduleMode !== null ||
     campos.cardId !== null ||
     campos.accountId !== null ||
     campos.categoryId !== null ||
