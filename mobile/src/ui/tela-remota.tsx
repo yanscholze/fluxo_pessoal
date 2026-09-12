@@ -11,10 +11,26 @@
  * sendo mostrado. Uma tela vazia sem explicação faz a pessoa duvidar do próprio
  * dado; dizer "isto é calculado no servidor e eu não o alcancei" devolve a ela
  * o controle da situação.
+ *
+ * O conteúdo entra com uma subida curta quando os dados chegam, e é aqui que
+ * essa transição mora — não em cada tela. Ela existe por um motivo específico:
+ * estas telas trocam "Carregando…" por números, e sem transição a troca é um
+ * corte seco que o olho lê como a tela tendo piscado. Subir 10 px em 260 ms diz
+ * "isto acabou de chegar" e ancora a atenção onde o número apareceu.
+ *
+ * Curta e única de propósito. Animação em toda parte vira ruído, e num
+ * aplicativo que se abre dez vezes por dia a entrada precisa ser algo que não
+ * canse na décima.
  */
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { Remoto } from "../state/remote.tsx";
@@ -39,6 +55,25 @@ export function TelaRemota<T>({
   children: (dados: T) => ReactNode;
 }) {
   const palette = usePalette();
+
+  /*
+   * A entrada dispara quando os dados chegam, não quando a tela monta: animar
+   * o "Carregando…" e depois trocá-lo pelo conteúdo daria duas entradas para o
+   * mesmo evento.
+   */
+  const entrada = useSharedValue(0);
+  const temDados = remoto.dados !== null;
+
+  useEffect(() => {
+    if (temDados) {
+      entrada.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
+    }
+  }, [temDados, entrada]);
+
+  const estiloDaEntrada = useAnimatedStyle(() => ({
+    opacity: entrada.value,
+    transform: [{ translateY: (1 - entrada.value) * 10 }],
+  }));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
@@ -87,7 +122,9 @@ export function TelaRemota<T>({
         ) : null}
 
         {remoto.dados ? (
-          children(remoto.dados)
+          <Animated.View style={[{ gap: space.md }, estiloDaEntrada]}>
+            {children(remoto.dados)}
+          </Animated.View>
         ) : remoto.carregando ? (
           <Small>Carregando…</Small>
         ) : !remoto.offline && !remoto.erro ? (
