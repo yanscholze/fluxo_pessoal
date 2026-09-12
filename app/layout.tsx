@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+
+import { ServiceWorker } from "./ui/service-worker.tsx";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,7 +9,10 @@ export const metadata: Metadata = {
   /**
    * O manifesto é o que torna o Fluxo instalável — no computador pelo Chrome
    * e pelo Edge, no celular pelo "adicionar à tela inicial". Junto com o
-   * service worker registrado em `install-app.tsx`, fecha os requisitos.
+   * service worker, registrado aqui no layout raiz, fecha os requisitos.
+   *
+   * O registro precisa ser do layout, e não do painel: o Chrome decide se
+   * oferece a instalação na **primeira** página que carrega, que é a de login.
    */
   manifest: "/manifest.webmanifest",
   applicationName: "Fluxo",
@@ -58,7 +63,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEMA_INICIAL }} />
       </head>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        <ServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }

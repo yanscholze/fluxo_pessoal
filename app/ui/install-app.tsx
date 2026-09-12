@@ -1,19 +1,17 @@
 "use client";
 
 /**
- * Registro do service worker e convite para instalar.
+ * O convite para instalar.
  *
- * Duas coisas que só o navegador sabe fazer, e que precisam de um componente
- * de cliente para acontecer:
+ * O Chrome dispara `beforeinstallprompt` uma vez e, se ninguém o segurar, o
+ * convite se perde: sobra o ícone discreto na barra de endereço, que quase
+ * ninguém encontra. Aqui ele é guardado e vira um botão de verdade — que some
+ * sozinho depois de instalado ou recusado.
  *
- * 1. **Registrar o service worker.** Sem ele o Chrome não oferece instalação,
- *    e não existe tela para quando a rede cai.
- *
- * 2. **Guardar o convite de instalação.** O Chrome dispara
- *    `beforeinstallprompt` uma vez e, se ninguém o segurar, o convite se
- *    perde: sobra o ícone discreto na barra de endereço, que quase ninguém
- *    encontra. Aqui ele é guardado e vira um botão de verdade — que some
- *    sozinho depois de instalado ou recusado.
+ * Quem registra o service worker é o layout raiz. Tem de ser lá: o Chrome
+ * decide se oferece a instalação na primeira página carregada, e enquanto o
+ * registro vivia aqui — dentro da barra lateral do painel — ele só acontecia
+ * depois do login, tarde demais.
  */
 
 import { useEffect, useState } from "react";
@@ -31,12 +29,8 @@ export function InstallApp({ className }: { className?: string }) {
   const [convite, setConvite] = useState<ConviteDeInstalacao | null>(null);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      // Falhar aqui não pode derrubar nada: sem service worker o aplicativo
-      // continua inteiro, só não é instalável.
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    }
-
+    // O registro do service worker mora no layout raiz: precisa acontecer na
+    // primeira página, que é a de login, e não só depois de entrar no painel.
     function aoPoderInstalar(evento: Event) {
       // Sem isto o Chrome mostra o próprio aviso, no momento dele.
       evento.preventDefault();
