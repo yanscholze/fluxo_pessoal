@@ -18,6 +18,15 @@ import { join } from "node:path";
 
 const args = process.argv.slice(2);
 const aplicar = args.includes("--aplicar");
+
+/**
+ * Primeiro dia que os extratos cobrem.
+ *
+ * É onde todo saldo anterior é ancorado. Não é a data do lançamento mais
+ * antigo: parcela de cartão carrega a data da compra original, meses antes do
+ * extrato, e ancorar ali faria o patrimônio aparecer antes de existir.
+ */
+const INICIO_DA_JANELA = "2026-01-01";
 const iUrl = args.indexOf("--url");
 const base = iUrl >= 0 && (args[iUrl + 1] ?? "").startsWith("http") ? args[iUrl + 1] : "http://localhost:5173";
 const iVale = args.indexOf("--vale");
@@ -94,8 +103,16 @@ if (vale) {
 } else if (valeCentavos === null) {
   console.log("   não existe e --vale não foi informado; nada a fazer");
 } else {
-  console.log(`   criar com saldo de abertura ${brl(valeCentavos)}`);
+  console.log(`   criar e lançar ${brl(valeCentavos)} como entrada visível`);
   if (aplicar) {
+    /*
+     * A conta nasce zerada e o saldo entra como lançamento.
+     *
+     * Saldo de abertura é uma constante somada a **toda** data da série: ele
+     * faria o patrimônio mostrar este vale em meses que o app não acompanhou.
+     * Como lançamento, o valor aparece no extrato com nome e data, e pode ser
+     * conferido — que é a regra da casa para tudo que existia antes do Fluxo.
+     */
     const criada = await api("/api/v1/accounts", {
       method: "POST",
       body: {
@@ -103,10 +120,21 @@ if (vale) {
         kind: CONTA_VALE.kind,
         institution: CONTA_VALE.instituicao,
         includeInTotals: true,
-        openingBalance: dinheiro(valeCentavos),
       },
     });
     vale = { id: criada.id };
+
+    await api("/api/v1/transactions", {
+      method: "POST",
+      body: {
+        kind: "income",
+        description: `Saldo anterior ao Fluxo · ${CONTA_VALE.nome}`,
+        amount: dinheiro(valeCentavos),
+        occurredOn: INICIO_DA_JANELA,
+        state: "confirmed",
+        accountId: vale.id,
+      },
+    });
   }
 }
 

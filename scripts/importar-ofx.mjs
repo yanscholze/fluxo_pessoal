@@ -379,11 +379,20 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
   const categorias = new Map((await api("/api/v1/categories")).map((c) => [`${c.kind}:${c.name}`, c.id]));
 
   const idDe = {};
+  /**
+   * Quanto cada conta já tinha antes da janela importada.
+   *
+   * Guardado aqui e lançado em `gravar()` como entrada visível, nunca como
+   * `openingBalance`: abertura é uma constante somada a **toda** data da série
+   * e faria o patrimônio mostrar dinheiro em meses que o app não acompanhou.
+   */
+  const aberturas = {};
   for (const [chave, spec, abertura] of [
     ["conta", CONTA, saldoAbertura],
     ["caixinha", CAIXINHA, 0],
     ["externa", EXTERNA, aberturaExterna],
   ]) {
+    if (abertura) aberturas[chave] = abertura;
     if (contas.has(spec.nome)) {
       idDe[chave] = contas.get(spec.nome);
       continue;
@@ -402,7 +411,10 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
             kind: spec.kind,
             institution: spec.instituicao,
             includeInTotals: true,
-            ...(abertura ? { openingBalance: dinheiro(abertura) } : {}),
+            // Nunca saldo de abertura: ele é uma constante somada a toda data
+            // da série e faz o patrimônio mostrar dinheiro em meses que o app
+            // não acompanhou. A diferença entra como lançamento visível, no
+            // primeiro dia da janela — ver `gravar()`.
           },
         });
       } catch (erro) {
@@ -469,7 +481,7 @@ async function garantirCatalogo(saldoAbertura, aberturaExterna) {
     throw new Error(`não consegui um nome livre para a categoria "${nome}"`);
   };
 
-  return idDe;
+  return { idDe, aberturas };
 }
 
 // --- parcelas futuras --------------------------------------------------------
@@ -643,7 +655,7 @@ function alocarPagamentos(resultado) {
   return { alocados, sobras };
 }
 
-async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela) {
+async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela, aberturas) {
   let criados = 0;
   const { alocados, sobras } = alocarPagamentos(resultado);
   if (sobras.length) {
@@ -695,6 +707,31 @@ async function gravar(resultado, futuras, idDe, lucroDaCaixinha, inicioDaJanela)
   // A data é o início do período, e não o fim, porque a caixinha já tinha
   // saldo quando a janela começa: o primeiro movimento de janeiro é um
   // resgate, e lançar o lucro no fim deixaria o histórico negativo até lá.
+  /*
+   * O que cada conta já tinha antes da janela entra como lançamento.
+   *
+   * Nunca como `openingBalance`: abertura é uma constante somada a **toda**
+   * data da série histórica, e faria o patrimônio mostrar esse dinheiro em
+   * meses que o app não acompanhou — foi exatamente o que aconteceu, e o
+   * usuário viu patrimônio em outubro de 2025 sobre dados que começam em
+   * janeiro de 2026.
+   */
+  for (const [chave, valor] of Object.entries(aberturas ?? {})) {
+    if (!valor) continue;
+    await api("/api/v1/transactions", {
+      method: "POST",
+      body: {
+        kind: valor > 0 ? "income" : "expense",
+        description: "Saldo anterior ao Fluxo",
+        amount: dinheiro(Math.abs(valor)),
+        occurredOn: inicioDaJanela,
+        state: "confirmed",
+        accountId: idDe[chave],
+      },
+    });
+    criados += 1;
+  }
+
   if (lucroDaCaixinha > 0) {
     await api("/api/v1/transactions", {
       method: "POST",
@@ -872,6 +909,6 @@ if ((jaExiste ?? []).length > 0) {
 }
 
 const aberturaExterna = aberturaDasContasProprias(resultado, "externa");
-const idDe = await garantirCatalogo(aberturaConta, aberturaExterna);
-const criados = await gravar(resultado, futuras, idDe, aberturaCaixinha, inicioDaJanela);
+const { idDe, aberturas } = await garantirCatalogo(aberturaConta, aberturaExterna);
+const criados = await gravar(resultado, futuras, idDe, aberturaCaixinha, inicioDaJanela, aberturas);
 console.log(`\n✅ ${criados} lançamentos criados.`);

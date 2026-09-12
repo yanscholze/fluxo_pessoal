@@ -20,7 +20,7 @@ import {
 } from "../../core/time/competence.ts";
 import { type LocalDate, lastDayOfMonth, todayIn } from "../../core/time/local-date.ts";
 import { freeToSpendExclusions, listAccounts, listCards, listCategories } from "../repositories/catalog.ts";
-import { loadLedger, transactionIndex } from "../repositories/ledger.ts";
+import { categoriesFrom, loadLedger, transactionIndex } from "../repositories/ledger.ts";
 
 /** Períodos oferecidos na tela. `todos` cobre o histórico inteiro. */
 export type ReportPeriod = "mes" | "3m" | "6m" | "12m" | "todos";
@@ -96,13 +96,35 @@ export async function buildReport(
   const liquidIds = new Set(liquidAccounts(accounts).map((account) => account.id));
   const openingByAccount = new Map(accounts.map((account) => [account.id, account.openingBalance]));
 
+  const cardIds = new Set(cards.map((card) => card.id));
+
   const monthly: MonthlyPoint[] = competences.map((competence) => {
-    const totais = flow(entries, {
-      accountIds: liquidIds,
-      competence,
-      states: ["confirmed"],
-      kinds: CONSUMPTION,
-    });
+    /*
+     * Consumo é consumo, tenha saído da conta ou do cartão.
+     *
+     * A versão anterior filtrava só por conta, e com isso **toda** compra no
+     * crédito sumia do relatório: a compra sai do cartão, e o que sai da conta
+     * é o pagamento da fatura — que é `invoice_payment` e, com razão, não conta
+     * como consumo. Nenhum dos dois entrava, e o resultado era um usuário que
+     * gastou R$ 2.148 em seis meses recebendo R$ 24.297: "resultado +R$ 22.148"
+     * e taxa de poupança de 91%, num semestre em que ele não guardou nada.
+     *
+     * O gráfico de categorias já somava o cartão. Eram duas respostas para a
+     * mesma pergunta na mesma tela.
+     *
+     * As duas passagens não se sobrepõem: uma movimentação pertence a uma conta
+     * **ou** a um cartão, nunca aos dois, e o pagamento da fatura fica fora das
+     * duas por não ser consumo.
+     */
+    const base = { competence, states: ["confirmed"] as const, kinds: CONSUMPTION };
+    const daConta = flow(entries, { ...base, accountIds: liquidIds });
+    const doCartao = flow(entries, { ...base, cardIds });
+
+    const totais = {
+      inflow: (daConta.inflow + doCartao.inflow) as Cents,
+      outflow: (daConta.outflow + doCartao.outflow) as Cents,
+      net: (daConta.inflow + doCartao.inflow - daConta.outflow - doCartao.outflow) as Cents,
+    };
 
     const fimDoMes = lastDayOfMonth(`${competence}-01` as LocalDate);
     const saldo = [...liquidIds].reduce(
@@ -128,6 +150,14 @@ export async function buildReport(
     cards,
     entries,
     today,
+    /*
+     * A política só vale acompanhada do mapa de categorias.
+     *
+     * Sem ele o recorte do empréstimo de cartão não alcança nada, e esta tela
+     * mostrava um patrimônio diferente do da tela de Patrimônio — o mesmo
+     * dinheiro, dois números.
+     */
+    categoryByTransaction: categoriesFrom(index),
     policy: { excludedCategoryIds: excluded },
   });
 

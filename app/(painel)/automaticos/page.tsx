@@ -1,5 +1,6 @@
 import { listAccounts, listCategories } from "../../../server/repositories/catalog.ts";
 import { buildCapturesView } from "../../../server/services/captures.ts";
+import { buildPlanningView } from "../../../server/services/planning.ts";
 import { listReceiptRules } from "../../../server/services/reconciliation.ts";
 import { listProjects } from "../../../server/services/work.ts";
 import { currentUser } from "../../auth-context.ts";
@@ -9,6 +10,7 @@ import { Layers, ShieldCheck, Users, Zap } from "../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader, type Tone } from "../../ui/primitives.tsx";
 import { CaptureQueue } from "./capture-queue.tsx";
+import { PayableLinks } from "./payable-links.tsx";
 import { PayerRules } from "./payer-rules.tsx";
 import { SourceRules } from "./source-rules.tsx";
 
@@ -36,12 +38,13 @@ export default async function Automaticos() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const [view, regras, projetos, contas, categorias] = await Promise.all([
+  const [view, regras, projetos, contas, categorias, planejamento] = await Promise.all([
     buildCapturesView(user.id),
     listReceiptRules(user.id),
     listProjects(user.id),
     listAccounts(user.id),
     listCategories(user.id),
+    buildPlanningView(user.id),
   ]);
 
   return (
@@ -99,6 +102,38 @@ export default async function Automaticos() {
             categories={categorias
               .filter((categoria) => categoria.kind === "income")
               .map((categoria) => ({ id: categoria.id, name: categoria.name }))}
+          />
+        </Panel>
+
+        {/*
+          As duas listas frente a frente.
+          Ninguém decora o texto da notificação do banco: digitar de cabeça erra
+          o acento, o espaço, a abreviação. Escolher da lista das capturas que
+          de fato chegaram acerta por construção.
+        */}
+        <Panel>
+          <PanelHeader
+            title="Contas a pagar com baixa automática"
+            icon={Zap}
+            hint="Ligue cada recorrência à notificação que a paga — confirmar a captura dá baixa na previsão em vez de criar um lançamento novo"
+          />
+          <PayableLinks
+            recurrences={planejamento.recurrences.map((regra) => ({
+              id: regra.id,
+              description: regra.description,
+              amountCents: regra.amountCents,
+              scheduleLabel: regra.scheduleLabel,
+              captureMatch: regra.captureMatch,
+              captureIgnore: regra.captureIgnore,
+            }))}
+            captures={[...view.pending, ...view.recent].map((captura) => ({
+              id: captura.id,
+              description: captura.description,
+              sourceApp: captura.sourceApp,
+              amountCents: captura.amountCents,
+              occurredOn: captura.occurredOn,
+              status: captura.status,
+            }))}
           />
         </Panel>
 
