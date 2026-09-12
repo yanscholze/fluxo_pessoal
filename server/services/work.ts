@@ -750,6 +750,92 @@ export async function linkPaymentToTransaction(
 }
 
 /**
+ * Registra um recebimento que **já aconteceu**, sem parcela prévia.
+ *
+ * `linkPaymentToTransaction` resolve o caso de uma parcela em aberto encontrar a
+ * receita que a pagou. Falta o caso anterior a ele: o dinheiro entrou antes de o
+ * projeto existir no Fluxo, e portanto não há parcela nenhuma para dar baixa.
+ * Foi o que aconteceu com os projetos anteriores à área de trabalho — o cliente
+ * pagou, o extrato registrou, e o projeto nasceu depois, já com zero a receber.
+ *
+ * Sem isto o usuário ficava sem saída: criar a parcela e dar baixa pelo caminho
+ * normal criaria uma **segunda** receita, dobrando a renda daquele mês.
+ *
+ * A parcela nasce já quitada, com a data e o valor do lançamento — quem manda
+ * sobre quanto e quando entrou é o extrato, não o que foi combinado.
+ */
+export async function registerPastPayment(
+  userId: string,
+  input: {
+    projectId: string;
+    transactionId: string;
+    description?: string | null;
+  },
+  now: Date = new Date(),
+): Promise<{ paymentId: string; amountCents: number }> {
+  const database = getDatabase();
+
+  const projeto = await findProject(userId, input.projectId);
+  if (!projeto) throw notFound("Projeto", input.projectId);
+
+  const [lancamento] = await database
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, input.transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!lancamento) throw notFound("Lançamento", input.transactionId);
+
+  if (lancamento.kind !== "income") {
+    throw validationError("Só uma receita pode quitar uma parcela", [
+      { path: "transactionId", message: "O lançamento escolhido não é uma receita" },
+    ]);
+  }
+
+  // Uma receita quita uma parcela só: o mesmo depósito em dois projetos faria a
+  // renda do mês aparecer duas vezes no relatório de trabalho.
+  const [jaUsado] = await database
+    .select({ id: projectPayments.id })
+    .from(projectPayments)
+    .where(
+      and(eq(projectPayments.userId, userId), eq(projectPayments.transactionId, input.transactionId)),
+    )
+    .limit(1);
+  if (jaUsado) throw conflict("Este lançamento já quita outra parcela");
+
+  const paymentId = newId(now.getTime());
+  await database.insert(projectPayments).values({
+    id: paymentId,
+    userId,
+    projectId: input.projectId,
+    description: (input.description?.trim() || lancamento.description).slice(0, 160),
+    amountCents: lancamento.amountCents,
+    dueOn: lancamento.occurredOn,
+    receivedOn: lancamento.occurredOn,
+    // Nulo significa "entrou o combinado", e aqui o combinado **é** o que entrou.
+    receivedAmountCents: null,
+    transactionId: input.transactionId,
+    notes: null,
+  });
+
+  await recordEvent({
+    id: newId(now.getTime()),
+    userId,
+    projectId: input.projectId,
+    kind: "payment",
+    summary: `Recebido: ${(input.description?.trim() || lancamento.description).slice(0, 120)}`,
+    occurredAt: now.toISOString(),
+  });
+
+  return { paymentId, amountCents: lancamento.amountCents };
+}
+
+/**
  * As receitas que ainda não quitaram parcela nenhuma.
  *
  * É a lista que a tela oferece na hora de vincular. Filtrar aqui, e não na

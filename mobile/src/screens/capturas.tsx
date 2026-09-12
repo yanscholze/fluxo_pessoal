@@ -274,9 +274,14 @@ function SeletorDeDestino({
                 backgroundColor: marcado ? palette.accent : palette.surfaceSunken,
               }}
             >
-              <Small tone={marcado ? "subtle" : "muted"} style={{ color: marcado ? palette.accentInk : undefined }}>
-                {opcao.label}
-              </Small>
+              {/*
+                O tom resolve a cor; um `style` com `color: undefined` não.
+                Em React Native o achatamento de estilos é chave a chave, e uma
+                chave presente com valor indefinido **apaga** a que veio antes:
+                o texto perdia a cor do tom e caía no preto padrão — invisível
+                sobre o fundo escuro, que é como esta tela estava.
+              */}
+              <Small tone={marcado ? "inverse" : "muted"}>{opcao.label}</Small>
             </Pressable>
           );
         })}

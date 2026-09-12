@@ -62,9 +62,22 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
     const termo = normalizar(busca);
 
     const visiveis = transactions.filter((item) => {
+      /*
+       * "Saídas" e "Entradas" mostram o que **aconteceu**, não o que está
+       * projetado.
+       *
+       * A versão anterior filtrava só pela natureza, e com 67 parcelas
+       * projetadas até 2027 o extrato abria mostrando compras que ainda nem
+       * foram cobradas — todas marcadas "previsto", todas em datas à frente,
+       * empurrando o gasto de verdade para fora da tela. Quem abre o extrato
+       * quer conferir o que saiu; para o que vem, existe a aba própria.
+       *
+       * Por isso "Previsto" é uma aba irmã e não um acréscimo: as três se
+       * excluem, e "Tudo" continua sendo o lugar de ver os dois juntos.
+       */
       if (filtro === "previsto" && item.state !== "planned") return false;
-      if (filtro === "entradas" && item.kind !== "income") return false;
-      if (filtro === "saidas" && item.kind !== "expense") return false;
+      if (filtro === "entradas" && (item.kind !== "income" || item.state === "planned")) return false;
+      if (filtro === "saidas" && (item.kind !== "expense" || item.state === "planned")) return false;
       if (!termo) return true;
 
       const categoria = item.categoryId ? (nomeDaCategoria.get(item.categoryId) ?? "") : "";

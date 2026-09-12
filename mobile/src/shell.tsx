@@ -14,9 +14,11 @@
  * histórico entre abas, transições configuráveis — este aplicativo não usa.
  */
 
-import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { familiaDoPeso } from "./ui/fonts.ts";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
 import { CapturasScreen } from "./screens/capturas.tsx";
@@ -196,6 +198,12 @@ export function Shell() {
         </View>
       </View>
 
+      {/*
+        A barra é o único controle sempre visível, e era a menor coisa da tela.
+        Com cinco destinos em 52 px de altura e texto de legenda, cada alvo
+        ficava no limite do que um polegar acerta sem olhar — e acertar sem
+        olhar é exatamente o que se espera de uma barra de abas.
+      */}
       <View
         style={{
           flexDirection: "row",
@@ -203,7 +211,9 @@ export function Shell() {
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: palette.line,
           backgroundColor: palette.surface,
-          paddingBottom: insets.bottom,
+          paddingTop: 6,
+          paddingHorizontal: space.xs,
+          paddingBottom: insets.bottom + 6,
         }}
       >
         {GRUPOS.map((item) => (
@@ -238,7 +248,10 @@ export function Shell() {
         style={({ pressed }) => ({
           position: "absolute",
           right: space.lg,
-          bottom: insets.bottom + 64,
+          // Acima da barra, que agora mede 64 de item mais 12 de respiro. O
+          // número acompanha a barra: separá-los faria o botão encostar nela na
+          // primeira vez que a altura mudasse de novo.
+          bottom: insets.bottom + 88,
           width: 56,
           height: 56,
           borderRadius: radius.pill,
@@ -415,40 +428,81 @@ function ItemDeGrupo({
 }) {
   const palette = usePalette();
 
+  /*
+   * A seleção é animada, e não trocada de um quadro para o outro.
+   *
+   * Numa barra de abas o movimento não é enfeite: ele diz **de onde para onde**
+   * a navegação foi, e é o que faz a troca parecer um lugar mudando em vez de
+   * uma tela sendo substituída. Sem isso, tocar numa aba dá a mesma sensação de
+   * recarregar a página.
+   *
+   * `useNativeDriver` porque opacidade e escala rodam na thread de UI: a
+   * animação continua fluida mesmo enquanto a tela nova busca dados, que é
+   * justamente quando a thread de JavaScript está ocupada.
+   */
+  const progresso = useRef(new Animated.Value(ativo ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(progresso, {
+      toValue: ativo ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [ativo, progresso]);
+
   return (
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: ativo }}
       onPress={onPress}
-      style={{
+      // O alvo passa a ocupar a altura inteira do item: um toque perto da borda
+      // de cima deixava de contar, e ninguém entende por que a aba não trocou.
+      style={({ pressed }) => ({
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        minHeight: 52,
+        minHeight: 64,
         paddingVertical: space.sm,
-        gap: 4,
-      }}
+        gap: 5,
+        opacity: pressed ? 0.6 : 1,
+      })}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <Texto
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        <Animated.Text
+          numberOfLines={1}
           style={[
-            type.caption,
-            { color: ativo ? palette.accent : palette.inkSubtle, fontWeight: ativo ? "600" : "400" },
+            type.bodySm,
+            {
+              fontFamily: familiaDoPeso(ativo ? "600" : "400"),
+              color: ativo ? palette.accent : palette.inkMuted,
+              transform: [
+                {
+                  translateY: progresso.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                },
+              ],
+            },
           ]}
         >
           {label}
-        </Texto>
+        </Animated.Text>
         {alerta ? (
-          <View style={{ width: 5, height: 5, borderRadius: radius.pill, backgroundColor: palette.caution }} />
+          <View style={{ width: 6, height: 6, borderRadius: radius.pill, backgroundColor: palette.caution }} />
         ) : null}
       </View>
 
-      <View
+      {/*
+        O traço cresce a partir do centro em vez de aparecer pronto. É o que
+        amarra o movimento ao toque: a mão saiu daqui, e a marca segue.
+      */}
+      <Animated.View
         style={{
-          height: 2,
-          width: 16,
+          height: 3,
+          width: 22,
           borderRadius: radius.pill,
-          backgroundColor: ativo ? palette.accent : "transparent",
+          backgroundColor: palette.accent,
+          opacity: progresso,
+          transform: [{ scaleX: progresso }],
         }}
       />
     </Pressable>

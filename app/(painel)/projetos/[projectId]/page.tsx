@@ -12,6 +12,7 @@ import { Page, PageHeader, SectionTitle, Stack } from "../../../ui/page-frame.ts
 import { Badge, Empty, Meter, Notice, Panel, PanelHeader } from "../../../ui/primitives.tsx";
 import { LogTime } from "./log-time.tsx";
 import { SessionsPanel } from "./sessions-panel.tsx";
+import { PastPayment } from "./past-payment.tsx";
 import { PaymentActions } from "./payment-actions.tsx";
 import { DocumentsPanel } from "./documents-panel.tsx";
 import { GithubPanel } from "./github-panel.tsx";
@@ -151,6 +152,7 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
             <PanelHeader
               title="Cobrança"
               hint={`${payments.length} parcela${payments.length === 1 ? "" : "s"}`}
+              action={<PastPayment projectId={project.id} />}
             />
             {payments.length ? (
               <div className="mt-1">
