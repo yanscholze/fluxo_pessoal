@@ -38,6 +38,10 @@ export const GET = handle(async (request: Request) => {
         scheduleDay: rule.scheduleDay,
         interval: rule.interval,
         isActive: rule.isActive,
+        // A ligação com a captura acompanha a regra: é o cliente que mostra
+        // "esta cobrança dá baixa sozinha", e sem o campo ele não teria como.
+        captureMatch: rule.captureMatch ?? null,
+        captureIgnore: rule.captureIgnore ?? null,
         next: proxima ? { competence: proxima.competence, date: proxima.date, amountCents: proxima.amount } : null,
       };
     }),
