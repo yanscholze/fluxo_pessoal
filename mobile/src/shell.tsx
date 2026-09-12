@@ -40,6 +40,7 @@ import { PatrimonioScreen } from "./screens/patrimonio.tsx";
 import { PlanejamentoScreen } from "./screens/planejamento.tsx";
 import { RelatoriosScreen } from "./screens/relatorios.tsx";
 import { AssinaturasScreen } from "./screens/assinaturas.tsx";
+import { AssistenteScreen } from "./screens/assistente.tsx";
 import { AvisosScreen } from "./screens/avisos.tsx";
 import { SaudeScreen } from "./screens/saude.tsx";
 import { TrabalhoScreen } from "./screens/trabalho.tsx";
@@ -65,6 +66,7 @@ type Tela =
   | "recompensas"
   | "viagens"
   | "trabalho"
+  | "assistente"
   | "automacoes"
   | "capturas"
   | "configuracoes";
@@ -132,6 +134,7 @@ const GRUPOS: readonly Grupo[] = [
     label: "Mais",
     telas: [
       { id: "trabalho", label: "Trabalho" },
+      { id: "assistente", label: "Assistente" },
       { id: "automacoes", label: "Automações" },
       { id: "capturas", label: "Capturas" },
       { id: "configuracoes", label: "Ajustes" },
@@ -306,6 +309,8 @@ function Conteudo({
       return <AvisosScreen onVoltar={() => onIrPara("painel")} />;
     case "assinaturas":
       return <AssinaturasScreen onVoltar={() => onIrPara("recorrencias")} />;
+    case "assistente":
+      return <AssistenteScreen onVoltar={() => onIrPara("trabalho")} />;
     case "saude":
       return <SaudeScreen />;
     case "relatorios":

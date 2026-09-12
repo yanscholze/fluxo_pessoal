@@ -466,3 +466,25 @@ export type AssinaturasView = {
 };
 
 export const fetchAssinaturas = (c: Credenciais) => buscar<AssinaturasView>("/api/v1/subscriptions", c);
+
+// --- assistente --------------------------------------------------------------
+
+export type RespostaDoAssistente = {
+  readonly answer: string;
+  readonly summary: string;
+  readonly actions: readonly {
+    readonly label: string;
+    readonly reason: string;
+    readonly priority: "alta" | "media" | "baixa";
+  }[];
+  readonly warnings: readonly string[];
+  readonly remaining?: number;
+};
+
+export type EstadoDoAssistente = {
+  readonly configured: boolean;
+  readonly advice: { readonly remaining: number; readonly limit: number };
+  readonly receipt: { readonly remaining: number; readonly limit: number };
+};
+
+export const fetchAssistente = (c: Credenciais) => buscar<EstadoDoAssistente>("/api/v1/assistant", c);
