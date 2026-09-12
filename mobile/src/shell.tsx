@@ -24,6 +24,7 @@ import { AjustesScreen } from "./screens/ajustes.tsx";
 import { CapturasScreen } from "./screens/capturas.tsx";
 import { CarteiraScreen } from "./screens/carteira.tsx";
 import { ExtratoScreen } from "./screens/extrato.tsx";
+import { ImportarScreen } from "./screens/importar.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
 import {
@@ -69,6 +70,7 @@ type Tela =
   | "assistente"
   | "automacoes"
   | "capturas"
+  | "importar"
   | "configuracoes";
 
 type Grupo = {
@@ -137,6 +139,7 @@ const GRUPOS: readonly Grupo[] = [
       { id: "assistente", label: "Assistente" },
       { id: "automacoes", label: "Automações" },
       { id: "capturas", label: "Capturas" },
+      { id: "importar", label: "Importar" },
       { id: "configuracoes", label: "Ajustes" },
     ],
   },
@@ -343,6 +346,8 @@ function Conteudo({
       return <AutomacoesScreen />;
     case "capturas":
       return <CapturasScreen onVoltar={() => onIrPara("painel")} />;
+    case "importar":
+      return <ImportarScreen onVoltar={() => onIrPara("painel")} />;
     case "configuracoes":
       return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("painel")} />;
   }

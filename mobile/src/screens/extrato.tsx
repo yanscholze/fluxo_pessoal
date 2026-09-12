@@ -144,8 +144,12 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
             return (
               <Pressable
                 key={opcao.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: ativo }}
                 onPress={() => setFiltro(opcao.id)}
-                style={{
+                // O recuo no toque é o que dá peso ao filtro: ele reordena a
+                // tela inteira, e sem resposta tátil o dedo não sabe se pegou.
+                style={({ pressed }) => ({
                   flex: 1,
                   height: 34,
                   alignItems: "center",
@@ -154,7 +158,9 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
                   backgroundColor: ativo ? palette.accentWash : palette.surfaceSunken,
                   borderWidth: 1,
                   borderColor: ativo ? palette.accentEdge : palette.line,
-                }}
+                  transform: [{ scale: pressed ? 0.96 : 1 }],
+                  opacity: pressed ? 0.85 : 1,
+                })}
               >
                 <Texto
                   style={[
@@ -272,6 +278,15 @@ function Linha({
   return (
     <Pressable
       onPress={onPress}
+      /*
+       * A ondulação nativa, além do fundo que muda.
+       *
+       * Numa lista longa uma animação por linha custaria caro — um valor
+       * compartilhado por item, num extrato de trezentas linhas. O `ripple` do
+       * Android roda no sistema, não no JavaScript: custa zero e é a resposta
+       * tátil que a mão espera de uma lista.
+       */
+      android_ripple={{ color: palette.accentWash }}
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",

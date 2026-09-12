@@ -488,3 +488,26 @@ export type EstadoDoAssistente = {
 };
 
 export const fetchAssistente = (c: Credenciais) => buscar<EstadoDoAssistente>("/api/v1/assistant", c);
+
+// --- importações -------------------------------------------------------------
+
+export type LoteDeImportacao = {
+  readonly id: string;
+  readonly filename: string;
+  readonly format: "ofx" | "csv";
+  readonly status: "review" | "committed" | "discarded";
+  readonly targetName: string;
+  readonly competence: string | null;
+  readonly createdAt: string;
+  readonly counts: {
+    readonly found: number;
+    readonly fresh: number;
+    readonly duplicates: number;
+    readonly withoutCategory: number;
+    readonly possibleTransfers: number;
+    readonly discarded: number;
+  };
+};
+
+export const fetchImportacoes = (c: Credenciais) =>
+  buscar<readonly LoteDeImportacao[]>("/api/v1/imports", c);
