@@ -18,8 +18,8 @@ import { SegmentedControl } from "../../ui/controls.tsx";
 import { Check, Moon, Sun } from "../../ui/icons.tsx";
 import { Label } from "../../ui/primitives.tsx";
 
-/** O padrão não tem atributo: o `:root` do CSS já define o verde. */
-const PADRAO = "verde";
+/** O padrão não tem atributo: o `:root` do CSS já define o violeta. */
+const PADRAO = "violeta";
 
 const ACENTOS = [
   [PADRAO, "var(--color-accent)", "Verde"],
@@ -70,7 +70,7 @@ export function Appearance() {
   function aplicarAcento(valor: string) {
     gravarPreferencia(
       (raiz) => {
-        // O padrão não tem atributo: o `:root` do CSS já define o verde.
+        // O padrão não tem atributo: o `:root` do CSS já define o violeta.
         if (valor === PADRAO) raiz.removeAttribute("data-accent");
         else raiz.dataset.accent = valor;
       },

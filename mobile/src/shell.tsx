@@ -22,7 +22,7 @@ import { familiaDoPeso } from "./ui/fonts.ts";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
 import { CapturasScreen } from "./screens/capturas.tsx";
-import { CartoesScreen } from "./screens/cartoes.tsx";
+import { CarteiraScreen } from "./screens/carteira.tsx";
 import { ExtratoScreen } from "./screens/extrato.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
@@ -310,7 +310,7 @@ function Conteudo({
     case "contas":
       return <ContasScreen />;
     case "cartoes":
-      return <CartoesScreen />;
+      return <CarteiraScreen />;
     case "parcelamentos":
       return <ParcelamentosScreen />;
     case "recorrencias":

@@ -186,10 +186,18 @@
   --color-ink-muted: #4a5462;
   --color-ink-subtle: #606974;
 
-  /* --- Cromo interativo -------------------------------------------------- */
-  --color-accent: #0d9668;
+  /* --- Cromo interativo --------------------------------------------------
+   *
+   * Violeta é a identidade do Fluxo. O verde continua disponível como acento
+   * escolhido, mas deixou de ser o padrão: o cartão, o ícone e a marca são
+   * roxos, e o cromo verde fazia a interface parecer de outro produto.
+   *
+   * Positivo e negativo seguem verde e vermelho em qualquer acento — dinheiro
+   * que entra e dinheiro que sai não podem depender de preferência visual.
+   */
+  --color-accent: #6d4aff;
   --color-accent-ink: #ffffff;
-  --color-accent-hover: #0b855c;
+  --color-accent-hover: #5c3ae6;
 
   /* --- Semântica de valor ------------------------------------------------ */
   --color-positive: #16a34a;
@@ -454,9 +462,9 @@
      preservada, que é o que mantém a leitura em três níveis. */
   --color-ink-subtle: #7b8490;
 
-  --color-accent: #21c99a;
-  --color-accent-ink: #04231b;
-  --color-accent-hover: #35d6a9;
+  --color-accent: #9d84ff;
+  --color-accent-ink: #120e26;
+  --color-accent-hover: #b19bff;
 
   --color-positive: #4ade80;
   --color-negative: #ff6b6b;
@@ -539,15 +547,15 @@
   --color-accent-hover: #7bb0ff;
 }
 
-[data-accent="violeta"] {
-  --color-accent: #6d4aff;
+[data-accent="verde"] {
+  --color-accent: #0d9668;
   --color-accent-ink: #ffffff;
-  --color-accent-hover: #5c3ae6;
+  --color-accent-hover: #0b855c;
 }
-[data-theme="dark"][data-accent="violeta"] {
-  --color-accent: #9d84ff;
-  --color-accent-ink: #120e26;
-  --color-accent-hover: #b19bff;
+[data-theme="dark"][data-accent="verde"] {
+  --color-accent: #21c99a;
+  --color-accent-ink: #04231b;
+  --color-accent-hover: #35d6a9;
 }
 
 [data-accent="ambar"] {

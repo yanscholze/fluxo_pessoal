@@ -7,6 +7,7 @@
  */
 
 import { ActivityIndicator, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -19,11 +20,19 @@ import { usePalette } from "./src/ui/theme.ts";
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <SessionProvider>
-        <Raiz />
-      </SessionProvider>
-    </SafeAreaProvider>
+    /*
+     * `GestureHandlerRootView` envolve tudo, e precisa ser a raiz de verdade:
+     * qualquer gesto declarado abaixo dela funciona, e qualquer um acima
+     * simplesmente não dispara — sem erro, sem aviso, só um arrasto que não
+     * acontece. É a pegadinha mais comum da biblioteca.
+     */
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <SessionProvider>
+          <Raiz />
+        </SessionProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
