@@ -44,6 +44,7 @@ import { todayIn } from "@fluxo/core/time/local-date.ts";
 import type { CardSummary } from "../finance/derive.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { CardFace, LARGURA_DA_FACE } from "../ui/card-face.tsx";
+import { CardPhoto } from "../ui/card-photo.tsx";
 import { Medidor } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Label, Row, Small, Texto } from "../ui/primitives.tsx";
@@ -256,7 +257,12 @@ export function CarteiraScreen() {
             />
           }
         >
-          {selecionado ? <Detalhe resumo={selecionado} hoje={hoje} aoFechar={fechar} /> : null}
+          {selecionado ? <Detalhe
+              resumo={selecionado}
+              hoje={hoje}
+              aoFechar={fechar}
+              aoAtualizar={() => void synchronize()}
+            /> : null}
         </ScrollView>
       </Animated.View>
     </SafeAreaView>
@@ -267,10 +273,12 @@ function Detalhe({
   resumo,
   hoje,
   aoFechar,
+  aoAtualizar,
 }: {
   resumo: CardSummary;
   hoje: string;
   aoFechar: () => void;
+  aoAtualizar: () => void;
 }) {
   const palette = usePalette();
   const { card } = resumo;
@@ -335,6 +343,16 @@ function Detalhe({
         <Small style={{ marginTop: space.xs }}>
           {money(cents(resumo.available ?? 0))} livres · inclui parcelas futuras
         </Small>
+      </Card>
+
+      <Card>
+        <Label style={{ marginBottom: space.sm }}>Face do cartão</Label>
+        {/*
+          A troca de foto vive aqui, e não nos ajustes: é olhando a face que se
+          repara que ela está errada. No celular ainda ganha a câmera — o cartão
+          está na mesma mão que o telefone.
+        */}
+        <CardPhoto cardId={card.id} aoTrocar={aoAtualizar} />
       </Card>
 
       <Pressable onPress={aoFechar} style={{ alignItems: "center", paddingVertical: space.md }}>

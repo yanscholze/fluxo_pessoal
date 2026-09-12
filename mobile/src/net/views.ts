@@ -429,3 +429,40 @@ export type ProjetosView = {
 };
 
 export const fetchProjetos = (c: Credenciais) => buscar<ProjetosView>("/api/v1/projects", c);
+
+// --- assinaturas -------------------------------------------------------------
+
+export type RotuloDeAssinatura = { readonly id: string; readonly name: string; readonly color: string };
+
+export type AssinaturaView = {
+  readonly id: string;
+  readonly description: string;
+  readonly amountCents: number;
+  readonly monthlyCents: number;
+  readonly yearlyCents: number;
+  readonly interval: "monthly" | "yearly";
+  readonly scheduleDay: number;
+  readonly isActive: boolean;
+  readonly cardName: string | null;
+  readonly label: RotuloDeAssinatura | null;
+};
+
+export type AssinaturasView = {
+  readonly competence: string;
+  readonly subscriptions: readonly AssinaturaView[];
+  readonly byLabel: readonly {
+    readonly label: RotuloDeAssinatura;
+    readonly monthlyCents: number;
+    readonly yearlyCents: number;
+    readonly count: number;
+    readonly sharePercent: number;
+  }[];
+  readonly totals: {
+    readonly monthlyCents: number;
+    readonly yearlyCents: number;
+    readonly activeCount: number;
+    readonly pausedCount: number;
+  };
+};
+
+export const fetchAssinaturas = (c: Credenciais) => buscar<AssinaturasView>("/api/v1/subscriptions", c);

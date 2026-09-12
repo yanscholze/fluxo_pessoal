@@ -39,6 +39,7 @@ import { ParcelamentosScreen } from "./screens/parcelamentos.tsx";
 import { PatrimonioScreen } from "./screens/patrimonio.tsx";
 import { PlanejamentoScreen } from "./screens/planejamento.tsx";
 import { RelatoriosScreen } from "./screens/relatorios.tsx";
+import { AssinaturasScreen } from "./screens/assinaturas.tsx";
 import { AvisosScreen } from "./screens/avisos.tsx";
 import { SaudeScreen } from "./screens/saude.tsx";
 import { TrabalhoScreen } from "./screens/trabalho.tsx";
@@ -56,6 +57,7 @@ type Tela =
   | "cartoes"
   | "parcelamentos"
   | "recorrencias"
+  | "assinaturas"
   | "orcamentos"
   | "metas"
   | "patrimonio"
@@ -110,6 +112,7 @@ const GRUPOS: readonly Grupo[] = [
     label: "Planos",
     telas: [
       { id: "recorrencias", label: "Recorrências" },
+      { id: "assinaturas", label: "Assinaturas" },
       { id: "orcamentos", label: "Orçamentos" },
       { id: "metas", label: "Metas" },
     ],
@@ -301,6 +304,8 @@ function Conteudo({
       return <InicioScreen onOpenTransaction={onAbrirLancamento} onAbrirAjustes={() => onIrPara("configuracoes")} />;
     case "avisos":
       return <AvisosScreen onVoltar={() => onIrPara("painel")} />;
+    case "assinaturas":
+      return <AssinaturasScreen onVoltar={() => onIrPara("recorrencias")} />;
     case "saude":
       return <SaudeScreen />;
     case "relatorios":

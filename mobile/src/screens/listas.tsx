@@ -10,10 +10,12 @@
  * cada função, não na forma.
  */
 
-import { View } from "react-native";
+import { useState } from "react";
+import { Modal, Pressable, View } from "react-native";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
 import {
+  type ContaView,
   fetchAutomacoes,
   fetchContas,
   fetchInvestimentos,
@@ -26,6 +28,7 @@ import { Medidor } from "../ui/charts.tsx";
 import { money, percent, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Figure, Label, Row, Small } from "../ui/primitives.tsx";
 import { TelaRemota } from "../ui/tela-remota.tsx";
+import { ContaDetalheScreen } from "./conta-detalhe.tsx";
 import { radius, space, usePalette } from "../ui/theme.ts";
 
 /** Rótulo humano da natureza da conta. */
@@ -47,6 +50,13 @@ const NATUREZA: Record<string, string> = {
 export function ContasScreen({ onVoltar }: { onVoltar?: () => void }) {
   const palette = usePalette();
   const remoto = useRemoto(fetchContas);
+  /*
+   * A conta aberta.
+   *
+   * A lista respondia "quanto tem em cada lugar" e parava aí; toda pergunta
+   * seguinte exigia abrir o site. Um saldo que não é clicável é um cartaz.
+   */
+  const [aberta, setAberta] = useState<ContaView | null>(null);
 
   return (
     <TelaRemota titulo="Contas" descricao="Onde o dinheiro está." remoto={remoto} onVoltar={onVoltar}>
@@ -69,7 +79,12 @@ export function ContasScreen({ onVoltar }: { onVoltar?: () => void }) {
               ) : (
                 contas.map((conta, indice) => (
                   <Row key={conta.id} style={indice === contas.length - 1 ? { borderBottomWidth: 0 } : undefined}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1, minWidth: 0 }}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Abrir ${conta.name}`}
+                      onPress={() => setAberta(conta)}
+                      style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1, minWidth: 0 }}
+                    >
                       <View
                         style={{
                           width: 8,
@@ -85,7 +100,7 @@ export function ContasScreen({ onVoltar }: { onVoltar?: () => void }) {
                           {conta.institution ? ` · ${conta.institution}` : ""}
                         </Small>
                       </View>
-                    </View>
+                    </Pressable>
                     <Body strong style={{ color: conta.balanceCents < 0 ? palette.negative : palette.ink }}>
                       {money(cents(conta.balanceCents))}
                     </Body>
@@ -93,6 +108,25 @@ export function ContasScreen({ onVoltar }: { onVoltar?: () => void }) {
                 ))
               )}
             </Card>
+
+            <Modal
+              visible={aberta !== null}
+              animationType="slide"
+              presentationStyle="pageSheet"
+              onRequestClose={() => setAberta(null)}
+            >
+              {aberta ? (
+                <ContaDetalheScreen
+                  conta={aberta}
+                  onClose={() => {
+                    setAberta(null);
+                    // O acerto de saldo muda o número da lista: sem recarregar,
+                    // ela mostraria o valor de antes e pareceria que nada foi.
+                    remoto.recarregar();
+                  }}
+                />
+              ) : null}
+            </Modal>
           </>
         );
       }}
