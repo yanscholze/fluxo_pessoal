@@ -125,10 +125,27 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
     setEnviando(false);
 
     if (!resposta.ok) {
-      const dados = (await resposta.json().catch(() => ({}))) as {
-        error?: { message?: string };
-      };
-      setErro(dados.error?.message ?? "Não foi possível concluir. Tente de novo.");
+      /*
+       * O erro precisa dizer o que houve, não "tente de novo".
+       *
+       * A mensagem genérica aparecia sempre que a resposta não trazia um erro
+       * estruturado — um 500, uma página de erro, uma queda de rede — e nesses
+       * casos ela é exatamente a informação que falta para resolver. Os
+       * detalhes por campo vêm junto: é neles que está o campo culpado.
+       */
+      const dados = (await resposta.json().catch(() => null)) as {
+        error?: { message?: string; details?: { path?: string; message?: string }[] };
+      } | null;
+
+      const campos = dados?.error?.details
+        ?.map((item) => `${item.path}: ${item.message}`)
+        .join(" · ");
+
+      setErro(
+        dados?.error?.message
+          ? [dados.error.message, campos].filter(Boolean).join(" — ")
+          : `O servidor respondeu ${resposta.status}. Recarregue a página e tente de novo.`,
+      );
       return false;
     }
 

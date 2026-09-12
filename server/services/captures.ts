@@ -7,6 +7,9 @@
  * veio.
  */
 
+import { type Recurrence, matchesCapture } from "../../core/domain/recurrence/schedule.ts";
+import { listRecurrences } from "../repositories/recurrences.ts";
+import { confirmOccurrence } from "./recurrences.ts";
 import { competenceForPurchase } from "../../core/domain/card/invoice-cycle.ts";
 import { guessCategory } from "../../core/domain/capture/categorize.ts";
 import {
@@ -109,7 +112,31 @@ export async function ingest(
   const novos: (typeof captureEvents.$inferInsert)[] = [];
   let duplicadas = 0;
 
+  /*
+   * As regras que sabem reconhecer a própria cobrança.
+   *
+   * Carregadas uma vez para o lote inteiro: consultar por notificação faria uma
+   * ida ao banco por item, e um lote de sincronização traz dezenas.
+   */
+  const comCasador = (await listRecurrences(userId, true)).filter((rule) => rule.captureMatch?.trim());
+
   for (const evento of [...events].sort((a, b) => a.postedAt - b.postedAt)) {
+    /*
+     * O aviso de boleto **emitido** nunca chega à fila.
+     *
+     * O banco notifica duas vezes o mesmo boleto: quando é emitido e quando é
+     * pago. Só a segunda é um fato financeiro. Sem este filtro a emissão entra
+     * na fila todo mês para ser descartada à mão todo mês — e a fila existe
+     * justamente para conter o que merece decisão.
+     */
+    const emitido = comCasador.some(
+      (rule) => matchesCapture(rule, `${evento.title ?? ""} ${evento.text}`) === "ignorar",
+    );
+    if (emitido) {
+      motivos.cobranca_emitida = (motivos.cobranca_emitida ?? 0) + 1;
+      continue;
+    }
+
     const resultado = captureNotification(evento, regras, janela);
 
     if (resultado.kind === "ignored") {
@@ -392,6 +419,24 @@ export type ConfirmInput = {
  * O usuário pode corrigir qualquer campo antes — a leitura automática é um
  * rascunho, não um veredito.
  */
+/**
+ * A recorrência que esta notificação paga, se alguma.
+ *
+ * O texto conferido é o cru da notificação mais a descrição já extraída: o
+ * nome do credor às vezes só aparece no corpo, e às vezes só no título.
+ */
+async function recorrenciaCasada(
+  userId: string,
+  texto: string,
+): Promise<{ rule: Recurrence; veredito: "pagamento" | "ignorar" } | null> {
+  const regras = await listRecurrences(userId, true);
+  for (const rule of regras) {
+    const veredito = matchesCapture(rule, texto);
+    if (veredito !== "nao") return { rule, veredito };
+  }
+  return null;
+}
+
 export async function confirmCapture(
   userId: string,
   captureId: string,
@@ -408,9 +453,40 @@ export async function confirmCapture(
   if (!evento) throw notFound("Sugestão", captureId);
   if (evento.status !== "pendente") throw conflict("Esta sugestão já foi resolvida");
 
-  const origem = await resolveOrigin(userId, evento, input);
   const amount = input.amount ?? cents(evento.amountCents);
   const occurredOn = input.occurredOn ?? localDate(evento.occurredOn);
+
+  /*
+   * Se esta notificação paga uma recorrência, a confirmação dá **baixa** nela.
+   *
+   * O caminho comum criaria uma despesa solta, que ficaria ao lado da previsão
+   * da própria regra: o mesmo boleto contado duas vezes, uma como previsto e
+   * outra como pago. Dando baixa, a previsão vira fato — que é o que um contas
+   * a pagar faz.
+   *
+   * O valor e a data vêm da notificação, não da regra: o boleto reajustou, ou
+   * foi pago com atraso, e quem manda sobre o que saiu é o banco.
+   */
+  const casada = await recorrenciaCasada(userId, `${evento.rawText} ${evento.description}`);
+  if (casada?.veredito === "pagamento") {
+    const competenciaDaRegra = competenceOf(occurredOn);
+    const baixa = await confirmOccurrence(
+      userId,
+      casada.rule.id,
+      competenciaDaRegra,
+      { amount, occurredOn },
+      now,
+    );
+
+    await database
+      .update(captureEvents)
+      .set({ status: "confirmado", transactionId: baixa.transactionId })
+      .where(and(eq(captureEvents.userId, userId), eq(captureEvents.id, captureId)));
+
+    return { transactionId: baixa.transactionId, competence: competenciaDaRegra };
+  }
+
+  const origem = await resolveOrigin(userId, evento, input);
 
   const competence =
     origem.card !== null ? competenceForPurchase(origem.card, occurredOn) : competenceOf(occurredOn);

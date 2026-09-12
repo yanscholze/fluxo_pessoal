@@ -94,6 +94,23 @@ export const recurrences = sqliteTable(
     /** Frequência da cobrança. Assinatura anual não gera lançamento mensal. */
     interval: text("interval", { enum: ["monthly", "yearly"] }).notNull().default("monthly"),
 
+    /**
+     * O texto que identifica esta cobrança na notificação do banco.
+     *
+     * É o que transforma a recorrência num contas a pagar de verdade: bateu,
+     * confirmar a captura dá **baixa na ocorrência do mês** em vez de criar um
+     * lançamento solto que ficaria ao lado da previsão, contando o mesmo
+     * dinheiro duas vezes.
+     */
+    captureMatch: text("capture_match"),
+    /**
+     * O texto que significa "isto não é pagamento".
+     *
+     * O banco avisa quando o boleto é emitido e de novo quando é pago. Sem este
+     * filtro a emissão entra na fila todo mês para ser ignorada à mão todo mês.
+     */
+    captureIgnore: text("capture_ignore"),
+
     startsOn: text("starts_on").notNull(),
     endsOn: text("ends_on"),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),

@@ -55,6 +55,8 @@ export type RecurrenceView = {
   readonly accountId: string | null;
   readonly cardId: string | null;
   readonly categoryId: string | null;
+  readonly captureMatch: string | null;
+  readonly captureIgnore: string | null;
   readonly next: { competence: Competence; date: LocalDate; amountCents: number } | null;
   /** Ocorrência da competência corrente ainda não confirmada. */
   readonly pending: { competence: Competence; date: LocalDate; amountCents: number } | null;
@@ -148,6 +150,8 @@ export async function buildPlanningView(userId: string, now: Date = new Date()):
       accountId: rule.accountId ?? null,
       cardId: rule.cardId ?? null,
       categoryId: rule.categoryId ?? null,
+      captureMatch: rule.captureMatch ?? null,
+      captureIgnore: rule.captureIgnore ?? null,
       next: proxima
         ? { competence: proxima.competence, date: proxima.date, amountCents: proxima.amount }
         : null,

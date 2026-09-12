@@ -35,7 +35,15 @@ export type IgnoreReason =
   /** Texto de aviso, não de transação (saldo, limite, promoção). */
   | "nao_e_transacao"
   /** Mesmo valor e estabelecimento numa janela curta. */
-  | "duplicada";
+  | "duplicada"
+  /**
+   * Aviso de cobrança **emitida**, não paga.
+   *
+   * O banco notifica o mesmo boleto duas vezes: quando é emitido e quando é
+   * pago. Só a segunda é fato financeiro, e é a recorrência dona daquela
+   * cobrança que diz qual texto distingue as duas.
+   */
+  | "cobranca_emitida";
 
 export type CaptureOutcome =
   | { readonly kind: "ignored"; readonly reason: IgnoreReason }

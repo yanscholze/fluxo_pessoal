@@ -1,4 +1,5 @@
 import { buildRewardsView } from "../../../server/services/rewards.ts";
+import { PointsCheck } from "./points-check.tsx";
 import { currentUser } from "../../auth-context.ts";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, decimal, money, percent } from "../../ui/format.ts";
@@ -78,7 +79,19 @@ export default async function Recompensas() {
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   {temPontos ? (
                     <div className="rounded-md border border-line bg-surface-sunken p-4">
-                      <Label>Pontos disponíveis</Label>
+                      {/*
+                        O acerto fica junto do número, que é onde a pergunta
+                        "isto bate com o meu extrato de pontos?" é feita.
+                      */}
+                      <div className="flex items-start justify-between gap-2">
+                        <Label>Pontos disponíveis</Label>
+                        <PointsCheck
+                          cardId={cartao.cardId}
+                          cardName={cartao.cardName}
+                          balanceMilli={cartao.balance.pointsMilli}
+                          openingMilli={cartao.config.pointsOpeningMilli}
+                        />
+                      </div>
                       <p className="tabular mt-1 text-figure text-ink">{pontos(cartao.balance.pointsMilli)}</p>
                       {cartao.balance.pendingPointsMilli > 0 ? (
                         <p className="mt-1 text-caption text-ink-subtle">

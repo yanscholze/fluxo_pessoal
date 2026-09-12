@@ -58,6 +58,16 @@ export function RecurrenceActions({
    * sobra — e até agora ele era imutável.
    */
   const [modoDoValor, setModoDoValor] = useState(recurrence.amountMode);
+  /*
+   * O que transforma esta regra num contas a pagar de verdade.
+   *
+   * Com o casador preenchido, a notificação de pagamento do boleto deixa de
+   * virar um lançamento solto ao lado da previsão — ela **dá baixa** nela. Sem
+   * ele, o mesmo dinheiro apareceria duas vezes: uma como previsto, outra como
+   * pago.
+   */
+  const [casador, setCasador] = useState(recurrence.captureMatch ?? "");
+  const [ignorar, setIgnorar] = useState(recurrence.captureIgnore ?? "");
 
   const categoriasVisiveis = options.categories.filter((item) =>
     recurrence.kind === "income" ? item.kind === "income" : item.kind === "expense",
@@ -96,6 +106,8 @@ export function RecurrenceActions({
       scheduleDay: Number(dia) || recurrence.scheduleDay,
       interval: intervalo,
       amountMode: modoDoValor,
+      captureMatch: casador.trim() || null,
+      captureIgnore: ignorar.trim() || null,
       ...(tipo === "cartao" ? { cardId: id } : { accountId: id }),
       categoryId: categoria || null,
     });
@@ -242,6 +254,47 @@ export function RecurrenceActions({
                 ))}
               </Select>
             </Field>
+          </div>
+
+          {/*
+            A ligação com a captura fecha o ciclo do contas a pagar: a regra
+            prevê, a notificação do banco avisa, e a confirmação dá baixa.
+          */}
+          <div className="rounded-nested border border-line bg-surface-sunken p-3">
+            <p className="text-body-sm font-medium text-ink">Baixa automática pela notificação</p>
+            <p className="mt-0.5 text-caption text-ink-subtle">
+              Quando a notificação do banco contiver este texto, confirmar a captura dá baixa nesta
+              regra em vez de criar um lançamento novo.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field
+                label="Texto que identifica a cobrança"
+                htmlFor={`rec-casa-${recurrence.id}`}
+                hint="Ex.: STAR PROTECAO"
+              >
+                <Input
+                  id={`rec-casa-${recurrence.id}`}
+                  value={casador}
+                  onChange={(evento) => setCasador(evento.target.value)}
+                  placeholder="nome do credor na notificação"
+                />
+              </Field>
+
+              <Field
+                label="Texto que significa “ignore”"
+                htmlFor={`rec-ign-${recurrence.id}`}
+                hint="Ex.: emitido — o aviso de boleto gerado não é pagamento."
+              >
+                <Input
+                  id={`rec-ign-${recurrence.id}`}
+                  value={ignorar}
+                  onChange={(evento) => setIgnorar(evento.target.value)}
+                  placeholder="emitido"
+                  disabled={!casador.trim()}
+                />
+              </Field>
+            </div>
           </div>
 
           {recurrence.amountMode !== "fixed" && modoDoValor !== "fixed" ? (

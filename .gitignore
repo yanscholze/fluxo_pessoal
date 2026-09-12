@@ -67,6 +67,7 @@ google-services.json
 # cada atualização. O skills-lock.json só faz sentido junto com elas.
 /.agents/
 /.claude/skills/
+/.claude/settings.local.json
 /skills-lock.json
 
 # Exportações do banco. Contêm lançamentos financeiros reais — e este

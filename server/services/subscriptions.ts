@@ -223,6 +223,12 @@ export type SubscriptionPatch = {
    */
   readonly amountMode?: "fixed" | "per_business_day" | null;
   readonly scheduleMode?: "day_of_month" | "business_day_of_month" | null;
+  /** Texto que identifica esta cobrança na notificação do banco. */
+  readonly captureMatch?: string | null;
+  /** Texto que significa "isto é só o aviso de emissão". */
+  readonly captureIgnore?: string | null;
+  readonly clearCaptureMatch?: boolean;
+  readonly clearCaptureIgnore?: boolean;
   readonly cardId?: string | null;
   readonly accountId?: string | null;
   readonly categoryId?: string | null;
@@ -303,6 +309,10 @@ export async function updateSubscription(
   if (patch.interval) campos.interval = patch.interval;
   if (patch.amountMode) campos.amountMode = patch.amountMode;
   if (patch.scheduleMode) campos.scheduleMode = patch.scheduleMode;
+  if (patch.captureMatch) campos.captureMatch = patch.captureMatch.trim();
+  else if (patch.clearCaptureMatch) campos.captureMatch = null;
+  if (patch.captureIgnore) campos.captureIgnore = patch.captureIgnore.trim();
+  else if (patch.clearCaptureIgnore) campos.captureIgnore = null;
   if (patch.cardId) {
     campos.cardId = patch.cardId;
     campos.accountId = null;

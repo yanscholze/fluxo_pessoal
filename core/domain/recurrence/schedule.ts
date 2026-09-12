@@ -67,7 +67,46 @@ export type Recurrence = {
   readonly startsOn: LocalDate;
   readonly endsOn: LocalDate | null;
   readonly isActive: boolean;
+  /**
+   * Texto que identifica esta cobrança na notificação do banco.
+   *
+   * É o que transforma a regra num contas a pagar: bateu, confirmar a captura
+   * dá baixa na ocorrência do mês em vez de criar um lançamento solto ao lado
+   * da previsão — o mesmo dinheiro contado duas vezes.
+   */
+  readonly captureMatch?: string | null;
+  /** Texto que significa "isto não é pagamento" — o aviso de boleto emitido. */
+  readonly captureIgnore?: string | null;
 };
+
+/**
+ * A notificação é o pagamento desta regra?
+ *
+ * Comparação sem acento e sem caixa, por continência: o banco escreve o mesmo
+ * credor de formas diferentes entre a emissão e a baixa, e exigir igualdade
+ * exata faria o casamento falhar no mês em que o texto mudasse uma vírgula.
+ *
+ * O `captureIgnore` vence o `captureMatch`. Uma notificação que diz "boleto
+ * emitido" **cita** o credor: sem essa precedência, a emissão daria baixa num
+ * pagamento que ainda não aconteceu.
+ */
+export function matchesCapture(
+  rule: Pick<Recurrence, "captureMatch" | "captureIgnore">,
+  texto: string,
+): "pagamento" | "ignorar" | "nao" {
+  if (!rule.captureMatch?.trim()) return "nao";
+
+  const normalizar = (valor: string) =>
+    valor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  const alvo = normalizar(texto);
+  if (!alvo.includes(normalizar(rule.captureMatch))) return "nao";
+  if (rule.captureIgnore?.trim() && alvo.includes(normalizar(rule.captureIgnore))) return "ignorar";
+  return "pagamento";
+}
 
 /** Uma execução prevista da regra numa competência. */
 export type Occurrence = {
