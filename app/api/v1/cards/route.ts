@@ -35,8 +35,10 @@ export const POST = handle(async (request: Request) => {
     closingDay: input.integer("closingDay", { min: 1, max: 31 }),
     dueDay: input.integer("dueDay", { min: 1, max: 31 }),
     dueAdjustment: input.optionalChoice("dueAdjustment", ["previous", "next"] as const) ?? "next",
+    // Sem valor, quem decide é o serviço — que tem o padrão escrito com o
+    // motivo. Repetir a escolha aqui daria duas respostas para a mesma pergunta.
     closingAdjustment:
-      input.optionalChoice("closingAdjustment", ["previous", "next", "none"] as const) ?? "previous",
+      input.optionalChoice("closingAdjustment", ["previous", "next", "none"] as const) ?? undefined,
     limit: input.optionalMoney("limit"),
     brand: input.optionalString("brand", { max: 40 }),
     tier: input.optionalString("tier", { max: 40 }),

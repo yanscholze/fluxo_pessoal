@@ -64,6 +64,7 @@ export function CardPanel({
           closingDay: card.closingDay,
           dueDay: card.dueDay,
           dueAdjustment: card.dueAdjustment,
+          closingAdjustment: card.closingAdjustment,
           rewardMode: card.rewardMode,
           pointsPerDollarMilli: card.pointsPerDollarMilli,
           cashbackBasisPoints: card.cashbackBasisPoints,

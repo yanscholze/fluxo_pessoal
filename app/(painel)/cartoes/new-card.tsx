@@ -64,6 +64,7 @@ export type CardToEdit = {
   readonly closingDay: number;
   readonly dueDay: number;
   readonly dueAdjustment: "previous" | "next";
+  readonly closingAdjustment: "previous" | "next" | "none";
   readonly rewardMode: Recompensa;
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
@@ -125,6 +126,7 @@ export function NewCard({
         closingDay: dados.get("closingDay"),
         dueDay: dados.get("dueDay"),
         dueAdjustment: dados.get("dueAdjustment"),
+        closingAdjustment: dados.get("closingAdjustment"),
         limit: dados.get("limit") || null,
         brand: dados.get("brand") || null,
         tier: dados.get("tier") || null,
@@ -284,16 +286,45 @@ export function NewCard({
             </Select>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          {/*
+            Cada data com a sua própria regra de dia não útil.
+
+            Antes havia um seletor só, chamado "Se cair em feriado", encostado
+            no campo do vencimento — e ele governava só o vencimento mesmo. O
+            fechamento ficava preso na regra de recuar para o dia útil anterior,
+            que é falsa para a maioria dos emissores daqui: a fatura fecha no
+            dia, domingo ou não; quem espera expediente é o **pagamento**.
+
+            A diferença não é cosmética. Com o fechamento recuando, tudo que se
+            compra no fim de semana anterior migra para a fatura seguinte, e o
+            total da tela deixa de bater com o do aplicativo do banco.
+          */}
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Fecha dia" htmlFor="card-closing" error={issues.closingDay}>
               <Input id="card-closing" name="closingDay" type="number" min={1} max={31} defaultValue={card?.closingDay ?? 13} required />
+            </Field>
+
+            <Field
+              label="Se o fechamento cair em dia não útil"
+              htmlFor="card-closing-adjust"
+              hint="A maioria fecha no dia, sem olhar o calendário"
+            >
+              <Select
+                id="card-closing-adjust"
+                name="closingAdjustment"
+                defaultValue={card?.closingAdjustment ?? "none"}
+              >
+                <option value="none">Fecha no dia mesmo assim</option>
+                <option value="previous">Fecha no dia útil anterior</option>
+                <option value="next">Fecha no próximo dia útil</option>
+              </Select>
             </Field>
 
             <Field label="Vence dia" htmlFor="card-due" error={issues.dueDay}>
               <Input id="card-due" name="dueDay" type="number" min={1} max={31} defaultValue={card?.dueDay ?? 20} required />
             </Field>
 
-            <Field label="Se cair em feriado" htmlFor="card-adjust">
+            <Field label="Se o vencimento cair em dia não útil" htmlFor="card-adjust">
               <Select id="card-adjust" name="dueAdjustment" defaultValue={card?.dueAdjustment ?? "next"}>
                 <option value="next">Vence no próximo dia útil</option>
                 <option value="previous">Vence no dia útil anterior</option>

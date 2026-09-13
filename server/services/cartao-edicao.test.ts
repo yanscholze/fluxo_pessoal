@@ -140,6 +140,65 @@ describe("correção de cartão", () => {
     assert.equal(agosto.dueDate, "2026-08-20");
   });
 
+  /**
+   * O dia do fechamento não é feriado de ninguém.
+   *
+   * A maioria dos emissores daqui fecha no dia, domingo ou não — quem espera
+   * expediente é o pagamento. Recuando o fechamento, tudo que se compra no fim
+   * de semana anterior ao corte pula para a fatura seguinte, e o total da tela
+   * deixa de bater com o do aplicativo do banco. 13 de setembro de 2026 é um
+   * domingo, o que torna este o mês em que a diferença aparece.
+   */
+  it("fecha no dia mesmo caindo em domingo, e a regra é corrigível", async () => {
+    const { createCard, updateCard } = await import("./catalog.ts");
+    const { buildCardsView } = await import("./cards.ts");
+    const { listCards } = await import("../repositories/catalog.ts");
+    const alvo = await ambiente();
+
+    const [padrao] = await listCards(alvo.userId);
+    assert.equal(padrao.closingAdjustment, "none", "cartão novo fecha no dia");
+
+    const fechamentoDe = async (competencia: string) => {
+      const view = await buildCardsView(alvo.userId, AGORA);
+      const cartao = view.cards.find((linha) => linha.id === alvo.cartaoId);
+      return cartao?.invoices?.find((fatura) => fatura.competence === competencia)?.closingDate;
+    };
+
+    assert.equal(await fechamentoDe("2026-09"), "2026-09-13", "domingo, e fecha assim mesmo");
+
+    // Quem tem um emissor que de fato recua agora consegue dizer isso.
+    await updateCard(alvo.userId, alvo.cartaoId, { closingAdjustment: "previous" }, AGORA);
+    assert.equal(await fechamentoDe("2026-09"), "2026-09-11", "sexta anterior ao domingo");
+
+    // E consegue voltar atrás — que era o que faltava: a rota de correção não
+    // lia este campo, então a escolha do cadastro era definitiva.
+    await updateCard(alvo.userId, alvo.cartaoId, { closingAdjustment: "none" }, AGORA);
+    assert.equal(await fechamentoDe("2026-09"), "2026-09-13");
+
+    // O vencimento continua com a regra dele, independente da do fechamento.
+    const outro = await createCard(
+      alvo.userId,
+      {
+        name: "Fecha domingo, vence segunda",
+        kind: "credit",
+        paymentAccountId: alvo.contaId,
+        closingDay: 13,
+        dueDay: 20,
+        dueAdjustment: "next",
+        closingAdjustment: "none",
+      },
+      AGORA,
+    );
+
+    const view = await buildCardsView(alvo.userId, AGORA);
+    const segundo = view.cards.find((linha) => linha.id === outro);
+    const setembro = segundo?.invoices?.find((fatura) => fatura.competence === "2026-09");
+    // As duas regras convivendo no mesmo fim de semana, que é o ponto: o corte
+    // ignora o domingo (13/09) e o pagamento não (20/09 é domingo, vence 21).
+    assert.equal(setembro?.closingDate, "2026-09-13", "fecha no domingo mesmo");
+    assert.equal(setembro?.dueDate, "2026-09-21", "vence na segunda seguinte");
+  });
+
   it("o cartão de um usuário não é editável por outro", async () => {
     const { updateCard } = await import("./catalog.ts");
     const { signUp } = await import("./auth.ts");

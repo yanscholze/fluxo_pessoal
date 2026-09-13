@@ -327,6 +327,20 @@ export type CardInput = {
   readonly manualUsdRateMicros?: number | null;
 };
 
+/**
+ * O que fazer quando o fechamento cai em dia não útil, quando ninguém diz.
+ *
+ * "Não faz nada" — a fatura fecha no dia, domingo ou feriado. É como a maioria
+ * dos emissores daqui trabalha: quem espera expediente é o **pagamento**, não o
+ * corte. Recuar por padrão, como era antes, joga tudo que foi comprado no fim
+ * de semana anterior ao corte para a fatura seguinte, e o total da tela deixa
+ * de bater com o do aplicativo do banco — sem que nada na tela explique por quê.
+ *
+ * Cartão já cadastrado não muda: o valor está gravado em cada linha, e agora
+ * também se corrige pela tela.
+ */
+const PADRAO_DE_FECHAMENTO = "none" as const;
+
 export async function createCard(userId: string, input: CardInput, now: Date = new Date()): Promise<string> {
   const database = getDatabase();
 
@@ -334,7 +348,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
-    closingAdjustment: input.closingAdjustment ?? "previous",
+    closingAdjustment: input.closingAdjustment ?? PADRAO_DE_FECHAMENTO,
   });
 
   const [account] = await database
@@ -377,7 +391,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
-    closingAdjustment: input.closingAdjustment ?? "previous",
+    closingAdjustment: input.closingAdjustment ?? PADRAO_DE_FECHAMENTO,
     rewardMode: input.rewardMode ?? "none",
     pointsPerDollarMilli: input.pointsPerDollarMilli ?? 0,
     cashbackBasisPoints: input.cashbackBasisPoints ?? 0,
