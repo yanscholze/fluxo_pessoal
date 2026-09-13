@@ -11,7 +11,7 @@
  * passado" diz.
  */
 
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { fetchNetWorth } from "../net/views.ts";
@@ -100,6 +100,11 @@ export function PatrimonioScreen({ onVoltar }: { onVoltar?: () => void }) {
                         height: 8,
                         borderRadius: radius.pill,
                         backgroundColor: conta.color || palette.accent,
+                        // O contorno é o que deixa a cor livre do site ser
+                        // livre: sem ele, uma cor parecida com a superfície faz
+                        // a bolinha — e com ela a conta — sumir da lista.
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: palette.line,
                       }}
                     />
                     <View style={{ flex: 1, minWidth: 0 }}>

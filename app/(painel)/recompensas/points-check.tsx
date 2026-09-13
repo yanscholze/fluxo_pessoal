@@ -23,11 +23,23 @@ import { useState } from "react";
 
 import { Button, Field, Input } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/dialog.tsx";
+import { parseScaled } from "../../../core/kernel/money.ts";
 import { decimal } from "../../ui/format.ts";
 import { Notice } from "../../ui/primitives.tsx";
 
 /** Pontos são guardados em milésimos para não arredondar a cada compra. */
 const MILLI = 1000;
+
+/**
+ * Pontos na unidade, com casas só quando existem.
+ *
+ * A mesma regra da tela de recompensas. Aqui ela importa mais: mostrar
+ * "11.257" para um saldo de 11.257,4 faria quem digita exatamente o que vê
+ * criar uma diferença de 0,4 ponto que ninguém pediu.
+ */
+function pontos(milli: number): string {
+  return decimal(milli / MILLI, milli % MILLI === 0 ? 0 : 2);
+}
 
 export function PointsCheck({
   cardId,
@@ -42,12 +54,25 @@ export function PointsCheck({
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
-  const [real, setReal] = useState(String(Math.round(balanceMilli / MILLI)));
+  const [real, setReal] = useState(String(balanceMilli / MILLI).replace(".", ","));
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const informado = Math.round(Number(real.replace(/\D/g, "")) || 0);
-  const diferenca = informado * MILLI - balanceMilli;
+  /*
+   * O que foi digitado, lido em milésimos pelo mesmo leitor do dinheiro.
+   *
+   * Antes daqui saía `Number(real.replace(/\D/g, ""))`, que apaga o separador
+   * decimal em vez de entendê-lo: digitar "8756,39" pontos virava 875 639, e o
+   * acerto gravava um saldo **cem vezes maior** sem avisar ninguém. Num campo
+   * cuja função é "coloque aqui o que o banco mostra", isso é o pior defeito
+   * possível — ele não recusa, ele mente.
+   *
+   * `null` quer dizer "ainda não dá para saber": campo vazio, ou texto que não
+   * é número. Não é zero. Tratá-lo como zero fazia o botão se oferecer para
+   * derrubar o saldo anterior a zero, e o servidor aceitava.
+   */
+  const informadoMilli = parseScaled(real, 3);
+  const diferenca = informadoMilli === null ? 0 : informadoMilli - balanceMilli;
 
   /**
    * A nova abertura.
@@ -96,8 +121,13 @@ export function PointsCheck({
         description="O Fluxo soma o que cada compra rendeu. Informe o que o emissor mostra e a diferença entra como saldo anterior."
         width="sm"
         footer={
-          <Button variant="primary" busy={enviando} onClick={() => void acertar()} disabled={diferenca === 0}>
-            {diferenca === 0 ? "Sem diferença" : "Acertar"}
+          <Button
+            variant="primary"
+            busy={enviando}
+            onClick={() => void acertar()}
+            disabled={informadoMilli === null || diferenca === 0}
+          >
+            {informadoMilli === null ? "Informe o saldo" : diferenca === 0 ? "Sem diferença" : "Acertar"}
           </Button>
         }
       >
@@ -105,7 +135,7 @@ export function PointsCheck({
           <Field label="Saldo no Fluxo hoje" htmlFor={`pontos-atual-${cardId}`}>
             <Input
               id={`pontos-atual-${cardId}`}
-              value={decimal(balanceMilli / MILLI, 0)}
+              value={pontos(balanceMilli)}
               readOnly
               className="tabular text-right"
             />
@@ -116,10 +146,18 @@ export function PointsCheck({
             htmlFor={`pontos-real-${cardId}`}
             hint="O número do aplicativo do banco, agora."
           >
+            {/*
+              Texto, e não `type="number"`.
+
+              O campo numérico do navegador recusa a vírgula — e o saldo de
+              pontos tem casas decimais, que em português se escrevem com
+              vírgula. Quem digitava "11.257,4" via o campo esvaziar sozinho.
+              Como texto, quem interpreta é o leitor do domínio, que entende as
+              duas formas.
+            */}
             <Input
               id={`pontos-real-${cardId}`}
-              type="number"
-              min={0}
+              inputMode="decimal"
               value={real}
               autoFocus
               onChange={(evento) => setReal(evento.target.value)}
@@ -129,8 +167,7 @@ export function PointsCheck({
 
           {diferenca !== 0 ? (
             <Notice tone="info">
-              O saldo anterior passa de {decimal(openingMilli / MILLI, 0)} para{" "}
-              {decimal(novaAbertura / MILLI, 0)} pontos. O que cada compra rendeu não muda — é o
+              O saldo anterior passa de {pontos(openingMilli)} para {pontos(novaAbertura)} pontos. O que cada compra rendeu não muda — é o
               pedaço que o Fluxo não apurou que se ajusta.
             </Notice>
           ) : null}

@@ -11,9 +11,11 @@
  * lido: no ponto ao lado do saldo, na fatia do gráfico, na linha do extrato.
  * Duas contas do mesmo banco com o mesmo cinza obrigam a ler o nome toda vez.
  *
- * Escolha entre cores fixas, e não um seletor livre. A paleta é a mesma dos
- * gráficos, então a cor escolhida aqui continua legível lá — um tom qualquer
- * escolhido à mão pode cair em cima do acento da interface e a conta some.
+ * Nove cores prontas e, ao lado delas, a paleta do sistema. As nove são a
+ * mesma paleta dos gráficos: escolhendo entre elas, a cor continua legível na
+ * fatia e na linha, sem sorte nenhuma envolvida. O seletor livre fica por
+ * último porque é o caso raro — quem quer exatamente o azul do banco — e
+ * porque ali a legibilidade passa a ser escolha de quem escolheu.
  *
  * O saldo não se edita aqui, e é deliberado: quem soma é o razão. A diferença
  * entre o que o Fluxo calculou e o que o banco mostra vira **lançamento**, no
@@ -125,28 +127,49 @@ export function EditAccount({
             label="Cor"
             hint="É por ela que a conta é reconhecida antes de o nome ser lido."
           >
-            <div role="radiogroup" aria-label="Cor da conta" className="flex flex-wrap gap-2">
-              {CORES.map((opcao) => {
-                const escolhida = cor.toLowerCase() === opcao.toLowerCase();
-                return (
-                  <button
-                    key={opcao}
-                    type="button"
-                    role="radio"
-                    aria-checked={escolhida}
-                    aria-label={`Cor ${opcao}`}
-                    onClick={() => setCor(opcao)}
-                    style={{ backgroundColor: opcao }}
-                    className={join(
-                      "size-8 rounded-full transition-transform hover:scale-105",
-                      // O anel marca a escolha por fora: um "✓" dentro do
-                      // círculo precisaria de contraste contra nove cores, e em
-                      // duas delas ficaria ilegível.
-                      escolhida ? "ring-2 ring-ink ring-offset-2 ring-offset-surface" : "",
-                    )}
-                  />
-                );
-              })}
+            <div className="flex flex-wrap items-center gap-2">
+              <div role="radiogroup" aria-label="Cor da conta" className="flex flex-wrap gap-2">
+                {CORES.map((opcao) => {
+                  const escolhida = cor.toLowerCase() === opcao.toLowerCase();
+                  return (
+                    <button
+                      key={opcao}
+                      type="button"
+                      role="radio"
+                      aria-checked={escolhida}
+                      aria-label={`Cor ${opcao}`}
+                      onClick={() => setCor(opcao)}
+                      style={{ backgroundColor: opcao }}
+                      className={join(
+                        "size-8 rounded-full transition-transform hover:scale-105",
+                        // O anel marca a escolha por fora: um "✓" dentro do
+                        // círculo precisaria de contraste contra nove cores, e em
+                        // duas delas ficaria ilegível.
+                        escolhida ? "ring-2 ring-ink ring-offset-2 ring-offset-surface" : "",
+                      )}
+                    />
+                  );
+                })}
+              </div>
+
+              {/*
+                A paleta do sistema, como no cadastro de cartão.
+
+                As nove são atalho, não cerca: elas cobrem o caso comum e já
+                nascem legíveis contra os gráficos. Quem quer o azul exato do
+                banco abre o seletor do sistema aqui e escolhe, que é o mesmo
+                gesto que o cartão sempre teve.
+              */}
+              <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-caption text-ink-muted">
+                <input
+                  type="color"
+                  value={cor}
+                  aria-label="Outra cor"
+                  onChange={(evento) => setCor(evento.target.value)}
+                  className="size-8 cursor-pointer rounded-full border border-line-strong bg-surface-sunken"
+                />
+                outra
+              </label>
             </div>
           </Field>
 

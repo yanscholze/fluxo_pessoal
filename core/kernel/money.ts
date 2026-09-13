@@ -65,6 +65,24 @@ export function toDecimal(value: Cents): number {
  * chama decidir se isso é erro de validação ou linha a ignorar.
  */
 export function parseMoney(input: string): Cents | null {
+  const total = parseScaled(input, 2);
+  return total === null ? null : assertSafe(total);
+}
+
+/**
+ * O mesmo leitor, para qualquer unidade mínima inteira.
+ *
+ * `scale` é quantas casas decimais cabem na unidade: 2 para centavos, 3 para
+ * milésimos — que é como o Fluxo guarda horas e pontos de cartão. Com escala 3,
+ * "2.500,61" vira 2 500 610.
+ *
+ * Existe porque a parte difícil aqui nunca foi multiplicar por dez: é decidir
+ * se o ponto de "1.500" separa milhar ou decimal. Essa regra morava só dentro
+ * do dinheiro, então quem precisava dela para pontos acabava pedindo um
+ * inteiro — foi assim que resgatar "2500,61" pontos virou "informe um número
+ * inteiro" para quem tinha o saldo com casas.
+ */
+export function parseScaled(input: string, scale: number): number | null {
   const raw = input.trim();
   if (!raw) return null;
 
@@ -85,14 +103,16 @@ export function parseMoney(input: string): Cents | null {
   if (!/^\d*$/.test(digits) || !/^\d*$/.test(split.fractionPart)) return null;
   if (!digits && !split.fractionPart) return null;
 
+  const fator = 10 ** scale;
+
   // Arredonda a fração em vez de truncar: `0,005` vale meio centavo e precisa
   // virar 1, não sumir.
   const fractionValue = split.fractionPart ? Number(`0.${split.fractionPart}`) : 0;
   if (!Number.isFinite(fractionValue)) return null;
-  const total = Number(digits || "0") * 100 + Math.round(fractionValue * 100);
+  const total = Number(digits || "0") * fator + Math.round(fractionValue * fator);
   if (!Number.isFinite(total)) return null;
 
-  return assertSafe(negative ? -total : total);
+  return negative ? -total : total;
 }
 
 /**

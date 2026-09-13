@@ -21,12 +21,18 @@ export const POST = handle(async (request: Request) => {
 
   const cardId = input.reference("cardId");
   const kind = input.choice("kind", ["points", "cashback"] as const);
-  // Pontos chegam em unidade inteira e cashback em texto de dinheiro; as duas
-  // viram a menor unidade aqui, que é como o saldo é guardado.
+  /*
+   * As duas viram a menor unidade aqui, que é como o saldo é guardado: pontos
+   * em milésimos, cashback em centavos.
+   *
+   * Pontos eram lidos como inteiro, e não são. O saldo de um cartão que pontua
+   * por dólar gasto quase nunca é redondo — quem tinha 11.257,4 e quis resgatar
+   * "2500,61" recebia "informe um número inteiro" e não tinha como registrar o
+   * próprio resgate. Agora a leitura é a mesma do dinheiro, só que com três
+   * casas em vez de duas.
+   */
   const amount =
-    kind === "points"
-      ? Math.round(input.integer("amount", { min: 1 }) * 1000)
-      : (input.money("amount") as number);
+    kind === "points" ? input.scaled("amount", { scale: 3 }) : (input.money("amount") as number);
   const accountId = input.optionalReference("accountId");
   const redeemedOn = input.optionalDate("redeemedOn");
   const note = input.optionalString("note", { max: 180 });

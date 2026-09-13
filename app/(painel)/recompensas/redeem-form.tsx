@@ -62,8 +62,26 @@ export function RedeemForm({
     setEnviando(false);
 
     if (!resposta.ok) {
-      const corpo = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
-      setErro(corpo.error?.message ?? "Não foi possível registrar o resgate.");
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        error?: { message?: string; issues?: readonly { path?: string; message?: string }[] };
+      };
+
+      /*
+       * A frase do servidor mais o detalhe do campo, sem repetir.
+       *
+       * Sozinha, a mensagem geral às vezes manda "revisar os campos
+       * destacados" — e este formulário não destaca nada. Sozinho, o detalhe
+       * às vezes é só "Disponível: 12000", que não diz o que houve. Juntos,
+       * dizem: "você não tem pontos suficientes · Disponível: 12000".
+       */
+      const geral = corpo.error?.message ?? null;
+      const detalhes = (corpo.error?.issues ?? [])
+        .map((problema) => problema.message)
+        .filter((mensagem): mensagem is string => Boolean(mensagem) && mensagem !== geral);
+
+      setErro(
+        [geral, ...detalhes].filter(Boolean).join(" · ") || "Não foi possível registrar o resgate.",
+      );
       return;
     }
 
@@ -137,10 +155,17 @@ export function RedeemForm({
             <span className="mb-1.5 block text-body-sm font-medium text-ink">
               {tipo === "points" ? "Quantos pontos" : "Quanto"}
             </span>
+            {/*
+              Decimal nos dois casos, inclusive em pontos.
+
+              Saldo de ponto quase nunca é redondo — o cartão pontua por dólar
+              gasto, e a conta cai em casas. Teclado de inteiro escondia a
+              vírgula justamente de quem precisava dela.
+            */}
             <input
               name="amount"
               required
-              inputMode={tipo === "points" ? "numeric" : "decimal"}
+              inputMode="decimal"
               placeholder={tipo === "points" ? "0" : "0,00"}
               className="tabular h-9 w-full rounded-md border border-line-strong bg-surface-sunken px-3 text-body text-ink placeholder:text-ink-subtle transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
             />

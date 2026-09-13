@@ -8,7 +8,7 @@
 
 import { type FieldIssue, validationError } from "../../core/kernel/errors.ts";
 import { parseId } from "../../core/kernel/id.ts";
-import { type Cents, cents, parseMoney } from "../../core/kernel/money.ts";
+import { type Cents, cents, parseMoney, parseScaled } from "../../core/kernel/money.ts";
 import { type Competence, parseCompetence } from "../../core/time/competence.ts";
 import { type LocalDate, parseLocalDate } from "../../core/time/local-date.ts";
 
@@ -140,6 +140,41 @@ export class InputReader {
   optionalMoney(path: string, options: { allowNegative?: boolean } = {}): Cents | null {
     if (this.missing(path)) return null;
     return this.money(path, { ...options, allowZero: true });
+  }
+
+  /**
+   * Número decimal lido na unidade mínima inteira que o domínio guarda.
+   *
+   * `scale` é quantas casas cabem na unidade — 3 para pontos e horas, que o
+   * Fluxo guarda em milésimos. É o mesmo leitor do dinheiro, que já sabe que
+   * "2.500,61" e "2500.61" são o mesmo número e que o ponto de "1.500" separa
+   * milhar. Pedir `integer` para um saldo que tem casas decimais é o que fazia
+   * um resgate legítimo voltar como "informe um número inteiro".
+   */
+  scaled(
+    path: string,
+    options: { scale: number; allowZero?: boolean; allowNegative?: boolean },
+  ): number {
+    const value = this.raw(path);
+    let parsed: number | null = null;
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      parsed = Math.round(value * 10 ** options.scale);
+    } else if (typeof value === "string") {
+      parsed = parseScaled(value, options.scale);
+    }
+
+    if (parsed === null) {
+      this.fail(path, "Informe um número válido");
+      return 0;
+    }
+    if (!options.allowNegative && parsed < 0) {
+      this.fail(path, "O valor não pode ser negativo");
+    }
+    if (!options.allowZero && parsed === 0) {
+      this.fail(path, "Informe um valor maior que zero");
+    }
+    return parsed;
   }
 
   date(path: string): LocalDate {
@@ -276,13 +311,28 @@ export class InputReader {
    * sem trocar cor nenhuma. O cliente não tem como descobrir que o campo foi
    * ignorado — ele pediu, recebeu sucesso, e nada mudou.
    */
-  done(message = "Revise os campos destacados"): void {
+  done(message?: string): void {
     for (const campo of Object.keys(this.body)) {
       if (!this.lidos.has(campo)) {
         this.fail(campo, "Campo não reconhecido por esta rota");
       }
     }
-    if (this.issues.length) throw validationError(message, this.issues);
+    if (!this.issues.length) return;
+
+    /*
+     * Com um problema só, a mensagem geral **é** esse problema.
+     *
+     * "Revise os campos destacados" pressupõe uma tela que destaca campos, e
+     * várias daqui não destacam: mostram a mensagem geral e mais nada. Quem
+     * digitava pontos com vírgula lia "revise os campos destacados" sem saber
+     * qual campo nem o quê — a informação existia, em `issues`, e não chegava
+     * a ninguém. Com dois ou mais, aí sim vale pedir para revisar, porque
+     * nenhuma frase única daria conta.
+     */
+    const geral =
+      message ?? (this.issues.length === 1 ? this.issues[0].message : "Revise os campos destacados");
+
+    throw validationError(geral, this.issues);
   }
 }
 

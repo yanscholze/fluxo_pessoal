@@ -30,12 +30,18 @@ const FOCALIZAVEIS =
  * escrevia em lugar nenhum e `Enter` fechava o diálogo — a pendência que a
  * pessoa acabou de escrever simplesmente não existia, sem erro nem aviso.
  *
- * A ordem é: o campo marcado com `autofocus`, depois o primeiro campo de
- * verdade, e só então o primeiro focalizável — que é o caso dos diálogos sem
- * formulário nenhum, como a confirmação de apagar.
+ * A ordem é: o campo que o React já focou por `autoFocus`, depois o primeiro
+ * campo **editável**, e só então o primeiro focalizável — que é o caso dos
+ * diálogos sem formulário nenhum, como a confirmação de apagar.
+ *
+ * `readonly` fica de fora, e não é detalhe. Vários diálogos daqui começam
+ * mostrando o número que o Fluxo calculou — o saldo de hoje, os pontos de
+ * hoje — num campo travado, e só o segundo campo é o que se digita. Cair no
+ * primeiro dava exatamente o mesmo sintoma de cair no botão: a pessoa digitava
+ * e nada aparecia.
  */
 const CAMPOS =
-  'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select:not([disabled]), textarea:not([disabled])';
+  'input:not([disabled]):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select:not([disabled]), textarea:not([disabled]):not([readonly])';
 
 /** Campos em que `Enter` significa "confirmar", e não "quebrar linha". */
 const CONFIRMA_COM_ENTER = new Set([
@@ -99,13 +105,22 @@ export function Dialog({
     const rolagem = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // O primeiro foco vai para dentro do diálogo. Sem isto, quem navega por
-    // teclado continua no botão que abriu — atrás do véu, fora do alcance.
-    const primeiro =
-      painel.current?.querySelector<HTMLElement>("[autofocus]") ??
-      painel.current?.querySelector<HTMLElement>(CAMPOS) ??
-      painel.current?.querySelector<HTMLElement>(FOCALIZAVEIS);
-    primeiro?.focus();
+    /*
+     * O primeiro foco vai para dentro do diálogo. Sem isto, quem navega por
+     * teclado continua no botão que abriu — atrás do véu, fora do alcance.
+     *
+     * Quem já está dentro fica onde está. É assim que o `autoFocus` de um campo
+     * continua valendo: o React o aplica antes deste efeito, e o React 19 não
+     * deixa o atributo no HTML para ser procurado depois. Sem esta guarda, o
+     * diálogo desfazia a escolha de quem sabia qual campo importa.
+     */
+    const jaDentro = painel.current?.contains(document.activeElement);
+    if (!jaDentro) {
+      const primeiro =
+        painel.current?.querySelector<HTMLElement>(CAMPOS) ??
+        painel.current?.querySelector<HTMLElement>(FOCALIZAVEIS);
+      primeiro?.focus();
+    }
 
     function aoTeclar(evento: KeyboardEvent) {
       if (evento.key === "Escape") {

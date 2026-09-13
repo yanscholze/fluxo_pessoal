@@ -11,9 +11,10 @@
  * ser lido — na lista, no ponto ao lado do saldo, na fatia do gráfico. Duas
  * contas do mesmo banco com a mesma cor cinza obrigam a ler o nome toda vez.
  *
- * Escolha entre cores fixas, e não um seletor livre. A paleta é a mesma dos
- * gráficos, então a cor escolhida aqui continua legível lá — um roxo qualquer
- * escolhido à mão pode cair em cima do roxo do acento e sumir.
+ * A paleta é a mesma dos gráficos, então a cor escolhida aqui continua legível
+ * lá. O seletor livre do sistema existe no site, onde há mouse e diálogo de
+ * cores; aqui a fileira mostra também a cor que veio de lá, para o celular não
+ * dizer que a conta está sem cor só porque ela não é uma das nove.
  *
  * O acerto de saldo fica embaixo, separado por uma linha, porque é de outra
  * natureza: nome e cor são aparência e se corrigem à vontade; o acerto **cria
@@ -39,8 +40,8 @@ import { radius, space, type, usePalette } from "../ui/theme.ts";
  * As cores possíveis.
  *
  * A mesma paleta dos gráficos, mais um cinza neutro para quem não quer
- * distinguir. Cor livre pareceria mais poderoso e seria pior: um tom escolhido
- * à mão pode cair em cima do acento da interface e a conta some da lista.
+ * distinguir. São atalhos legíveis por construção: qualquer uma delas continua
+ * distinguível na fatia do gráfico e ao lado do acento da interface.
  */
 const CORES = [
   "#6d4aff",
@@ -69,6 +70,26 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
   const [feito, setFeito] = useState<string | null>(null);
 
   const mudouIdentidade = nome.trim() !== conta.name || cor !== (conta.color || CORES[8]);
+
+  /*
+   * A cor escolhida no site entra na fileira.
+   *
+   * O site oferece, além destas nove, o seletor do sistema — e uma conta pintada
+   * com o azul exato do banco não bate com nenhuma das nove. Sem esta linha, o
+   * celular mostraria a fileira inteira sem nada marcado, como se a conta não
+   * tivesse cor; e salvar o nome levaria junto uma cor que ninguém escolheu.
+   *
+   * A fileira deriva da cor **gravada**, e não da que está selecionada agora.
+   * Derivando da selecionada, tocar numa das nove apagaria da tela a cor livre
+   * original — e não haveria caminho de volta sem fechar a tela e perder o que
+   * já foi digitado.
+   */
+  const corGravada = conta.color || CORES[8];
+  const paleta: readonly string[] = CORES.some(
+    (opcao) => opcao.toLowerCase() === corGravada.toLowerCase(),
+  )
+    ? CORES
+    : [...CORES, corGravada];
 
   // Quem converte é o domínio, o mesmo `parseMoney` do site e do servidor. Um
   // `Number(texto.replace(",", "."))` aqui seria a segunda implementação de uma
@@ -182,7 +203,7 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
             É por ela que a conta é reconhecida antes de o nome ser lido.
           </Small>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-            {CORES.map((opcao) => {
+            {paleta.map((opcao) => {
               const escolhida = cor.toLowerCase() === opcao.toLowerCase();
               return (
                 <Pressable
