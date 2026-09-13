@@ -19,12 +19,11 @@ import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { cents, parseMoney } from "@fluxo/core/kernel/money.ts";
+import { cents } from "@fluxo/core/kernel/money.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
-import { call } from "../net/client.ts";
 import type { ContaView } from "../net/views.ts";
+import { ContaEditarScreen } from "./conta-editar.tsx";
 import { useLedger } from "../state/ledger.tsx";
-import { useConnectedSession } from "../state/session.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { money, relativeDate } from "../ui/format.ts";
 import { Body, Button, Card, Empty, Figure, Label, Notice, Row, Small, Texto } from "../ui/primitives.tsx";
@@ -41,7 +40,7 @@ const NATUREZA: Record<string, string> = {
 export function ContaDetalheScreen({ conta, onClose }: { conta: ContaView; onClose: () => void }) {
   const palette = usePalette();
   const { transactions } = useLedger();
-  const [acertando, setAcertando] = useState(false);
+  const [editando, setEditando] = useState(false);
 
   /*
    * O extrato sai do razão local, o mesmo que alimenta o resto do aplicativo.
@@ -139,140 +138,30 @@ export function ContaDetalheScreen({ conta, onClose }: { conta: ContaView; onClo
           )}
         </Card>
 
-        <Button label="Acertar saldo" variant="secondary" onPress={() => setAcertando(true)} />
+        {/*
+          Uma porta só para nome, cor e acerto de saldo. Separá-las em três
+          botões faria a tela perguntar "o que você quer mudar?" antes de a
+          pessoa poder olhar as opções.
+        */}
+        <Button label="Editar conta" variant="secondary" onPress={() => setEditando(true)} />
       </ScrollView>
 
       <Modal
-        visible={acertando}
+        visible={editando}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setAcertando(false)}
+        onRequestClose={() => setEditando(false)}
       >
-        <AcertarSaldo conta={conta} onClose={() => setAcertando(false)} />
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-/**
- * Acertar o saldo, do celular.
- *
- * O mesmo gesto do site, pela mesma razão: o Fluxo deduz o saldo somando
- * lançamentos, e todo saldo deduzido acumula o que ficou de fora — uma compra
- * em dinheiro, um período não importado, uma entrada posterior ao último
- * extrato. A diferença vira lançamento, com data de hoje, visível no extrato.
- */
-function AcertarSaldo({ conta, onClose }: { conta: ContaView; onClose: () => void }) {
-  const palette = usePalette();
-  const { credentials } = useConnectedSession();
-  const { synchronize } = useLedger();
-
-  const [real, setReal] = useState((conta.balanceCents / 100).toFixed(2).replace(".", ","));
-  const [enviando, setEnviando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  // Quem converte é o domínio, o mesmo `parseMoney` do site e do servidor. Um
-  // `Number(texto.replace(",", "."))` aqui seria a segunda implementação de uma
-  // regra que já existe, e a primeira a errar com "1.500".
-  const informado = parseMoney(real);
-  const diferenca = informado === null ? 0 : informado - conta.balanceCents;
-  const entrada = diferenca > 0;
-
-  async function acertar() {
-    if (diferenca === 0) {
-      setErro("O saldo informado é igual ao que o Fluxo já tem.");
-      return;
-    }
-
-    setEnviando(true);
-    setErro(null);
-    try {
-      await call("/api/v1/transactions", {
-        baseUrl: credentials.baseUrl,
-        token: credentials.token,
-        method: "POST",
-        body: {
-          kind: entrada ? "income" : "expense",
-          description: `Acerto de saldo · ${conta.name}`,
-          amount: (Math.abs(diferenca) / 100).toFixed(2),
-          occurredOn: todayIn(),
-          state: "confirmed",
-          accountId: conta.id,
-        },
-      });
-      await synchronize();
-      onClose();
-    } catch (problema) {
-      setErro(problema instanceof Error ? problema.message : "Não foi possível acertar.");
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top", "bottom"]}>
-      <ScrollView
-        contentContainerStyle={{ padding: space.lg, gap: space.md }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink }]}>
-            Acertar saldo
-          </Texto>
-          <Pressable accessibilityRole="button" onPress={onClose} hitSlop={12}>
-            <Body muted>Cancelar</Body>
-          </Pressable>
-        </View>
-
-        <Card>
-          <Label>Saldo no Fluxo</Label>
-          <Figure>{money(cents(conta.balanceCents))}</Figure>
-        </Card>
-
-        <Card>
-          <Label style={{ marginBottom: space.xs }}>Saldo que o banco mostra</Label>
-          <TextInput
-            value={real}
-            onChangeText={setReal}
-            keyboardType="decimal-pad"
-            autoFocus
-            placeholderTextColor={palette.inkSubtle}
-            style={[
-              type.figureSm,
-              {
-                fontFamily: familiaDoPeso(type.figureSm.fontWeight),
-                color: palette.ink,
-                backgroundColor: palette.surfaceInset,
-                borderRadius: radius.md,
-                paddingHorizontal: space.sm,
-                paddingVertical: 12,
-                textAlign: "right",
-              },
-            ]}
-          />
-        </Card>
-
-        {diferenca !== 0 ? (
-          <Notice tone="info">
-            Entra no extrato de hoje como {entrada ? "receita" : "despesa"} de{" "}
-            {money(cents(Math.abs(diferenca)))}, com o nome “Acerto de saldo”. Dá para editar ou
-            apagar depois.
-          </Notice>
-        ) : null}
-
-        {erro ? <Notice tone="negative">{erro}</Notice> : null}
-
-        <Button
-          label={
-            diferenca === 0
-              ? "Sem diferença"
-              : `Lançar ${entrada ? "entrada" : "saída"} de ${money(cents(Math.abs(diferenca)))}`
-          }
-          onPress={() => void acertar()}
-          disabled={enviando || diferenca === 0}
-          busy={enviando}
+        <ContaEditarScreen
+          conta={conta}
+          onClose={() => {
+            setEditando(false);
+            // Nome, cor e saldo mudam o que a lista mostra: sem fechar até lá,
+            // o detalhe seguiria exibindo o que havia antes.
+            onClose();
+          }}
         />
-      </ScrollView>
+      </Modal>
     </SafeAreaView>
   );
 }

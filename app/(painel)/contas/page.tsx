@@ -17,6 +17,7 @@
 import { lastDay } from "../../../core/time/competence.ts";
 import { type AccountView, buildAccountsView } from "../../../server/services/accounts.ts";
 import { BalanceCheck } from "./balance-check.tsx";
+import { EditAccount } from "./edit-account.tsx";
 import { currentUser } from "../../auth-context.ts";
 import { ChartFrame, LineChart, chartColor } from "../../ui/charts.tsx";
 import {
@@ -280,7 +281,7 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
                 É a resposta para a única pergunta que se faz olhando esta
                 coluna: "isto bate com o meu banco?".
               */}
-              <span className="flex items-center justify-end gap-2">
+              <span className="flex items-center justify-end gap-1.5">
                 <Amount
                   cents={conta.balanceCents}
                   currency={conta.currency}
@@ -291,6 +292,7 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
                   accountName={conta.name}
                   balanceCents={conta.balanceCents}
                 />
+                <EditAccount accountId={conta.id} name={conta.name} color={conta.color} />
               </span>
             </Td>
           </Tr>
