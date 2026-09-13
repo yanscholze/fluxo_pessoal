@@ -1207,9 +1207,10 @@ export async function buildBoard(userId: string, now: Date = new Date()): Promis
   ]);
 
   const nomeCliente = new Map(listaClientes.map((cliente) => [cliente.id, cliente.name]));
-  const abertos = listaProjetos.filter(
-    (projeto) => !["done", "cancelled"].includes(projeto.status),
-  );
+  // A mesma definição de "aberto" que o painel e a tela de projetos usam. Era
+  // uma lista à parte aqui, e listas à parte discordam no dia em que uma
+  // situação nova aparece em duas delas e não na terceira.
+  const abertos = listaProjetos.filter((projeto) => isOpenStatus(projeto.status));
   const porId = new Map(abertos.map((projeto) => [projeto.id, projeto]));
 
   const doQuadro = tarefas.filter((tarefa) => porId.has(tarefa.projectId));

@@ -35,6 +35,7 @@ import { useRemoto } from "../state/remote.tsx";
 import { useConnectedSession } from "../state/session.tsx";
 import { FaixaDeIndicadores, GraficoDeCategorias, GraficoMensal, Sparkbars } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
+import { Pendencias } from "../ui/pendencias.tsx";
 import { Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
@@ -210,6 +211,19 @@ export function InicioScreen({
             </>
           ) : null}
         </View>
+
+        {/*
+          O que falta fazer, logo depois de quanto sobra.
+
+          É a segunda pergunta de quem abre o aplicativo de manhã, e ela morava
+          no fim da tela de Trabalho — atrás da lista de projetos, que responde
+          outra coisa. O cartão some sozinho quando não há pendência nenhuma.
+        */}
+        <Pendencias
+          tarefas={dados?.openTasks ?? []}
+          today={hoje}
+          onMudou={() => painel.recarregar()}
+        />
 
         {charts.balanceDays.length > 1 ? (
           <Card>

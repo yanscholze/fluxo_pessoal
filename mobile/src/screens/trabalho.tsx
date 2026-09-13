@@ -5,21 +5,21 @@
  * cadastrada — que é o caso comum de quem toca um trabalho sozinho — via uma
  * tela vazia e concluía que o aplicativo não conhecia os projetos dele.
  *
- * Agora o projeto vem primeiro, com o que se pergunta sobre ele longe do
- * computador: quanto já entrou do combinado, quantas horas foram, e quanto
- * falta para o prazo. As tarefas vêm depois, quando existem.
+ * Agora a tela é dos projetos, e só deles: quanto já entrou do combinado,
+ * quantas horas foram, quanto falta para o prazo — o que se pergunta sobre um
+ * projeto longe do computador.
+ *
+ * As pendências saíram daqui para o painel. Elas estavam no fim desta tela,
+ * atrás da lista de projetos, e respondem a outra pergunta: não "como vai este
+ * projeto", e sim "o que eu faço hoje" — que é a primeira do dia e por isso
+ * pertence à primeira tela.
  */
 
 import { useMemo, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
-import {
-  fetchBoard,
-  fetchProjetos,
-  type BoardTask,
-  type ProjetoView,
-} from "../net/views.ts";
+import { fetchProjetos, type ProjetoView } from "../net/views.ts";
 import { useRemoto } from "../state/remote.tsx";
 import { HorasScreen } from "./horas.tsx";
 import { Medidor } from "../ui/charts.tsx";
@@ -51,7 +51,6 @@ const emHoras = (milli: number) => milli / 1000;
 
 export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
   const remoto = useRemoto(fetchProjetos);
-  const quadro = useRemoto(fetchBoard);
   /**
    * O projeto cujo registro de horas está aberto.
    *
@@ -127,8 +126,6 @@ export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
               />
             ))
           )}
-
-          <Pendencias tarefas={quadro.dados?.tasks ?? []} />
 
           <Modal
             visible={registrando !== null}
@@ -237,67 +234,6 @@ function CartaoDeProjeto({
           Toque para registrar horas
         </Small>
       </Pressable>
-    </Card>
-  );
-}
-
-/** As tarefas abertas, com as atrasadas primeiro. */
-function Pendencias({ tarefas }: { tarefas: readonly BoardTask[] }) {
-  const palette = usePalette();
-  const abertas = useMemo(
-    () =>
-      [...tarefas]
-        .filter((tarefa) => tarefa.status !== "done")
-        .sort(
-          (esquerda, direita) =>
-            Number(direita.isLate) - Number(esquerda.isLate),
-        ),
-    [tarefas],
-  );
-
-  if (abertas.length === 0) return null;
-
-  return (
-    <Card>
-      <Label style={{ marginBottom: space.xs }}>
-        Pendências ({abertas.length})
-      </Label>
-      {abertas.map((tarefa, indice) => (
-        <Row
-          key={tarefa.id}
-          style={
-            indice === abertas.length - 1 ? { borderBottomWidth: 0 } : undefined
-          }
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space.sm,
-              flex: 1,
-              minWidth: 0,
-            }}
-          >
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: radius.pill,
-                backgroundColor: tarefa.projectColor ?? palette.accent,
-              }}
-            />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Body numberOfLines={1}>{tarefa.title}</Body>
-              <Small tone={tarefa.isLate ? "negative" : "subtle"}>
-                {tarefa.projectName}
-                {tarefa.dueOn
-                  ? ` · ${relativeDate(tarefa.dueOn as never)}`
-                  : ""}
-              </Small>
-            </View>
-          </View>
-        </Row>
-      ))}
     </Card>
   );
 }

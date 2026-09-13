@@ -9,6 +9,7 @@ import { FreeToSpend } from "../ui/dashboard/free-to-spend.tsx";
 import { ProjectsPanel } from "../ui/dashboard/projects-panel.tsx";
 import { PositionStrip } from "../ui/dashboard/position-strip.tsx";
 import { RecentPanel } from "../ui/dashboard/recent-panel.tsx";
+import { TasksPanel } from "../ui/dashboard/tasks-panel.tsx";
 import { UpcomingPanel } from "../ui/dashboard/upcoming-panel.tsx";
 import { competenceLong } from "../ui/format.ts";
 import { Plus } from "../ui/icons.tsx";
@@ -75,6 +76,17 @@ export default async function VisaoGeral() {
             className="xl:grid-cols-1"
           />
         </div>
+
+        {/*
+          O que fazer hoje, logo abaixo do quanto sobra.
+
+          É a segunda pergunta de quem abre o Fluxo de manhã, e estava a dois
+          cliques daqui. Só aparece para quem tem projeto aberto: num uso
+          puramente pessoal, um quadro de tarefas vazio seria mobília.
+        */}
+        {dashboard.openProjects.length ? (
+          <TasksPanel tasks={dashboard.openTasks} today={dashboard.today} />
+        ) : null}
 
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">

@@ -390,6 +390,14 @@ export type DashboardView = {
     readonly inflowCents: number;
     readonly outflowCents: number;
   }[];
+  /**
+   * As pendências em aberto, já prontas para a tela.
+   *
+   * Vêm junto com o painel de propósito: uma chamada a mais só para as tarefas
+   * gastaria uma volta de rede inteira para cinco linhas de texto, e o painel
+   * já carrega tudo o que a primeira tela mostra.
+   */
+  readonly openTasks: readonly BoardTask[];
 };
 
 export const fetchDashboard = (c: Credenciais) => buscar<DashboardView>("/api/v1/dashboard", c);

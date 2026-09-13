@@ -5,7 +5,7 @@ import { CircleAlert, Clock, Layers, Pause } from "../../../ui/icons.tsx";
 import { Page, PageHeader, Stack } from "../../../ui/page-frame.tsx";
 import { Empty, Panel } from "../../../ui/primitives.tsx";
 import { WorkNav } from "../work-nav.tsx";
-import { Board } from "./board.tsx";
+import { TaskBoard } from "../../../ui/work/task-board.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +74,7 @@ export default async function Quadro() {
         />
 
         {view.tasks.length ? (
-          <Board tasks={view.tasks} />
+          <TaskBoard tasks={view.tasks} />
         ) : (
           <Panel>
             <Empty
