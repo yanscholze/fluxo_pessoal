@@ -164,35 +164,35 @@
    * a superfície branca **subir**, e é de graça: nenhuma sombra precisa
    * trabalhar mais para compensar.
    */
-  --color-canvas: #edeff3;
+  --color-canvas: #f0eff5;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #f5f7f9;
-  --color-surface-inset: #e9ecf1;
+  --color-surface-sunken: #f6f5fa;
+  --color-surface-inset: #ebe9f2;
 
-  --color-line: #e2e6ec;
-  --color-line-strong: #cdd3dc;
+  --color-line: #e1deeb;
+  --color-line-strong: #ccc7db;
 
   /* Clareamento no alto da página. Ver a regra de `body`. */
   --color-canvas-glow: rgb(255 255 255 / 0.85);
 
   /* Texto, em três degraus. Mais que isso vira ruído; menos, vira monotonia. */
-  --color-ink: #10151c;
+  --color-ink: #222132;
   /* O terceiro tom precisa passar em 4,5:1 no fundo mais escuro em que ele
      aparece, e não só no branco. Em #8b95a3 dava 3,03:1 — a dica de campo, o
      rótulo do menu e o "—" de célula vazia ficavam abaixo do mínimo de leitura
      em toda tela. Escurecer o terceiro tom obrigou a escurecer o segundo: sem
      isso os dois encostavam e a hierarquia entre apoio e dica sumia. */
-  --color-ink-muted: #4a5462;
-  --color-ink-subtle: #606974;
+  --color-ink-muted: #565366;
+  --color-ink-subtle: #6b657b;
 
   /* --- Cromo interativo -------------------------------------------------- */
-  --color-accent: #0d9668;
+  --color-accent: #7056b8;
   --color-accent-ink: #ffffff;
-  --color-accent-hover: #0b855c;
+  --color-accent-hover: #6047a4;
 
   /* --- Semântica de valor ------------------------------------------------ */
-  --color-positive: #16a34a;
+  --color-positive: #168047;
   --color-negative: #dc2626;
   --color-caution: #b45309;
   --color-info: #2563eb;
@@ -244,10 +244,10 @@
   --text-figure-sm--font-weight: 620;
 
   /* Título de página. */
-  --text-title: 1.0625rem;
+  --text-title: 1.5rem;
   --text-title--line-height: 1.35;
-  --text-title--letter-spacing: -0.013em;
-  --text-title--font-weight: 620;
+  --text-title--letter-spacing: -0.025em;
+  --text-title--font-weight: 600;
 
   /* Título de seção dentro de um painel. */
   --text-heading: 0.875rem;
@@ -256,11 +256,11 @@
   --text-heading--font-weight: 600;
 
   /* Corpo. O tamanho padrão de qualquer texto de conteúdo. */
-  --text-body: 0.875rem;
+  --text-body: 0.9375rem;
   --text-body--line-height: 1.5;
 
   /* Corpo secundário: subtítulo de linha, texto de apoio. */
-  --text-body-sm: 0.8125rem;
+  --text-body-sm: 0.875rem;
   --text-body-sm--line-height: 1.45;
 
   /* Nota, metadado, eixo de gráfico. */
@@ -300,8 +300,8 @@
   /* ---------------------------------------------------------------------- */
 
   --container-page-narrow: 48rem;
-  --container-page: 96rem;
-  --container-page-wide: 112rem;
+  --container-page: 88rem;
+  --container-page-wide: 100rem;
 
   --container-measure-sm: 42ch;
   --container-measure: 56ch;
@@ -324,7 +324,7 @@
    * `panel` é a superfície de conteúdo; `nested` é o que vive dentro dela com
    * um respiro de 4 px (14 − 4 = 10); `inner` é o que encosta com 2 px.
    */
-  --radius-panel: 0.875rem;
+  --radius-panel: 0.75rem;
   --radius-nested: 0.625rem;
   --radius-inner: 0.75rem;
 
@@ -436,27 +436,27 @@
 /* -------------------------------------------------------------------------- */
 
 [data-theme="dark"] {
-  --color-canvas: #08090b;
-  --color-surface: #0f1114;
-  --color-surface-raised: #171a1f;
-  --color-surface-sunken: #0b0d10;
-  --color-surface-inset: #131619;
+  --color-canvas: #161826;
+  --color-surface: #222433;
+  --color-surface-raised: #2a2c3e;
+  --color-surface-sunken: #1b1d2b;
+  --color-surface-inset: #2a2c3d;
 
-  --color-line: #1d2126;
-  --color-line-strong: #2b3138;
+  --color-line: #333548;
+  --color-line-strong: #484b61;
 
   --color-canvas-glow: rgb(255 255 255 / 0.035);
 
-  --color-ink: #e9ecef;
-  --color-ink-muted: #99a2ac;
+  --color-ink: #eeeef5;
+  --color-ink-muted: #b6b5c8;
   /* 3,93:1 sobre a superfície, e 3,4:1 sobre o painel elevado — abaixo do
      mínimo nos dois. Clareado até 4,99:1, com a distância para `muted`
      preservada, que é o que mantém a leitura em três níveis. */
-  --color-ink-subtle: #7b8490;
+  --color-ink-subtle: #a09fb6;
 
-  --color-accent: #21c99a;
-  --color-accent-ink: #04231b;
-  --color-accent-hover: #35d6a9;
+  --color-accent: #a394e8;
+  --color-accent-ink: #191329;
+  --color-accent-hover: #b6a8f4;
 
   --color-positive: #4ade80;
   --color-negative: #ff6b6b;
@@ -528,6 +528,17 @@
 /* qualquer paleta, porque eles não são estilo — são o sinal do dinheiro.      */
 /* -------------------------------------------------------------------------- */
 
+[data-accent="verde"] {
+  --color-accent: #087c57;
+  --color-accent-ink: #ffffff;
+  --color-accent-hover: #086b4c;
+}
+[data-theme="dark"][data-accent="verde"] {
+  --color-accent: #51d5af;
+  --color-accent-ink: #10261f;
+  --color-accent-hover: #76e4c4;
+}
+
 [data-accent="azul"] {
   --color-accent: #2563eb;
   --color-accent-ink: #ffffff;
@@ -540,14 +551,14 @@
 }
 
 [data-accent="violeta"] {
-  --color-accent: #6d4aff;
+  --color-accent: #7056b8;
   --color-accent-ink: #ffffff;
-  --color-accent-hover: #5c3ae6;
+  --color-accent-hover: #6047a4;
 }
 [data-theme="dark"][data-accent="violeta"] {
-  --color-accent: #9d84ff;
-  --color-accent-ink: #120e26;
-  --color-accent-hover: #b19bff;
+  --color-accent: #a394e8;
+  --color-accent-ink: #191329;
+  --color-accent-hover: #b6a8f4;
 }
 
 [data-accent="ambar"] {
@@ -720,4 +731,18 @@
     background-size: 220% 100%;
     animation: var(--animate-shimmer);
   }
+}
+
+/* Nocturne: shared app chrome, with the selected accent as a thin guiding line. */
+.brand-mark { display: grid; width: 2.2rem; height: 2.2rem; place-items: center; color: var(--color-accent); background: var(--color-accent-wash); border: 1px solid var(--color-accent-edge); border-radius: .65rem; box-shadow: 0 0 20px -10px var(--color-accent); }
+.brand-mark svg { width: 1.5rem; height: 1.5rem; }
+.app-sidebar { background-image: linear-gradient(180deg, var(--color-accent-wash), transparent 12rem); }
+.page-content { scroll-margin-top: 5rem; }
+.page-content:focus { outline: none; }
+.page-heading h1 { text-wrap: balance; }
+.skip-link { position: fixed; top: .75rem; left: 1rem; z-index: 100; transform: translateY(-200%); padding: .75rem 1rem; background: var(--color-accent); color: var(--color-accent-ink); border-radius: .5rem; }
+.skip-link:focus { transform: translateY(0); }
+@media (pointer: coarse) {
+  .press, input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+  .nav-item { min-height: 44px; }
 }

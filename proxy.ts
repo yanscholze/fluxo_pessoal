@@ -27,7 +27,29 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "./core/kernel/session-cookie.ts";
 
 export function proxy(request: NextRequest) {
-  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
+  if (request.cookies.has(SESSION_COOKIE)) {
+    const legacyRoutes: Record<string, { path: string; tab?: string; hash?: string }> = {
+      "/investimentos": { path: "/patrimonio", tab: "investimentos" },
+      "/metas": { path: "/patrimonio", tab: "metas" },
+      "/saude": { path: "/patrimonio", tab: "saude" },
+      "/parcelamentos": { path: "/planejamento", tab: "parcelamentos" },
+      "/assinaturas": { path: "/planejamento", tab: "assinaturas" },
+      "/importar": { path: "/automaticos", tab: "importacoes" },
+      "/conectar": { path: "/configuracoes", tab: "aparelhos" },
+      "/recompensas": { path: "/cartoes", tab: "recompensas" },
+      "/assistente": { path: "/", hash: "conversa" },
+    };
+    const legacy = legacyRoutes[request.nextUrl.pathname.replace(/\/$/, "")];
+    if (legacy) {
+      // Preserve batch, card and other deep-link parameters while selecting the new section.
+      const destination = new URL(request.url);
+      destination.pathname = legacy.path;
+      if (legacy.tab) destination.searchParams.set("aba", legacy.tab);
+      if (legacy.hash) destination.hash = legacy.hash;
+      return NextResponse.redirect(destination);
+    }
+    return NextResponse.next();
+  }
 
   const destino = new URL("/entrar", request.url);
   return NextResponse.redirect(destino);

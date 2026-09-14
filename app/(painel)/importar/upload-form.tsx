@@ -71,7 +71,7 @@ export function UploadForm({
     }
 
     const corpo = (await resposta.json()) as { data: { id: string } };
-    router.replace(`/importar?lote=${corpo.data.id}`);
+    router.replace(`/automaticos?aba=importacoes&lote=${encodeURIComponent(corpo.data.id)}`);
     router.refresh();
   }
 

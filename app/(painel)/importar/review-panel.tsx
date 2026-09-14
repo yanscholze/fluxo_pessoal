@@ -62,7 +62,7 @@ export function ReviewPanel({
   async function confirmar() {
     if (await chamar({}, "POST")) {
       startTransition(() => {
-        router.replace("/importar");
+        router.replace("/automaticos?aba=importacoes");
         router.refresh();
       });
     }
@@ -71,7 +71,7 @@ export function ReviewPanel({
   async function descartar() {
     if (await chamar({}, "DELETE")) {
       startTransition(() => {
-        router.replace("/importar");
+        router.replace("/automaticos?aba=importacoes");
         router.refresh();
       });
     }

@@ -8,6 +8,9 @@
  * Uso: `node scripts/smoke.mjs [http://localhost:5173]`
  */
 
+import { nthBusinessDayOfMonth, businessDaysInMonth } from "../core/time/brazilian-calendar.ts";
+import { todayIn, year, month, addMonths } from "../core/time/local-date.ts";
+
 const BASE = process.argv[2] ?? "http://localhost:5173";
 
 /**
@@ -197,11 +200,12 @@ async function main() {
   conferir("saldo da conta ignora compra no crédito", painel.position.currentBalanceCents, 800000);
 
   const cartao = painel.cards.find((item) => item.id === cartaoId);
-  const agosto = cartao.currentInvoice.competence === "2026-08" ? cartao.currentInvoice : cartao.overdueInvoices[0];
+  const faturas = [...cartao.overdueInvoices, ...(cartao.currentInvoice ? [cartao.currentInvoice] : []), ...cartao.upcomingInvoices];
+  const agosto = faturas.find((fatura) => fatura.competence === "2026-08");
   conferir("fatura de agosto = 1200 + 400 da 1ª parcela", agosto.chargesCents, 160000);
   conferir("fatura de agosto vence em", agosto.dueDate, "2026-08-20");
 
-  const setembro = cartao.currentInvoice.competence === "2026-09" ? cartao.currentInvoice : null;
+  const setembro = faturas.find((fatura) => fatura.competence === "2026-09");
   conferir("fatura de setembro = 300 + 400 da 2ª parcela", setembro?.chargesCents, 70000);
 
   // Mercado 1200 + Farmácia 300 + parcelamento 1200 = 2700 em três faturas.
@@ -224,7 +228,7 @@ async function main() {
   conferir("pagamento saiu da conta", painel.position.currentBalanceCents, 640000);
   conferir("dívida caiu para as faturas seguintes", painel.position.cardDebtCents, 270000 - 160000);
   conferir("limite voltou proporcionalmente", cartaoDepois.availableLimitCents, 500000 - 110000);
-  conferir("agosto não aparece mais em atraso", cartaoDepois.overdueInvoices.length, 0);
+  conferir("agosto não aparece mais em atraso", cartaoDepois.overdueInvoices.filter((fatura) => fatura.competence === "2026-08").length, 0);
 
   // Pagar de novo precisa ser recusado.
   let recusou = false;
@@ -377,11 +381,15 @@ async function main() {
 
   const regras = await api("/api/v1/recurrences");
   const salario = regras.find((item) => item.id === salarioId);
-  conferir("próxima ocorrência do salário", salario.next.date, "2026-09-08");
+  const hoje = todayIn();
+  const quintoDia = nthBusinessDayOfMonth(year(hoje), month(hoje), 5);
+  const proximoMes = addMonths(hoje, 1);
+  const proximoSalario = quintoDia >= hoje ? quintoDia : nthBusinessDayOfMonth(year(proximoMes), month(proximoMes), 5);
+  conferir("próxima ocorrência do salário", salario.next.date, proximoSalario);
 
   const va = regras.find((item) => item.description === "Vale-alimentação");
-  // Setembro/2026 tem 21 dias úteis: 35,00 × 21 = 735,00.
-  conferir("vale-alimentação varia com os dias úteis", va.next.amountCents, 73500);
+  // O mês de referência acompanha a próxima ocorrência, mesmo após a virada do calendário.
+  conferir("vale-alimentação varia com os dias úteis", va.next.amountCents, 3500 * businessDaysInMonth(year(va.next.date), month(va.next.date)));
 
   painel = await api("/api/v1/dashboard");
   const agenda = painel.upcoming.map((item) => item.description);
@@ -684,6 +692,17 @@ async function main() {
   // que a pilha toda — rota, serviço, domínio, banco — chega até o HTML.
   const paginas = [
     "/",
+    "/painel",
+    "/patrimonio",
+    "/patrimonio?aba=investimentos",
+    "/patrimonio?aba=metas",
+    "/patrimonio?aba=saude",
+    "/planejamento?aba=parcelamentos",
+    "/planejamento?aba=recorrencias",
+    "/planejamento?aba=assinaturas",
+    "/automaticos?aba=importacoes",
+    "/configuracoes?aba=aparelhos",
+    `/cartoes?cartao=${cartaoId}&aba=recompensas`,
     "/lancamentos",
     "/contas",
     "/cartoes",
@@ -715,7 +734,8 @@ async function main() {
   const quebradas = [];
   for (const caminho of paginas) {
     const resposta = await fetch(`${BASE}${caminho}`, { headers: { cookie: sessaoWeb } });
-    if (resposta.ok) renderizaram += 1;
+    const html = await resposta.text();
+    if (resposta.ok && html.includes("<main") && !html.includes("Internal Server Error")) renderizaram += 1;
     else quebradas.push(`${caminho} (${resposta.status})`);
   }
   conferir(

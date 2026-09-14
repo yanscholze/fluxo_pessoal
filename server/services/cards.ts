@@ -146,7 +146,7 @@ function toCardView(
           ? "futura"
           : totals.outstanding === 0
             ? "paga"
-            : competence < active
+            : dueDate < today
               ? "atrasada"
               : "em_aberto";
 

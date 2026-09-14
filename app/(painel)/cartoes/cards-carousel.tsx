@@ -1,26 +1,12 @@
-"use client";
-
-/**
- * Carrossel de cartões.
- *
- * Arrastar para o lado troca o cartão, e o detalhe abaixo acompanha. O
- * movimento é `scroll-snap` nativo — não é gesto simulado em JavaScript: o
- * arrasto no celular, a rolagem horizontal do trackpad, a barra de rolagem e o
- * teclado passam a funcionar de graça, e nenhum deles funcionaria numa
- * implementação com `pointerdown`/`pointermove`.
- *
- * O JavaScript entra só para responder "qual cartão está no centro agora", via
- * `IntersectionObserver`. Se ele falhar, o carrossel continua rolando e os
- * cartões continuam clicáveis — degrada para uma lista horizontal, não para
- * uma tela quebrada.
- */
-
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import type { CardsView, CardView } from "../../../server/services/cards.ts";
+import type { CardRewardsView } from "../../../server/services/rewards.ts";
+import { CreditCard, Gift } from "../../ui/icons.tsx";
 import { join } from "../../ui/primitives.tsx";
 import { CardFace, type FaceData } from "./card-face.tsx";
 import { CardPanel } from "./card-panel.tsx";
+import { CardRewardsPanel } from "./card-rewards-panel.tsx";
 
 function paraFace(card: CardView): FaceData {
   const ativa = card.invoices.find((invoice) => invoice.isActive);
@@ -41,103 +27,78 @@ function paraFace(card: CardView): FaceData {
   };
 }
 
+/** A URL identifica o cartão e a seção: recarregar ou compartilhar mantém a escolha. */
 export function CardsCarousel({
   cards,
   accounts,
   today,
+  selectedCardId,
+  activeTab,
+  rewards,
 }: {
   cards: readonly CardView[];
   accounts: CardsView["accounts"];
   today: CardsView["today"];
+  selectedCardId: string;
+  activeTab: "faturas" | "recompensas";
+  rewards?: CardRewardsView;
 }) {
-  const [ativo, setAtivo] = useState(0);
-  const trilho = useRef<HTMLDivElement>(null);
+  const selecionado = cards.find((card) => card.id === selectedCardId) ?? cards[0];
+  const temRecompensas = selecionado?.kind === "credit" && selecionado.rewardMode !== "none";
 
-  // Quem manda no cartão ativo é a posição da rolagem, e não o clique: assim o
-  // arrasto e o clique não brigam por dois estados diferentes de verdade.
-  //
-  // A escolha é pelo cartão mais próximo da borda esquerda do trilho, e não
-  // pelo que estiver visível. `IntersectionObserver` parecia natural aqui e
-  // estava errado: numa tela larga todos os cartões ficam visíveis ao mesmo
-  // tempo, e o último a disparar vencia — o detalhe abria num cartão que o
-  // usuário nunca escolheu.
-  useEffect(() => {
-    const elemento = trilho.current;
-    if (!elemento) return;
-
-    function recalcular() {
-      const trilhoCaixa = elemento!.getBoundingClientRect();
-      let melhor = 0;
-      let menorDistancia = Number.POSITIVE_INFINITY;
-
-      for (const filho of elemento!.querySelectorAll<HTMLElement>("[data-indice]")) {
-        const distancia = Math.abs(filho.getBoundingClientRect().left - trilhoCaixa.left);
-        if (distancia < menorDistancia) {
-          menorDistancia = distancia;
-          melhor = Number(filho.dataset.indice);
-        }
-      }
-
-      setAtivo((atual) => (atual === melhor ? atual : melhor));
-    }
-
-    recalcular();
-    elemento.addEventListener("scroll", recalcular, { passive: true });
-    return () => elemento.removeEventListener("scroll", recalcular);
-  }, [cards.length]);
-
-  function irPara(indice: number) {
-    const elemento = trilho.current;
-    const alvo = elemento?.querySelector<HTMLElement>(`[data-indice="${indice}"]`);
-    alvo?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
-    setAtivo(indice);
+  function cardUrl(card: CardView, tab = activeTab) {
+    const hasRewards = card.kind === "credit" && card.rewardMode !== "none";
+    const query = new URLSearchParams({ cartao: card.id });
+    if (tab === "recompensas" && hasRewards) query.set("aba", "recompensas");
+    return `/cartoes?${query.toString()}`;
   }
 
-  const selecionado = cards[Math.min(ativo, cards.length - 1)];
-
   return (
-    <div>
-      <div
-        ref={trilho}
-        // `overflow-x-auto` com snap dá o arrasto; o padding lateral existe para
-        // o primeiro e o último cartão poderem centralizar.
-        className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 pt-1 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="group"
-        aria-label="Seus cartões"
-      >
-        {cards.map((card, indice) => (
-          <div key={card.id} data-indice={indice} className="snap-start">
-            <CardFace
-              data={paraFace(card)}
-              selected={cards.length > 1 ? indice === ativo : undefined}
-              onSelect={() => irPara(indice)}
-            />
-          </div>
+    <div className="space-y-5">
+      <nav aria-label="Seus cartões" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:mx-0 sm:px-0">
+        {cards.map((card) => (
+          <Link
+            key={card.id}
+            href={cardUrl(card)}
+            scroll={false}
+            aria-label={`Ver ${card.name}`}
+            aria-current={card.id === selecionado?.id ? "page" : undefined}
+            className="block shrink-0 snap-start rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          >
+            <CardFace data={paraFace(card)} selected={cards.length > 1 ? card.id === selecionado?.id : undefined} />
+          </Link>
         ))}
-      </div>
+      </nav>
 
-      {cards.length > 1 ? (
-        <div className="mb-5 flex items-center justify-center gap-1.5">
-          {cards.map((card, indice) => (
-            <button
-              key={card.id}
-              type="button"
-              onClick={() => irPara(indice)}
-              aria-label={`Ir para ${card.name}`}
-              aria-current={indice === ativo ? "true" : undefined}
+      {selecionado && temRecompensas ? (
+        <nav aria-label={`Seções do ${selecionado.name}`} className="flex gap-2 border-b border-line">
+          {([
+            { id: "faturas", label: "Faturas e limite", icon: CreditCard },
+            { id: "recompensas", label: "Recompensas", icon: Gift },
+          ] as const).map((tab) => (
+            <Link
+              key={tab.id}
+              href={cardUrl(selecionado, tab.id)}
+              scroll={false}
+              aria-current={activeTab === tab.id ? "page" : undefined}
               className={join(
-                "h-1.5 rounded-full transition-all duration-300 ease-out-soft",
-                indice === ativo ? "w-5 bg-accent" : "w-1.5 bg-line-strong hover:bg-ink-subtle",
+                "-mb-px inline-flex min-h-11 items-center gap-2 border-b-2 px-3 py-2 text-body-sm font-medium transition-colors",
+                activeTab === tab.id ? "border-accent text-accent" : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
               )}
-            />
+            >
+              <tab.icon size={16} aria-hidden />
+              {tab.label}
+            </Link>
           ))}
-        </div>
-      ) : (
-        <div className="mb-5" />
-      )}
+        </nav>
+      ) : null}
 
       {selecionado ? (
-        <CardPanel key={selecionado.id} card={selecionado} accounts={accounts} today={today} />
+        activeTab === "recompensas" && rewards ? (
+          <CardRewardsPanel card={rewards} accounts={accounts} />
+        ) : (
+          <CardPanel key={selecionado.id} card={selecionado} accounts={accounts} today={today} />
+        )
       ) : null}
     </div>
   );

@@ -21,17 +21,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { CreditCard, LayoutDashboard, Plus, Receipt, Wallet } from "./icons.tsx";
+import { Bot, CreditCard, Menu, Plus, Receipt } from "./icons.tsx";
 import { join } from "./primitives.tsx";
 
 const DESTINOS = [
-  { href: "/", label: "Painel", icon: LayoutDashboard },
-  { href: "/lancamentos", label: "Extrato", icon: Receipt },
+  { href: "/", label: "TARS", icon: Bot },
+  { href: "/lancamentos", label: "Lançamentos", icon: Receipt },
   { href: "/cartoes", label: "Cartões", icon: CreditCard },
-  { href: "/orcamentos", label: "Orçamento", icon: Wallet },
 ] as const;
 
-export function BottomNav() {
+export function BottomNav({ onMenuOpen, menuOpen }: { onMenuOpen: () => void; menuOpen: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -61,6 +60,7 @@ export function BottomNav() {
         {DESTINOS.slice(2).map((destino) => (
           <ItemInferior key={destino.href} destino={destino} pathname={pathname} />
         ))}
+        <li className="flex-1"><button type="button" onClick={onMenuOpen} aria-expanded={menuOpen} aria-controls="navegacao" className="flex min-h-[3.5rem] w-full flex-col items-center justify-center gap-0.5 text-caption text-ink-subtle hover:text-accent"><Menu size={19} aria-hidden /><span>Mais</span></button></li>
       </ul>
     </nav>
   );
@@ -82,7 +82,7 @@ function ItemInferior({
         href={destino.href}
         aria-current={ativo ? "page" : undefined}
         className={join(
-          "flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 text-caption transition-colors",
+          "flex min-h-[3.5rem] flex-col items-center justify-center gap-0.5 text-caption transition-colors",
           ativo ? "text-accent" : "text-ink-subtle hover:text-ink-muted",
         )}
       >

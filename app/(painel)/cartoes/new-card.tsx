@@ -68,6 +68,7 @@ export type CardToEdit = {
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  readonly manualUsdRateMicros: number;
 };
 
 function reais(centavos: number): string {
@@ -135,6 +136,7 @@ export function NewCard({
           ? {
               pointsPerDollarMilli: Math.round(Number(dados.get("pontosPorDolar") ?? 0) * 1000),
               pointsGoal: Number(dados.get("metaDePontos") ?? 0) || null,
+              manualUsdRateMicros: Math.round(Number(dados.get("cotacaoManual") ?? 0) * 1_000_000),
             }
           : {}),
         ...(recompensa === "cashback" || recompensa === "both"
@@ -398,6 +400,18 @@ export function NewCard({
                       min={0}
                       defaultValue={card?.pointsGoal || ""}
                       placeholder="40000"
+                      className="tabular"
+                    />
+                  </Field>
+                  <Field label="Dólar de referência (R$)" htmlFor="card-rate" hint="Opcional. Usado quando a cotação automática não está disponível.">
+                    <Input
+                      id="card-rate"
+                      name="cotacaoManual"
+                      type="number"
+                      step="0.000001"
+                      min={0}
+                      defaultValue={card?.manualUsdRateMicros ? card.manualUsdRateMicros / 1_000_000 : ""}
+                      placeholder="5,40"
                       className="tabular"
                     />
                   </Field>

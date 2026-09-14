@@ -66,7 +66,7 @@ export function PlanCard({ plan }: { plan: PlanView }) {
         {plan.nextDueDate ? (
           <span className="flex items-center gap-1.5">
             <CalendarClock size={13} strokeWidth={1.5} aria-hidden />
-            próxima em {date(plan.nextDueDate)}
+            {plan.overdueCount > 0 ? "pendente desde" : "próxima em"} {date(plan.nextDueDate)}
           </span>
         ) : null}
         {plan.lastCompetence ? <span>termina em {competenceShort(plan.lastCompetence)}</span> : null}

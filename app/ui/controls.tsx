@@ -23,15 +23,15 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
 
 const VARIANTE: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-hover border border-transparent",
+  primary: "bg-accent-wash text-accent hover:bg-accent/20 border border-accent-edge hover:border-accent",
   secondary: "bg-surface text-ink border border-line-strong hover:bg-surface-inset",
   ghost: "bg-transparent text-ink-muted border border-transparent hover:bg-surface-inset hover:text-ink",
   danger: "bg-negative-wash text-negative border border-transparent hover:bg-negative/20",
 };
 
 const TAMANHO: Record<ButtonSize, string> = {
-  sm: "h-8 gap-1.5 px-2.5 text-body-sm",
-  md: "h-9 gap-2 px-3.5 text-body-sm",
+  sm: "h-9 gap-1.5 px-2.5 text-body-sm",
+  md: "h-10 gap-2 px-3.5 text-body-sm",
 };
 
 export function Button({

@@ -42,24 +42,27 @@ export function AssistantChat({ remaining }: { remaining: number }) {
 
     setEnviando(true);
     setErro(null);
+    try {
+      const http = await fetch("/api/v1/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: texto }),
+      });
 
-    const http = await fetch("/api/v1/assistant", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: texto }),
-    });
+      if (!http.ok) {
+        const corpo = (await http.json().catch(() => ({}))) as { error?: { message?: string } };
+        setErro(corpo.error?.message ?? "Não foi possível consultar o assistente.");
+        return;
+      }
 
-    setEnviando(false);
-
-    if (!http.ok) {
-      const corpo = (await http.json().catch(() => ({}))) as { error?: { message?: string } };
-      setErro(corpo.error?.message ?? "Não foi possível consultar o assistente.");
-      return;
+      const corpo = (await http.json()) as { data: Resposta };
+      setResposta(corpo.data);
+      setRestantes(corpo.data.remaining);
+    } catch {
+      setErro("Não foi possível consultar o assistente. Confira sua conexão e tente novamente.");
+    } finally {
+      setEnviando(false);
     }
-
-    const corpo = (await http.json()) as { data: Resposta };
-    setResposta(corpo.data);
-    setRestantes(corpo.data.remaining);
   }
 
   const semCota = restantes <= 0;
@@ -73,7 +76,11 @@ export function AssistantChat({ remaining }: { remaining: number }) {
         }}
         className="flex flex-col gap-2 sm:flex-row"
       >
+        <label htmlFor="tars-question" className="sr-only">
+          Pergunta para o TARS
+        </label>
         <input
+          id="tars-question"
           value={pergunta}
           onChange={(evento) => setPergunta(evento.target.value)}
           maxLength={500}

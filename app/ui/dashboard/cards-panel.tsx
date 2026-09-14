@@ -53,7 +53,8 @@ export function CardsPanel({ cards, today }: { cards: Dashboard["cards"]; today:
 
 function CartaoAberto({ card, today }: { card: CardSummary; today: Dashboard["today"] }) {
   const fatura = card.currentInvoice;
-  const atrasadas = card.overdueInvoices;
+  const atrasadas = card.overdueInvoices.filter((invoice) => invoice.dueDate < today);
+  const fechadas = card.overdueInvoices.filter((invoice) => invoice.dueDate >= today);
   const usado = card.limitCents - card.availableLimitCents;
   const proporcao = card.limitCents > 0 ? usado / card.limitCents : 0;
 
@@ -96,6 +97,10 @@ function CartaoAberto({ card, today }: { card: CardSummary; today: Dashboard["to
           ))}
         </ul>
       ) : null}
+
+      {fechadas.length ? <ul className="mt-3 space-y-2 rounded-sm border border-accent-edge bg-accent-wash px-3 py-2">
+        {fechadas.map((invoice) => <li key={invoice.competence} className="flex flex-wrap justify-between gap-2 text-caption"><span>Fatura fechada · vence {date(invoice.dueDate)}</span><a href={`/cartoes?cartao=${card.id}`} className="tabular font-medium text-accent hover:underline">{money(invoice.outstandingCents)}</a></li>)}
+      </ul> : null}
 
       {fatura ? (
         <div className="mt-3.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">

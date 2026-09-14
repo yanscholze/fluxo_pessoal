@@ -41,8 +41,8 @@ export function FreeToSpend({
 
   return (
     <section
-      className={`reveal relative overflow-hidden rounded-panel border p-5 sm:p-6 ${
-        negativo ? "border-negative/30 bg-negative-wash" : "border-accent-edge bg-accent-wash"
+      className={`reveal @container relative overflow-hidden rounded-panel border p-5 sm:p-7 ${
+        negativo ? "border-negative/30 bg-negative-wash" : "border-line-strong bg-surface"
       }`}
     >
       {/* Brilho de canto: dá peso à superfície sem virar gradiente chapado. */}
@@ -54,7 +54,7 @@ export function FreeToSpend({
       />
 
       <div className="relative flex flex-col gap-6 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-10">
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 border-l-2 pl-4 ${negativo ? "border-negative" : "border-accent"}`}>
           <Label>Livre para gastar</Label>
 
           <p className={`tabular mt-2 text-display ${negativo ? "text-negative" : "text-ink"}`}>
@@ -98,7 +98,7 @@ export function FreeToSpend({
           </div>
         </div>
 
-        <div className="w-full shrink-0 rounded-md border border-line bg-surface p-4 lg:w-72">
+        <div className="w-full shrink-0 border-t border-line pt-4 @2xl:w-72 @2xl:border-t-0 @2xl:pt-0">
           <Label className="mb-3">O que pesa até {date(data.horizonEnd)}</Label>
           <Breakdown
             parts={[

@@ -29,7 +29,7 @@ export function Page({
 }) {
   const limite = { narrow: "max-w-page-narrow", default: "max-w-page", wide: "max-w-page-wide" }[width];
   return (
-    <main className={join("mx-auto w-full px-4 pb-16 pt-5 sm:px-6 sm:pb-20 lg:px-8", limite, className)}>
+    <main id="conteudo" tabIndex={-1} className={join("page-content mx-auto w-full px-4 pb-16 pt-6 sm:px-6 sm:pb-20 lg:px-8 lg:pt-8", limite, className)}>
       {children}
     </main>
   );
@@ -63,7 +63,7 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="mb-6">
+    <header className="page-heading mb-7">
       {back ? <div className="-ml-2 mb-2">{back}</div> : null}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">

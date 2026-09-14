@@ -1,17 +1,15 @@
 import { Integrations } from "./integrations.tsx";
 import { listCategories } from "../../../server/repositories/catalog.ts";
-import { listDeviceSessions } from "../../../server/auth/session.ts";
 import { currentUser } from "../../auth-context.ts";
 import { LinkButton } from "../../ui/controls.tsx";
-import { ListRow } from "../../ui/data-display.tsx";
-import { date } from "../../ui/format.ts";
-import { Download, Smartphone } from "../../ui/icons.tsx";
+import { Download } from "../../ui/icons.tsx";
 import { Page, PageHeader } from "../../ui/page-frame.tsx";
-import { Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
+import { Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { Appearance } from "./appearance.tsx";
 import { CategoryManager } from "./category-manager.tsx";
 import { PasswordForm } from "./password-form.tsx";
 import { SettingsTabs } from "./settings-tabs.tsx";
+import AparelhosContent from "../conectar/content.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -21,23 +19,25 @@ export const dynamic = "force-dynamic";
  * Em abas, e não numa pilha: as quatro áreas não têm relação entre si, e
  * empilhá-las obrigava a rolar por categorias para chegar em segurança.
  */
-export default async function Configuracoes() {
+export default async function Configuracoes({
+  searchParams,
+}: {
+  searchParams: Promise<{ aba?: string }>;
+}) {
   const user = await currentUser();
   // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
   // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const [categories, devices] = await Promise.all([
-    listCategories(user.id),
-    listDeviceSessions(user.id),
-  ]);
+  const [categories, params] = await Promise.all([listCategories(user.id), searchParams]);
 
   return (
-    <Page width="narrow">
+    <Page>
       <PageHeader eyebrow={user.email} title="Configurações" description={user.displayName} />
 
       <SettingsTabs
+        activeSection={params.aba}
         sections={[
           {
             value: "categorias",
@@ -80,43 +80,16 @@ export default async function Configuracoes() {
             value: "seguranca",
             label: "Segurança",
             content: (
-              <div className="space-y-5">
-                <Panel>
-                  <PanelHeader title="Senha" hint="Trocar a senha desconecta todos os aparelhos" />
-                  <PasswordForm />
-                </Panel>
-
-                <Panel>
-                  <PanelHeader
-                    title="Aparelhos conectados"
-                    icon={Smartphone}
-                    hint={devices.length ? `${devices.length} com acesso ativo` : undefined}
-                  />
-                  {devices.length ? (
-                    <ul>
-                      {devices.map((device) => (
-                        <ListRow
-                          key={device.id}
-                          icon={Smartphone}
-                          title={device.deviceName ?? "Aparelho sem nome"}
-                          subtitle={`${device.platform ?? "desconhecido"} · último acesso ${date(
-                            device.lastSeenAt.slice(0, 10) as never,
-                          )}`}
-                          meta={`expira ${date(device.expiresAt.slice(0, 10) as never)}`}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <Empty
-                      icon={Smartphone}
-                      title="Nenhum aparelho conectado"
-                      hint="O aplicativo Android aparece aqui depois de pareado."
-                      compact
-                    />
-                  )}
-                </Panel>
-              </div>
+              <Panel>
+                <PanelHeader title="Senha" hint="Trocar a senha desconecta todos os aparelhos" />
+                <PasswordForm />
+              </Panel>
             ),
+          },
+          {
+            value: "aparelhos",
+            label: "Aparelhos",
+            content: <AparelhosContent />,
           },
           {
             value: "dados",

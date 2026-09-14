@@ -50,10 +50,9 @@ describe("recorrência", () => {
     await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
 
     const painel = await buildDashboard(alvo.userId, AGORA);
-    assert.ok(
-      painel.upcoming.some((item) => item.description === "Salário"),
-      "a projeção precisa aparecer nos próximos compromissos",
-    );
+    const salarioProjetado = painel.upcoming.find((item) => item.description === "Salário");
+    assert.ok(salarioProjetado, "a projeção precisa aparecer nos próximos compromissos");
+    assert.equal(salarioProjetado.source, "recurrence", "a agenda precisa levar de volta à recorrência");
 
     const lancamentos = await listTransactions(alvo.userId, { limit: 100 });
     assert.equal(lancamentos.length, 0, "ler o painel não pode gravar previsão no banco");

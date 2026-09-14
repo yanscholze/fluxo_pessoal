@@ -70,20 +70,26 @@ export async function buildInstallmentsView(userId: string, now: Date = new Date
 
     const progress = summarizeProgress(plan, schedule, active, overdue);
 
-    return {
-      ...progress,
-      cardId: plan.cardId,
-      cardName: card?.name ?? "Cartão removido",
-      purchaseDate: plan.purchaseDate,
-      monthlyInterestBasisPoints: plan.monthlyInterestBasisPoints,
-      entries: schedule.map((item) => ({
+    const installmentEntries: InstallmentEntryView[] = schedule.map((item) => {
+      const status = installmentStatus(item.competence, active, overdue);
+      return {
         number: item.number,
         competence: item.competence,
         dueDate: item.dueDate,
         amountCents: item.amount,
-        status: installmentStatus(item.competence, active, overdue),
+        status: status === "overdue" && item.dueDate >= today ? "open" : status,
         transactionId: transactionIdByNumber.get(item.number) ?? null,
-      })),
+      };
+    });
+
+    return {
+      ...progress,
+      overdueCount: installmentEntries.filter((item) => item.status === "overdue").length,
+      cardId: plan.cardId,
+      cardName: card?.name ?? "Cartão removido",
+      purchaseDate: plan.purchaseDate,
+      monthlyInterestBasisPoints: plan.monthlyInterestBasisPoints,
+      entries: installmentEntries,
     };
   });
 

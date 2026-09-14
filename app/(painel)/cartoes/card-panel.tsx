@@ -33,6 +33,7 @@ export function CardPanel({
 
   const ativa = card.invoices.find((invoice) => invoice.isActive);
   const atrasadas = card.invoices.filter((invoice) => invoice.status === "atrasada");
+  const fechadas = card.invoices.filter((invoice) => !invoice.isActive && invoice.status === "em_aberto");
   const usoDoLimite = card.limitCents > 0 ? card.usedLimitCents / card.limitCents : 0;
 
   // As competências ao redor da ativa. É esta sequência que torna visível a
@@ -67,6 +68,7 @@ export function CardPanel({
           pointsPerDollarMilli: card.pointsPerDollarMilli,
           cashbackBasisPoints: card.cashbackBasisPoints,
           pointsGoal: card.pointsGoal,
+          manualUsdRateMicros: card.manualUsdRateMicros,
         }}
       />
 
@@ -120,6 +122,17 @@ export function CardPanel({
                       Pagar
                     </Button>
                   </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {fechadas.length ? (
+            <ul className="mt-4 space-y-2 rounded-md border border-accent-edge bg-accent-wash p-3">
+              {fechadas.map((invoice) => (
+                <li key={invoice.competence} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-body-sm text-ink">Fatura fechada de {competenceShort(invoice.competence)} · vence em {date(invoice.dueDate)}</span>
+                  <span className="flex items-center gap-3"><span className="tabular text-body-sm font-semibold text-ink">{money(invoice.outstandingCents)}</span><Button variant="primary" size="sm" onClick={() => setPagando(invoice)}>Pagar</Button></span>
                 </li>
               ))}
             </ul>

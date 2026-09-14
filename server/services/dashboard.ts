@@ -98,6 +98,7 @@ export type UpcomingItem = {
   readonly amountCents: number;
   readonly kind: "expense" | "income";
   readonly categoryId: string | null;
+  readonly source: "recurrence" | "transaction";
 };
 
 export type CategorySpend = {
@@ -302,7 +303,9 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
   // O índice precisa cobrir também os virtuais: sem isso a agenda mostraria
   // "Lançamento previsto" no lugar de "Salário".
   const meta = new Map<string, TransactionMeta>(index);
+  const projectedTransactionIds = new Set<string>();
   for (const transaction of projection.transactions) {
+    projectedTransactionIds.add(transaction.id);
     meta.set(transaction.id, {
       categoryId: transaction.categoryId,
       description: transaction.description,
@@ -346,7 +349,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     monthFlow: monthFlow(entries, accounts, competence),
     accounts: summarizeAccounts(accounts, entries, today),
     cards: cards.map((card) => summarizeCard(card, entries, today)),
-    upcoming: upcomingCommitments(entries, meta, today),
+    upcoming: upcomingCommitments(entries, meta, today, projectedTransactionIds),
     categorySpend: spendByCategory(entries, meta, categories, competence),
     cashflow: projectCashflow({
       ...positionInput,
@@ -453,6 +456,7 @@ function upcomingCommitments(
   entries: readonly LedgerEntry[],
   index: ReadonlyMap<string, TransactionMeta>,
   today: LocalDate,
+  projectedTransactionIds: ReadonlySet<string>,
 ): UpcomingItem[] {
   const horizon = addDays(today, UPCOMING_DAYS);
 
@@ -472,6 +476,7 @@ function upcomingCommitments(
         amountCents: Math.abs(entry.amount),
         kind: entry.amount > 0 ? ("income" as const) : ("expense" as const),
         categoryId: meta?.categoryId ?? null,
+        source: projectedTransactionIds.has(entry.transactionId) ? "recurrence" : "transaction",
       };
     });
 }

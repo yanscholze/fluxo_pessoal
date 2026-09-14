@@ -24,8 +24,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
-    { media: "(prefers-color-scheme: dark)", color: "#08090b" },
+    { media: "(prefers-color-scheme: light)", color: "#f0eff5" },
+    { media: "(prefers-color-scheme: dark)", color: "#161826" },
   ],
 };
 
@@ -40,7 +40,7 @@ const TEMA_INICIAL = `
 (function () {
   try {
     var salvo = localStorage.getItem("fluxo:tema");
-    var escuro = salvo ? salvo === "escuro" : matchMedia("(prefers-color-scheme: dark)").matches;
+    var escuro = salvo ? salvo === "escuro" : true;
     document.documentElement.dataset.theme = escuro ? "dark" : "light";
     var acento = localStorage.getItem("fluxo:acento");
     if (acento) document.documentElement.dataset.accent = acento;

@@ -1,4 +1,5 @@
 import { buildCardsView } from "../../../server/services/cards.ts";
+import { buildRewardsView } from "../../../server/services/rewards.ts";
 import { currentUser } from "../../auth-context.ts";
 import { MetricStrip } from "../../ui/data-display.tsx";
 import { money } from "../../ui/format.ts";
@@ -17,14 +18,23 @@ export const dynamic = "force-dynamic";
  * e quanto ainda posso usar. Os totais no topo somam só cartões de crédito —
  * débito não tem fatura nem limite, e incluí-lo tornaria o número sem sentido.
  */
-export default async function Cartoes() {
+export default async function Cartoes({
+  searchParams,
+}: {
+  searchParams: Promise<{ cartao?: string; aba?: string }>;
+}) {
   const user = await currentUser();
   // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
   // HTTP, e o layout mostra o aviso. Lançar aqui viraria exceção na
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const view = await buildCardsView(user.id);
+  const [view, params] = await Promise.all([buildCardsView(user.id), searchParams]);
+  const requestedCard = view.cards.find((card) => card.id === params.cartao);
+  const rewardCard = view.cards.find((card) => card.kind === "credit" && card.rewardMode !== "none");
+  const selectedCard = requestedCard ?? (params.aba === "recompensas" ? rewardCard : undefined) ?? view.cards[0];
+  const rewardsActive = params.aba === "recompensas" && selectedCard?.kind === "credit" && selectedCard.rewardMode !== "none";
+  const rewards = rewardsActive ? await buildRewardsView(user.id) : null;
   const credito = view.cards.filter((card) => card.kind === "credit");
 
   const limite = credito.reduce((soma, card) => soma + card.limitCents, 0);
@@ -41,7 +51,7 @@ export default async function Cartoes() {
     <Page>
       <PageHeader
         title="Cartões e faturas"
-        description="Fatura em aberto, atrasos, limite disponível e histórico de cada cartão."
+        description="Sua carteira de cartões, faturas e recompensas em um só lugar."
         actions={<NewCard accounts={view.accounts} />}
       />
 
@@ -74,14 +84,21 @@ export default async function Cartoes() {
                 value: money(emAberto),
                 tone: emAberto > 0 ? "caution" : "neutral",
                 icon: CreditCard,
-                hint: "Tudo que já fechou e ainda não foi pago",
+                hint: "Faturas atuais e anteriores ainda não pagas",
               },
             ]}
           />
         ) : null}
 
         {view.cards.length ? (
-          <CardsCarousel cards={view.cards} accounts={view.accounts} today={view.today} />
+          <CardsCarousel
+            cards={view.cards}
+            accounts={view.accounts}
+            today={view.today}
+            selectedCardId={selectedCard.id}
+            activeTab={rewardsActive ? "recompensas" : "faturas"}
+            rewards={rewards?.cards.find((card) => card.cardId === selectedCard.id)}
+          />
         ) : (
           <Panel>
             <Empty

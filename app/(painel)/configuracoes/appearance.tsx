@@ -18,13 +18,13 @@ import { SegmentedControl } from "../../ui/controls.tsx";
 import { Check, Moon, Sun } from "../../ui/icons.tsx";
 import { Label } from "../../ui/primitives.tsx";
 
-/** O padrão não tem atributo: o `:root` do CSS já define o verde. */
-const PADRAO = "verde";
+/** O roxo é a identidade oficial; escolhas anteriores continuam disponíveis. */
+const PADRAO = "violeta";
 
 const ACENTOS = [
-  [PADRAO, "var(--color-accent)", "Verde"],
+  [PADRAO, "#9184d9", "Roxo · oficial"],
+  ["verde", "#087c57", "Verde"],
   ["azul", "#2563eb", "Azul"],
-  ["violeta", "#6d4aff", "Violeta"],
   ["ambar", "#b45309", "Âmbar"],
 ] as const;
 
@@ -70,7 +70,7 @@ export function Appearance() {
   function aplicarAcento(valor: string) {
     gravarPreferencia(
       (raiz) => {
-        // O padrão não tem atributo: o `:root` do CSS já define o verde.
+        // O roxo é a identidade oficial; escolhas anteriores continuam disponíveis.
         if (valor === PADRAO) raiz.removeAttribute("data-accent");
         else raiz.dataset.accent = valor;
       },
@@ -143,7 +143,7 @@ export function Appearance() {
       <div>
         <Label>Cor de destaque</Label>
         <p className="mt-1 text-caption text-ink-subtle">
-          Muda apenas o cromo da interface. Receita e despesa continuam verde e vermelho.
+          Personalize botões, navegação e o TARS. Receitas e despesas mantêm suas cores de identificação.
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ACENTOS.map(([valor, cor, rotulo]) => {
@@ -155,7 +155,7 @@ export function Appearance() {
                 onClick={() => aplicarAcento(valor)}
                 aria-pressed={ativo}
                 title={rotulo}
-                className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-body-sm transition-colors ${
+                className={`inline-flex h-11 items-center gap-2 rounded-md border px-3 text-body-sm transition-colors ${
                   ativo
                     ? "border-accent-edge bg-accent-wash font-medium text-ink"
                     : "border-line-strong bg-surface text-ink-muted hover:bg-surface-inset"
