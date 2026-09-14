@@ -160,16 +160,10 @@ describe("livre para gastar", () => {
     assert.equal(livre.pendingIncome, 500000);
     assert.equal(livre.otherCommitments, 200000);
 
-    // A folga é o ponto mais apertado da curva, não a soma do período.
-    // Hoje é 05/08 e há R$ 3.000 na conta; o salário só cai no dia 7. Somar
-    // tudo daria R$ 6.000 — e gastar R$ 6.000 hoje deixaria a conta em
-    // −R$ 3.000 por dois dias. O dinheiro do dia 7 não está disponível no
-    // dia 5.
-    assert.equal(livre.amount, 300000);
-    assert.equal(livre.lowestOn, "2026-08-05", "o aperto é hoje, antes do salário");
+    assert.equal(livre.amount, 600000, "saldo + entradas − saídas do ciclo");
   });
 
-  it("a folga cai para depois quando o compromisso vence antes da entrada", () => {
+  it("fecha a conta do ciclo mesmo quando a entrada cai depois da saída", () => {
     const entries = razao(
       lancamento({
         id: "aluguel",
@@ -189,13 +183,10 @@ describe("livre para gastar", () => {
 
     const livre = computeFreeToSpend({ accounts: contas, cards: [cartaoFecha13], entries, today: hoje });
 
-    // R$ 3.000 hoje, −R$ 2.500 no dia 8, +R$ 5.000 no dia 12. O fundo do poço
-    // é o dia 8, com R$ 500 — é tudo que pode sair hoje sem furar o aluguel.
-    assert.equal(livre.amount, 50000);
-    assert.equal(livre.lowestOn, "2026-08-08");
+    assert.equal(livre.amount, 550000);
   });
 
-  it("a mesma entrada e a mesma saída em ordem invertida dão folgas diferentes", () => {
+  it("a mesma entrada e a mesma saída fecham igual, independentemente da data", () => {
     const cedo = razao(
       lancamento({ id: "e", kind: "income", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-06") }),
       lancamento({ id: "s", kind: "expense", amount: cents(400000), state: "planned", occurredOn: localDate("2026-08-12") }),
@@ -207,10 +198,8 @@ describe("livre para gastar", () => {
 
     const base = { accounts: contas, cards: [cartaoFecha13], today: hoje };
 
-    // A soma do período é idêntica nos dois casos. A ordem é que decide se o
-    // dinheiro chega a faltar — e é justamente isso que a folga precisa dizer.
     assert.equal(computeFreeToSpend({ ...base, entries: cedo }).amount, 300000);
-    assert.equal(computeFreeToSpend({ ...base, entries: tarde }).amount, -100000);
+    assert.equal(computeFreeToSpend({ ...base, entries: tarde }).amount, 300000);
   });
 
   it("ignora previstos fora da janela do ciclo", () => {
@@ -246,6 +235,29 @@ describe("livre para gastar", () => {
     const livre = computeFreeToSpend({ accounts: contas, cards: [cartaoFecha13], entries, today: hoje });
     // A compra pesa pela fatura, nunca duas vezes.
     assert.equal(livre.otherCommitments, 0);
+  });
+
+  it("desconta recorrência virtual no cartão sem inventar dívida de fatura", () => {
+    const assinatura = lancamento({
+      id: "virtual:codex",
+      kind: "expense",
+      amount: cents(10_324),
+      state: "planned",
+      origin: cardParty(CARTAO),
+      occurredOn: localDate("2026-08-10"),
+      competence: competence("2026-08"),
+    });
+
+    const livre = computeFreeToSpend({
+      accounts: contas,
+      cards: [cartaoFecha13],
+      entries: razao(assinatura),
+      today: hoje,
+    });
+
+    assert.equal(livre.openInvoices, 0, "projeção não aparece como dívida quitável");
+    assert.equal(livre.otherCommitments, cents(10_324));
+    assert.equal(livre.amount, cents(289_676));
   });
 
   it("respeita categorias excluídas da política", () => {
@@ -343,7 +355,7 @@ describe("bolsos separados: dinheiro e benefício", () => {
     conta({ id: "vale", kind: "benefit", openingBalance: cents(70_900) }),
   ];
 
-  it("mede o dinheiro sem somar o vale", () => {
+  it("a visão de dinheiro continua disponível como detalhamento", () => {
     const folga = computeFreeToSpend({ accounts: contas, cards: [], entries: [], today: localDate("2026-09-07") }, "money");
 
     assert.equal(folga.liquidBalance, cents(100_000));
@@ -372,7 +384,7 @@ describe("bolsos separados: dinheiro e benefício", () => {
     assert.equal(computeFreeToSpend(entrada, "money").amount, cents(50_000), "no dinheiro ela pesa");
   });
 
-  it("a posição devolve os dois, e o saldo corrente soma os dois", () => {
+  it("a posição consolida vale e dinheiro no livre do ciclo", () => {
     const posicao = computeFinancialPosition({
       accounts: contas,
       cards: [],
@@ -380,9 +392,9 @@ describe("bolsos separados: dinheiro e benefício", () => {
       today: localDate("2026-09-07"),
     });
 
-    assert.equal(posicao.freeToSpend.amount, cents(100_000));
+    assert.equal(posicao.freeToSpend.amount, cents(170_900));
     assert.equal(posicao.benefitFreeToSpend.amount, cents(70_900));
-    assert.equal(posicao.currentBalance, cents(170_900), "ter é a soma; poder gastar é que não");
+    assert.equal(posicao.currentBalance, cents(170_900));
   });
 });
 

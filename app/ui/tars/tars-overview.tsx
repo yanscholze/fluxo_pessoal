@@ -45,7 +45,7 @@ export function TarsOverview({
   const lateGoals = activeGoals.filter((goal) => goal.behindSchedule || (goal.targetDate !== null && goal.targetDate < today));
   const signals: Signal[] = [];
 
-  if (freeToSpend.amountCents < 0) signals.push({ id: "cash", label: "A projeção fica negativa", detail: `${money(Math.abs(freeToSpend.amountCents))} faltam no ponto mais apertado, em ${dateShort(freeToSpend.lowestOn)}.`, href: "/painel", urgent: true });
+  if (freeToSpend.amountCents < 0) signals.push({ id: "cash", label: "O ciclo fica negativo", detail: `${money(Math.abs(freeToSpend.amountCents))} faltam para cobrir faturas e compromissos previstos.`, href: "/painel", urgent: true });
   if (overdue.length) signals.push({ id: "invoices", label: `${overdue.length} fatura${overdue.length === 1 ? " vencida" : "s vencidas"}`, detail: `${money(overdue.reduce((total, invoice) => total + invoice.outstandingCents, 0))} ainda em aberto.`, href: "/cartoes", urgent: true });
   if (pending.captures) signals.push({ id: "captures", label: `${pending.captures} captura${pending.captures === 1 ? "" : "s"} para revisar`, detail: "Confira os dados antes de confirmar.", href: "/automaticos" });
   if (pending.imports) signals.push({ id: "imports", label: `${pending.imports} importaç${pending.imports === 1 ? "ão" : "ões"} em revisão`, detail: "Retome de onde você parou.", href: "/automaticos?aba=importacoes" });
@@ -108,10 +108,10 @@ export function TarsOverview({
               <p className={styles.primaryMetric}>{money(freeToSpend.liquidBalanceCents)}</p>
               <p className={styles.metricHint}>Nas contas de uso corrente em reais</p>
               <dl className={styles.financialRows}>
-                <div><dt>Comprometido até {dateShort(freeToSpend.horizonEnd)}</dt><dd>{money(position.committedCents)}</dd></div>
+                <div><dt>Comprometido no ciclo</dt><dd>{money(position.committedCents)}</dd></div>
                 {dashboard.benefitFreeToSpend ? (
                   <div>
-                    <dt>Livre no vale-alimentação</dt>
+                    <dt>Vale no fim do ciclo</dt>
                     <dd>{money(dashboard.benefitFreeToSpend.amountCents)}</dd>
                   </div>
                 ) : null}
@@ -163,7 +163,7 @@ export function TarsOverview({
             <div className={styles.freeSpend}>
               <span className={styles.metricLabel}>{freeToSpend.amountCents < 0 ? "Déficit projetado" : "Livre para gastar"}</span>
               <strong className={freeToSpend.amountCents < 0 ? styles.negative : undefined}>{money(freeToSpend.amountCents)}</strong>
-              <p>Menor saldo projetado até {dateShort(freeToSpend.horizonEnd)}<br />Considera a ordem das entradas e vencimentos.</p>
+              <p>Sobra do ciclo até {dateShort(freeToSpend.windowEnd)}<br />Saldo, entradas, faturas e compromissos previstos.</p>
               <Link href={hasAccounts ? "/painel" : "/contas"} className={styles.coreLink}>{hasAccounts ? "Entender minha projeção" : "Adicionar minha primeira conta"}<ArrowRight size={15} aria-hidden="true" /></Link>
             </div>
             <div className={styles.coreFooter}><span className={styles.statusDot} aria-hidden="true" />{signals.length ? `${signals.length} ${signals.length === 1 ? "ponto" : "pontos"} de atenção` : "Visão dos seus dados atuais"}</div>

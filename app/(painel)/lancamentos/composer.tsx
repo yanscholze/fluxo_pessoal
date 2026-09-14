@@ -10,7 +10,7 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { Competence } from "../../../core/time/competence.ts";
 import type { Statement } from "../../../server/services/statement.ts";
@@ -42,6 +42,7 @@ export function Composer({
   const [origem, setOrigem] = useState<Origem>("account");
   const [parcelas, setParcelas] = useState(1);
   const [enviando, setEnviando] = useState(false);
+  const envioEmCurso = useRef(false);
   const [erro, setErro] = useState<string | null>(null);
   const [issues, setIssues] = useState<Record<string, string>>({});
 
@@ -54,6 +55,8 @@ export function Composer({
 
   async function enviar(evento: React.FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    if (envioEmCurso.current) return;
+    envioEmCurso.current = true;
     setEnviando(true);
     setErro(null);
     setIssues({});
@@ -76,24 +79,29 @@ export function Composer({
     }
     if (tipo === "transfer") corpo.destinationAccountId = dados.get("destinationAccountId");
 
-    const resposta = await fetch("/api/v1/transactions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(corpo),
-    });
+    try {
+      const resposta = await fetch("/api/v1/transactions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
 
-    setEnviando(false);
+      if (!resposta.ok) {
+        const body = (await resposta.json().catch(() => ({}))) as { error?: Erro };
+        setErro(body.error?.message ?? "Não foi possível registrar o lançamento.");
+        setIssues(Object.fromEntries((body.error?.issues ?? []).map((issue) => [issue.path, issue.message])));
+        return;
+      }
 
-    if (!resposta.ok) {
-      const body = (await resposta.json().catch(() => ({}))) as { error?: Erro };
-      setErro(body.error?.message ?? "Não foi possível registrar o lançamento.");
-      setIssues(Object.fromEntries((body.error?.issues ?? []).map((issue) => [issue.path, issue.message])));
-      return;
+      setAberto(false);
+      setParcelas(1);
+      router.refresh();
+    } catch {
+      setErro("Não foi possível registrar o lançamento. Verifique sua conexão e tente novamente.");
+    } finally {
+      envioEmCurso.current = false;
+      setEnviando(false);
     }
-
-    setAberto(false);
-    setParcelas(1);
-    router.refresh();
   }
 
   if (!aberto) {

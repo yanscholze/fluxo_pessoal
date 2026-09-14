@@ -18,7 +18,7 @@ import {
   dueDateFor,
 } from "../card/invoice-cycle.ts";
 import { accountBalance, cardDebtAsOf, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
-import type { LedgerEntry } from "../ledger/types.ts";
+import { isProjected, type LedgerEntry } from "../ledger/types.ts";
 
 /** O que um cartão precisa expor para participar da posição financeira. */
 export type PositionCard = CycleConfig & {
@@ -104,47 +104,20 @@ export type FreeToSpend = {
   readonly openInvoices: Cents;
   /** Demais compromissos previstos do horizonte, fora do crédito. */
   readonly otherCommitments: Cents;
-  /**
-   * Quanto pode sair hoje sem que o saldo fique negativo em nenhum momento do
-   * horizonte. Negativo significa que os compromissos já assumidos não cabem
-   * no que existe mais o que está por entrar.
-   */
+  /** Quanto sobra no ciclo depois das receitas e compromissos conhecidos. */
   readonly amount: Cents;
-  /** A data do ponto mais apertado — onde `amount` foi medido. */
-  readonly lowestOn: LocalDate;
   readonly windowStart: LocalDate;
   readonly windowEnd: LocalDate;
-  /** Até onde a projeção olhou para achar o ponto mais apertado. */
-  readonly horizonEnd: LocalDate;
 };
 
 /**
- * Quanto pode ser gasto agora sem furar compromisso já assumido.
+ * Qual bolso está sendo mostrado.
  *
- * A resposta **não** é `saldo + entradas − saídas` do período. Essa conta
- * ignora a ordem dos fatos, e a ordem é o problema inteiro: com R$ 3.000 na
- * conta, R$ 6.000 de salário no dia 8 e R$ 1.950 de aluguel no dia 10, a soma
- * responde R$ 7.050 — mas gastar R$ 7.050 hoje deixa a conta negativa até o
- * dia 8. O dinheiro do dia 8 não está disponível no dia 5.
- *
- * A resposta certa é o **menor saldo projetado** do horizonte: percorre-se a
- * linha do tempo somando o que entra e subtraindo o que sai, e a folga é o
- * ponto mais apertado dessa curva. Gastar exatamente esse valor hoje encosta
- * em zero no pior momento e não passa disso.
- *
- * O horizonte vai do fim do ciclo do cartão de referência **ou** do último
- * vencimento em aberto, o que for mais longe. É o que garante que o salário
- * que cai antes do vencimento da fatura seja contado junto com ela, em vez de
- * um dos dois ficar de fora por acaso do calendário.
+ * A visão padrão soma o dinheiro e o vale porque o usuário pediu a folga do
+ * ciclo completa. A visão do vale permanece separada para indicar quanto do
+ * total só pode ser usado em alimentação.
  */
-/**
- * Qual bolso está sendo medido.
- *
- * `money` é conta corrente e espécie; `benefit`, o vale. A fatura do cartão só
- * pesa no dinheiro — vale-alimentação não paga fatura —, e por isso o bolso não
- * é um filtro cosmético: ele muda quais compromissos entram na conta.
- */
-export type Purse = "money" | "benefit";
+export type Purse = "all" | "money" | "benefit";
 
 /**
  * Parcela da fatura que a política mandou ignorar.
@@ -171,11 +144,24 @@ function excludedInvoiceCharges(
   return total;
 }
 
-export function computeFreeToSpend(input: PositionInput, purse: Purse = "money"): FreeToSpend {
+/**
+ * Folga do ciclo conforme a regra do produto:
+ *
+ * saldo disponível + todas as entradas previstas − faturas ajustadas −
+ * recorrências, assinaturas e saídas programadas. A janela é o ciclo do cartão
+ * principal; uma fatura pode vencer depois do fechamento, mas sua compra já é
+ * compromisso do ciclo e continua entrando pela fatura em aberto.
+ */
+export function computeFreeToSpend(input: PositionInput, purse: Purse = "all"): FreeToSpend {
   const policy = input.policy ?? NO_EXCLUSIONS;
   const { start, end } = windowBounds(input.cards, input.today);
 
-  const liquid = purse === "benefit" ? benefitAccounts(input.accounts) : moneyAccounts(input.accounts);
+  const liquid =
+    purse === "benefit"
+      ? benefitAccounts(input.accounts)
+      : purse === "money"
+        ? moneyAccounts(input.accounts)
+        : liquidAccounts(input.accounts);
   const liquidBalance = sum(
     liquid.map((account) => accountBalance(input.entries, account.id, input.today, account.openingBalance)),
   );
@@ -186,18 +172,12 @@ export function computeFreeToSpend(input: PositionInput, purse: Purse = "money")
     return categoryId !== null && policy.excludedCategoryIds.has(categoryId);
   };
 
-  // O vale não paga fatura: medir o bolso do benefício contra o cartão faria a
-  // folga do vale desaparecer por causa de uma dívida que ele não quita.
+  // O vale não recebe fatura própria. Na visão consolidada, porém, ele entra no
+  // saldo disponível solicitado pelo usuário.
   const creditCards = purse === "money" ? input.cards.filter((card) => card.kind === "credit") : [];
+  if (purse === "all") creditCards.push(...input.cards.filter((card) => card.kind === "credit"));
 
-  /**
-   * Pagamentos de fatura esperados, cada um na data em que precisa sair.
-   *
-   * Fatura já vencida e não paga sai **hoje**: o dinheiro é devido agora, e
-   * empurrá-la para a data de vencimento passada a faria cair fora do
-   * horizonte e sumir da conta.
-   */
-  const invoiceDues: { on: LocalDate; amount: Cents }[] = [];
+  let openInvoices = 0;
   for (const card of creditCards) {
     const active = activeCompetence(card, input.today);
     for (const competence of [...overdueCompetences(input.entries, card.id, active), active]) {
@@ -205,69 +185,40 @@ export function computeFreeToSpend(input: PositionInput, purse: Purse = "money")
       const ignorado = excludedInvoiceCharges(input.entries, card.id, competence, isExcluded);
       const devido = Math.max(0, outstanding - ignorado);
       if (devido <= 0) continue;
-      const due = dueDateFor(card, competence);
-      invoiceDues.push({ on: due < input.today ? input.today : due, amount: devido as Cents });
+      openInvoices += devido;
     }
   }
-
-  const horizonEnd = invoiceDues.reduce<LocalDate>(
-    (limite, pagamento) => (pagamento.on > limite ? pagamento.on : limite),
-    end,
-  );
 
   let pendingIncome = 0;
   let otherCommitments = 0;
-  const movimentos: { on: LocalDate; amount: number }[] = [];
 
   for (const entry of input.entries) {
     if (entry.state !== "planned") continue;
-    if (entry.party.kind !== "account" || !liquidIds.has(entry.party.accountId)) continue;
-    if (entry.effectiveOn < start || entry.effectiveOn > horizonEnd) continue;
+    if (entry.effectiveOn < start || entry.effectiveOn > end) continue;
     if (isExcluded(entry)) continue;
 
-    if (entry.amount > 0) pendingIncome += entry.amount;
-    else otherCommitments -= entry.amount;
+    if (entry.party.kind === "account" && liquidIds.has(entry.party.accountId)) {
+      if (entry.amount > 0) pendingIncome += entry.amount;
+      else otherCommitments -= entry.amount;
+      continue;
+    }
 
-    // Previsto com data já passada continua devendo acontecer: entra hoje,
-    // não na data vencida, senão nunca pesaria na curva.
-    movimentos.push({
-      on: entry.effectiveOn < input.today ? input.today : entry.effectiveOn,
-      amount: entry.amount,
-    });
-  }
-
-  for (const pagamento of invoiceDues) {
-    movimentos.push({ on: pagamento.on, amount: -pagamento.amount });
-  }
-
-  movimentos.sort((esquerda, direita) => (esquerda.on < direita.on ? -1 : esquerda.on > direita.on ? 1 : 0));
-
-  // O ponto de partida entra na comparação: quando tudo que vem pela frente só
-  // acrescenta, a folga é o próprio saldo de hoje — e não a soma com o que
-  // ainda não chegou.
-  let corrente = liquidBalance as number;
-  let menor = corrente;
-  let menorEm = input.today;
-  for (const movimento of movimentos) {
-    corrente += movimento.amount;
-    if (corrente < menor) {
-      menor = corrente;
-      menorEm = movimento.on;
+    // Recorrência no cartão ainda não é parte quitável da fatura, pois é uma
+    // projeção virtual. Mesmo assim já compromete o ciclo e precisa sair da
+    // folga uma vez — sem somar também à fatura.
+    if (entry.party.kind === "card" && isProjected(entry) && entry.amount < 0 && purse !== "benefit") {
+      otherCommitments -= entry.amount;
     }
   }
-
-  const openInvoices = sum(invoiceDues.map((pagamento) => pagamento.amount));
 
   return {
     liquidBalance,
     pendingIncome: pendingIncome as Cents,
-    openInvoices,
+    openInvoices: openInvoices as Cents,
     otherCommitments: otherCommitments as Cents,
-    amount: menor as Cents,
-    lowestOn: menorEm,
+    amount: (liquidBalance + pendingIncome - openInvoices - otherCommitments) as Cents,
     windowStart: start,
     windowEnd: end,
-    horizonEnd,
   };
 }
 
@@ -285,19 +236,18 @@ export type FinancialPosition = {
   readonly netWorth: Cents;
   /** Obrigações já assumidas: faturas em aberto e previstos da janela. */
   readonly committed: Cents;
-  /** Folga do dinheiro: conta corrente e espécie, contra faturas e previstos. */
+  /** Folga consolidada do ciclo, incluindo dinheiro e benefício. */
   readonly freeToSpend: FreeToSpend;
   /**
    * Folga do vale-alimentação, medida à parte.
    *
-   * Vale não paga fatura nem aluguel; somá-lo ao dinheiro produzia uma folga
-   * que prometia comprar coisas que aquele saldo não compra.
+   * É apenas um detalhamento do vale dentro da folga consolidada.
    */
   readonly benefitFreeToSpend: FreeToSpend;
 };
 
 export function computeFinancialPosition(input: PositionInput): FinancialPosition {
-  const freeToSpend = computeFreeToSpend(input, "money");
+  const freeToSpend = computeFreeToSpend(input);
   const benefitFreeToSpend = computeFreeToSpend(input, "benefit");
 
   /**
@@ -317,9 +267,7 @@ export function computeFinancialPosition(input: PositionInput): FinancialPositio
     accountBalance(input.entries, account.id, input.today, account.openingBalance);
 
   const investments = sum(active.filter((account) => !liquidIds.has(account.id)).map(balanceOf));
-  // O saldo corrente continua somando os dois bolsos: é quanto o usuário tem.
-  // O que não se soma é a **folga**, que depende do que cada bolso paga.
-  const currentBalance = (freeToSpend.liquidBalance + benefitFreeToSpend.liquidBalance) as Cents;
+  const currentBalance = freeToSpend.liquidBalance;
   /*
    * O passivo do patrimônio é o que já foi cobrado, não o que ainda vai ser.
    *
@@ -498,8 +446,6 @@ export const EMPTY_FREE_TO_SPEND: FreeToSpend = {
   openInvoices: ZERO,
   otherCommitments: ZERO,
   amount: ZERO,
-  lowestOn: "1970-01-01" as LocalDate,
   windowStart: "1970-01-01" as LocalDate,
   windowEnd: "1970-01-01" as LocalDate,
-  horizonEnd: "1970-01-01" as LocalDate,
 };

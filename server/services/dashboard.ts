@@ -128,14 +128,11 @@ export type Dashboard = {
     readonly pendingIncomeCents: number;
     readonly openInvoicesCents: number;
     readonly otherCommitmentsCents: number;
-    /** Data do ponto mais apertado da projeção — onde a folga foi medida. */
-    readonly lowestOn: LocalDate;
     readonly windowStart: LocalDate;
     readonly windowEnd: LocalDate;
-    readonly horizonEnd: LocalDate;
   };
   /**
-   * Folga do vale-alimentação, à parte da folga do dinheiro.
+   * Detalhamento do vale-alimentação dentro da folga consolidada.
    *
    * Ausente quando não há conta de benefício — mostrar um vale de R$ 0,00 para
    * quem não tem vale é ruído.
@@ -423,10 +420,8 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       pendingIncomeCents: position.freeToSpend.pendingIncome,
       openInvoicesCents: position.freeToSpend.openInvoices,
       otherCommitmentsCents: position.freeToSpend.otherCommitments,
-      lowestOn: position.freeToSpend.lowestOn,
       windowStart: position.freeToSpend.windowStart,
       windowEnd: position.freeToSpend.windowEnd,
-      horizonEnd: position.freeToSpend.horizonEnd,
     },
     monthFlow: monthFlow(entries, accounts, competence),
     accounts: summarizeAccounts(accounts, entries, today),

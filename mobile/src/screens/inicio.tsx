@@ -189,23 +189,20 @@ export function InicioScreen({
             </View>
           </FaixaDeIndicadores>
 
-          {/*
-            A folga não é a soma das linhas acima, e a tela precisa dizer isso.
-            Mostrar parcelas que não fecham com o total é pior do que não
-            mostrar nada — o usuário confere, não bate, e para de confiar.
-          */}
+          {/* A conta precisa ser auditável: o mesmo saldo, entradas e
+              compromissos exibidos acima fecham o livre do ciclo. */}
           {dados ? (
             <>
               <Small style={{ marginTop: space.md }}>
-                Medido no dia mais apertado até {relativeDate(dados.freeToSpend.horizonEnd as never)}
+                Sobra do ciclo até {relativeDate(dados.freeToSpend.windowEnd as never)}
                 {dados.freeToSpend.pendingIncomeCents > 0
                   ? ` · ${money(cents(dados.freeToSpend.pendingIncomeCents))} a receber no período`
                   : ""}
               </Small>
-              {/* O vale ao lado, nunca somado: ele compra comida e nada mais. */}
+              {/* O vale já integra a conta do ciclo e fica identificado. */}
               {dados.benefitFreeToSpend ? (
                 <Small style={{ marginTop: 4 }}>
-                  e mais {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação
+                  inclui {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação
                 </Small>
               ) : null}
             </>

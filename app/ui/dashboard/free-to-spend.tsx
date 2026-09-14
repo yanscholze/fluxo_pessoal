@@ -9,10 +9,9 @@
  * Vem sempre acompanhada do que a produziu. Um número financeiro sem a origem
  * obriga o usuário a confiar cegamente; com as parcelas ao lado, ele confere.
  *
- * A folga é o **menor saldo projetado** do horizonte, não a soma das parcelas:
- * a ordem dos vencimentos muda a resposta. Por isso as parcelas aparecem como
- * o que pesa no período, e não como uma conta que termina no resultado — somar
- * a coluna e não bater no total seria pior do que não mostrar nada.
+ * A conta fecha visivelmente: saldo disponível mais entradas previstas, menos
+ * faturas e compromissos conhecidos do ciclo. Assim o usuário confere o valor
+ * com os próprios lançamentos, sem um ajuste implícito escondido no painel.
  */
 
 import { daysBetween } from "../../../core/time/local-date.ts";
@@ -63,17 +62,13 @@ export function FreeToSpend({
             {money(data.amountCents)}
           </p>
 
-          {/*
-            O vale vem ao lado, nunca somado.
-            Vale-alimentação compra comida e nada mais: juntá-lo ao número
-            principal prometeria pagar aluguel e fatura com um saldo que não
-            paga nenhum dos dois. Separado, cada um responde pelo que cobre.
-          */}
+          {/* O vale já integra a conta do ciclo e aparece detalhado para não
+              esconder a parcela que só pode ser usada em alimentação. */}
           {benefit ? (
             <p className="mt-2 flex items-baseline gap-2 text-body-sm text-ink-muted">
-              <span>e mais</span>
+              <span>inclui</span>
               <span className="tabular font-medium text-ink">{money(benefit.amountCents)}</span>
-              <span>em vale-alimentação, que só compra comida</span>
+              <span>em vale-alimentação no fim do ciclo</span>
             </p>
           ) : null}
 
@@ -85,8 +80,8 @@ export function FreeToSpend({
             )}
             <span className="max-w-measure">
               {negativo
-                ? `Os compromissos assumidos passam do que você tem. Em ${date(data.lowestOn)} o saldo fica negativo mesmo sem nenhum gasto novo.`
-                : `É quanto pode sair hoje sem furar nenhum compromisso até ${date(data.horizonEnd)}. O ponto mais apertado é ${date(data.lowestOn)}.`}
+                ? "Os compromissos conhecidos do ciclo passam do saldo e das entradas previstas."
+                : "É a sobra do ciclo depois das faturas, recorrências e saídas já previstas."}
             </span>
           </p>
 
@@ -115,7 +110,7 @@ export function FreeToSpend({
         </div>
 
         <div className="w-full shrink-0 border-t border-line pt-4 @2xl:w-72 @2xl:border-t-0 @2xl:pt-0">
-          <Label className="mb-3">O que pesa até {date(data.horizonEnd)}</Label>
+          <Label className="mb-3">Conta do ciclo</Label>
           <Breakdown
             parts={[
               { label: "Saldo hoje", cents: data.liquidBalanceCents, sign: "+" },
@@ -125,9 +120,8 @@ export function FreeToSpend({
             ]}
           />
           <p className="mt-3 border-t border-line pt-3 text-caption text-ink-subtle">
-            A folga não é a soma dessas linhas: é o saldo no dia mais apertado do
-            período, porque dinheiro que entra depois de uma conta vencer não
-            paga essa conta.
+            Saldo disponível + entradas previstas − faturas em aberto − contas
+            previstas. Categorias marcadas para não pesar ficam fora da conta.
           </p>
         </div>
       </div>

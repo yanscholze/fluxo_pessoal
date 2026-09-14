@@ -211,12 +211,11 @@ describe("razão derivado no aparelho", () => {
 /**
  * O aplicativo e o site precisam responder o mesmo número.
  *
- * Estes casos são os que distinguem a regra de verdade — o menor saldo
- * projetado — da aproximação que existia aqui antes, `saldo − comprometido`.
- * Se alguém trocar de volta, é aqui que quebra.
+ * Estes casos garantem a mesma regra auditável do site: saldo disponível mais
+ * entradas previstas, menos faturas e compromissos do ciclo.
  */
 describe("livre para gastar, igual ao site", () => {
-  it("não conta como disponível hoje o salário que só cai depois", () => {
+  it("inclui o salário previsto dentro do ciclo", () => {
     const numeros = overview({
       categories: [],
       rows: [
@@ -226,7 +225,7 @@ describe("livre para gastar, igual ao site", () => {
           state: "planned",
           accountId: CONTA.id,
           amount: cents(500_000),
-          // Cai depois de hoje, e dentro da janela do cartão.
+          // Cai dentro da janela do cartão.
           occurredOn: localDate("2026-09-05"),
           competence: competence("2026-09"),
         }),
@@ -238,13 +237,11 @@ describe("livre para gastar, igual ao site", () => {
       competence: competence("2026-08"),
     });
 
-    // A soma do período daria 6.000,00. Gastar isso hoje deixaria a conta
-    // negativa até o dia 5 — o dinheiro do dia 5 não está disponível no dia 25.
     assert.equal(numeros.balance, 100_000);
-    assert.equal(numeros.free, 100_000);
+    assert.equal(numeros.free, 600_000);
   });
 
-  it("desconta o compromisso que vence antes da entrada", () => {
+  it("fecha saldo, entrada e compromisso previstos do ciclo", () => {
     const numeros = overview({
       categories: [],
       rows: [
@@ -274,8 +271,7 @@ describe("livre para gastar, igual ao site", () => {
       competence: competence("2026-08"),
     });
 
-    // O fundo do poço é o dia 28, depois do aluguel e antes do salário.
-    assert.equal(numeros.free, 60_000);
+    assert.equal(numeros.free, 560_000);
   });
 
   it("conta fora dos totais não entra na folga", () => {

@@ -341,10 +341,8 @@ export type DashboardView = {
     readonly pendingIncomeCents: number;
     readonly openInvoicesCents: number;
     readonly otherCommitmentsCents: number;
-    readonly lowestOn: string;
     readonly windowStart: string;
     readonly windowEnd: string;
-    readonly horizonEnd: string;
   };
   readonly benefitFreeToSpend: { readonly amountCents: number; readonly liquidBalanceCents: number } | null;
   readonly position: {
