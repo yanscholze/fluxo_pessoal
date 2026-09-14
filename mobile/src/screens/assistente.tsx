@@ -85,8 +85,11 @@ export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
         keyboardShouldPersistTaps="handled"
       >
         <View>
-          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink }]}>
-            Assistente
+          <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.6 }]}>
+            TARS // STATUS DO FLUXO
+          </Texto>
+          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 4 }]}>
+            Tudo que pede sua atenção.
           </Texto>
           <Small style={{ marginTop: 2 }}>
             Pergunte sobre o seu dinheiro. A resposta usa os seus números, não exemplos.

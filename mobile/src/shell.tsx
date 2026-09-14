@@ -6,9 +6,9 @@
  * cartão no topo escolhe a tela dentro dele. É a mesma árvore, dobrada para
  * caber numa mão.
  *
- * Antes eram quatro abas planas, uma tela cada, e tudo o que não coubesse nelas
- * simplesmente não existia no aplicativo. Com dois níveis, dezoito telas cabem
- * em cinco destinos sem que nenhuma fique inalcançável.
+ * A navegação conserva as implementações existentes, mas junta páginas que são
+ * partes da mesma decisão financeira. A barra leva aos cinco contextos e o
+ * seletor superior revela as derivações sem inflar a navegação principal.
  *
  * Continua sem biblioteca de navegação. O que uma resolveria — deep linking,
  * histórico entre abas, transições configuráveis — este aplicativo não usa.
@@ -93,11 +93,11 @@ type Grupo = {
 const GRUPOS: readonly Grupo[] = [
   {
     id: "inicio",
-    label: "Início",
+    label: "Painel",
     telas: [
       { id: "painel", label: "Painel" },
-      { id: "avisos", label: "Avisos" },
-      { id: "saude", label: "Saúde" },
+      { id: "assistente", label: "TARS" },
+      { id: "avisos", label: "Pendências" },
       { id: "relatorios", label: "Relatórios" },
     ],
   },
@@ -107,28 +107,28 @@ const GRUPOS: readonly Grupo[] = [
     telas: [
       { id: "lancamentos", label: "Lançamentos" },
       { id: "contas", label: "Contas" },
-      { id: "cartoes", label: "Cartões" },
+      { id: "cartoes", label: "Cartões e faturas" },
       { id: "parcelamentos", label: "Parcelamentos" },
+      { id: "recorrencias", label: "Recorrências" },
+      { id: "assinaturas", label: "Assinaturas" },
     ],
   },
   {
     id: "planos",
-    label: "Planos",
+    label: "Planejar",
     telas: [
-      { id: "recorrencias", label: "Recorrências" },
-      { id: "assinaturas", label: "Assinaturas" },
       { id: "orcamentos", label: "Orçamentos" },
       { id: "metas", label: "Metas" },
+      { id: "viagens", label: "Viagens" },
     ],
   },
   {
     id: "patrimonio",
-    label: "Patrimônio",
+    label: "Visão geral",
     telas: [
-      { id: "patrimonio", label: "Visão geral" },
+      { id: "patrimonio", label: "Patrimônio" },
       { id: "investimentos", label: "Investimentos" },
       { id: "recompensas", label: "Recompensas" },
-      { id: "viagens", label: "Viagens" },
     ],
   },
   {
@@ -136,10 +136,8 @@ const GRUPOS: readonly Grupo[] = [
     label: "Mais",
     telas: [
       { id: "trabalho", label: "Trabalho" },
-      { id: "assistente", label: "Assistente" },
       { id: "automacoes", label: "Automações" },
-      { id: "capturas", label: "Capturas" },
-      { id: "importar", label: "Importar" },
+      { id: "capturas", label: "Capturas e importações" },
       { id: "configuracoes", label: "Ajustes" },
     ],
   },

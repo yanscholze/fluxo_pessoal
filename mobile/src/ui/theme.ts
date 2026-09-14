@@ -51,7 +51,7 @@ export type Palette = {
 };
 
 const LIGHT: Palette = {
-  canvas: "#f6f7f9",
+  canvas: "#f4f3f8",
   surface: "#ffffff",
   surfaceRaised: "#ffffff",
   surfaceSunken: "#f0f2f5",
@@ -61,10 +61,10 @@ const LIGHT: Palette = {
   ink: "#10151c",
   inkMuted: "#5b6572",
   inkSubtle: "#8b95a3",
-  accent: "#6d4aff",
+  accent: "#7565d7",
   accentInk: "#ffffff",
-  accentWash: "#ece7ff",
-  accentEdge: "#c4b5fd",
+  accentWash: "#ebe8fb",
+  accentEdge: "#b6afe5",
   positive: "#16a34a",
   positiveWash: "#e4f4ea",
   negative: "#dc2626",
@@ -77,20 +77,20 @@ const LIGHT: Palette = {
 };
 
 const DARK: Palette = {
-  canvas: "#08090b",
-  surface: "#0f1114",
-  surfaceRaised: "#171a1f",
-  surfaceSunken: "#0b0d10",
-  surfaceInset: "#131619",
-  line: "#1d2126",
-  lineStrong: "#2b3138",
-  ink: "#e9ecef",
-  inkMuted: "#99a2ac",
-  inkSubtle: "#6a737e",
-  accent: "#9d84ff",
-  accentInk: "#120e26",
-  accentWash: "#1c1636",
-  accentEdge: "#3d2f7a",
+  canvas: "#161826",
+  surface: "#202335",
+  surfaceRaised: "#292d42",
+  surfaceSunken: "#12141f",
+  surfaceInset: "#1b1e2d",
+  line: "#31364d",
+  lineStrong: "#474d68",
+  ink: "#f1f0f7",
+  inkMuted: "#c0bed0",
+  inkSubtle: "#9290a7",
+  accent: "#9184d9",
+  accentInk: "#17152a",
+  accentWash: "#302c50",
+  accentEdge: "#625b99",
   positive: "#4ade80",
   positiveWash: "#12251a",
   negative: "#ff6b6b",
@@ -128,7 +128,7 @@ export const type = {
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
-export const radius = { xs: 4, sm: 6, md: 8, lg: 12, xl: 16, pill: 999 };
+export const radius = { xs: 6, sm: 9, md: 12, lg: 16, xl: 22, pill: 999 };
 
 /**
  * Elevação.
