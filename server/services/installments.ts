@@ -96,11 +96,25 @@ export async function buildInstallmentsView(userId: string, now: Date = new Date
   const ordenar = (lista: PlanView[]) =>
     [...lista].sort((left, right) => (left.nextDueDate ?? "9999").localeCompare(right.nextDueDate ?? "9999"));
 
-  const active = ordenar(views.filter((item) => !item.isSettled));
-  const settled = ordenar(views.filter((item) => item.isSettled));
+  /*
+   * Plano sem parcela nenhuma não é plano — é resto.
+   *
+   * Ele aparece quando as compras que o compunham foram apagadas e o cabeçalho
+   * ficou: uma importação desfeita, um cartão removido. A tela então mostrava
+   * dezenas de linhas "quitadas" de R$ 0,00, todas com a mesma aparência de
+   * conquista, e enterrava os parcelamentos que ainda estão sendo pagos.
+   *
+   * O filtro vive na leitura, e não numa limpeza de banco, porque o resto pode
+   * nascer de novo a qualquer apagamento — e porque um plano vazio nunca é a
+   * resposta certa para nenhuma pergunta desta tela.
+   */
+  const comParcelas = views.filter((item) => item.totalCount > 0);
 
-  const totalCents = views.reduce((soma, item) => soma + item.totalAmount, 0);
-  const paidCents = views.reduce((soma, item) => soma + item.paidAmount, 0);
+  const active = ordenar(comParcelas.filter((item) => !item.isSettled));
+  const settled = ordenar(comParcelas.filter((item) => item.isSettled));
+
+  const totalCents = comParcelas.reduce((soma, item) => soma + item.totalAmount, 0);
+  const paidCents = comParcelas.reduce((soma, item) => soma + item.paidAmount, 0);
 
   return {
     today,

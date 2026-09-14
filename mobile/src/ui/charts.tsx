@@ -185,11 +185,19 @@ export function Medidor({
   valor,
   total,
   tom = "accent",
+  cor,
   altura = 6,
 }: {
   valor: number;
   total: number;
   tom?: "accent" | "positive" | "negative" | "caution";
+  /**
+   * Cor exata da barra, quando o item tem uma escolhida pelo usuário — a cor da
+   * categoria, a da classificação de assinatura. Vence o `tom`, que é a cor
+   * semântica do tema: numa lista em que o ponto do item já é colorido, uma
+   * barra de outra cor faz o mesmo item parecer duas coisas.
+   */
+  cor?: string;
   altura?: number;
 }) {
   const palette = usePalette();
@@ -217,7 +225,7 @@ export function Medidor({
           width: `${Math.min(100, Math.max(0, razao * 100))}%`,
           height: "100%",
           borderRadius: radius.pill,
-          backgroundColor: estourou ? palette.negative : cores[tom],
+          backgroundColor: estourou ? palette.negative : (cor ?? cores[tom]),
         }}
       />
     </View>

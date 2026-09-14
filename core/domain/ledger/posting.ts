@@ -21,6 +21,7 @@ import { type DraftLedgerEntry, type Party, type Transaction, isSameParty } from
  * | Receita | conta +valor |
  * | Transferência | origem −valor, destino +valor |
  * | Pagamento de fatura | conta −valor, cartão +valor (dívida cai) |
+ * | Estorno | origem +valor (conta sobe, ou dívida do cartão cai) |
  *
  * Compra no crédito **não toca conta nenhuma**. O dinheiro só sai quando a
  * fatura é paga — é isso que impede o gasto ser contado duas vezes.
@@ -47,6 +48,11 @@ export function postTransaction(transaction: Transaction): DraftLedgerEntry[] {
       return [{ ...base, party: transaction.origin, amount: negate(transaction.amount) }];
 
     case "income":
+      return [{ ...base, party: transaction.origin, amount: transaction.amount }];
+
+    // Mesma movimentação da receita, kind diferente: é o `kind` que os
+    // relatórios leem para separar dinheiro novo de gasto devolvido.
+    case "refund":
       return [{ ...base, party: transaction.origin, amount: transaction.amount }];
 
     case "transfer": {
@@ -105,6 +111,16 @@ export function assertPostable(transaction: Transaction): void {
       }
       if (transaction.destination) {
         throw conflict("Receita não tem conta de destino");
+      }
+      return;
+
+    // Estorno aceita cartão de propósito — é o caso comum. A loja devolve o
+    // dinheiro de uma compra no crédito e a dívida da fatura cai sem que entre
+    // nada em conta; exigir conta aqui, como a receita exige, tornaria
+    // impossível registrar a devolução mais frequente que existe.
+    case "refund":
+      if (transaction.destination) {
+        throw conflict("Estorno não tem conta de destino");
       }
       return;
 

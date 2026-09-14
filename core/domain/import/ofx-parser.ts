@@ -28,11 +28,50 @@ export function parseOfx(text: string): ParseResult {
   for (const block of sliceBlocks(text)) {
     const rawText = clampRawText(block.raw);
     const outcome = readBlock(block.content, block.isCard);
-    if (typeof outcome === "string") discarded.push({ reason: outcome, rawText });
-    else rows.push({ ...outcome, rawText });
+    if (typeof outcome !== "string") {
+      rows.push({ ...outcome, rawText });
+      continue;
+    }
+    // O descarte guarda a linha quando ela era legível: pagamento de fatura e
+    // estorno saem do fluxo normal, mas são justamente o que a conciliação
+    // precisa parear depois.
+    const readable = readBlock(block.content, false);
+    discarded.push(
+      typeof readable === "string"
+        ? { reason: outcome, rawText }
+        : { reason: outcome, rawText, row: { ...readable, rawText } },
+    );
   }
 
-  return { format: "ofx", rows, discarded };
+  const balance = readBalance(text);
+  return balance === null
+    ? { format: "ofx", rows, discarded }
+    : { format: "ofx", rows, discarded, balance };
+}
+
+/**
+ * Lê o `LEDGERBAL` do arquivo.
+ *
+ * Só o primeiro: um arquivo com extrato e fatura na sequência traz um saldo por
+ * seção, e misturar os dois daria um número que não é de ninguém. Quem importa
+ * arquivo misto precisa separar as seções antes — e o Nubank, que é o caso
+ * real, exporta uma seção por arquivo.
+ */
+function readBalance(text: string): { amount: Cents; asOf: LocalDate } | null {
+  const block = /<LEDGERBAL>([\s\S]*?)<\/LEDGERBAL>/i.exec(text);
+  if (block === null) return null;
+
+  const rawAmount = field(block[1], "BALAMT");
+  if (rawAmount === null) return null;
+  const amount = parseOfxAmount(rawAmount);
+  if (amount === null) return null;
+
+  const rawDate = field(block[1], "DTASOF");
+  if (rawDate === null) return null;
+  const asOf = parseOfxDate(rawDate);
+  if (asOf === null) return null;
+
+  return { amount, asOf };
 }
 
 /**
@@ -158,6 +197,8 @@ const FIELD_PATTERNS = {
   NAME: /<NAME>([^<\r\n]*)/i,
   MEMO: /<MEMO>([^<\r\n]*)/i,
   TRNTYPE: /<TRNTYPE>([^<\r\n]*)/i,
+  BALAMT: /<BALAMT>([^<\r\n]*)/i,
+  DTASOF: /<DTASOF>([^<\r\n]*)/i,
 } as const;
 
 /** Valor de uma tag de folha: vai até a próxima tag ou o fim da linha. */

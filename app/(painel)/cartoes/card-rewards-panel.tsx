@@ -4,6 +4,7 @@ import { competenceShort, date, decimal, money, percent } from "../../ui/format.
 import { Coins, Gift } from "../../ui/icons.tsx";
 import { SectionTitle } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Label, Meter, Notice, Panel } from "../../ui/primitives.tsx";
+import { PointsCheck } from "../recompensas/points-check.tsx";
 import { RedeemForm } from "../recompensas/redeem-form.tsx";
 
 /** Pontos são guardados em milésimos; a tela mostra a unidade. */
@@ -61,11 +62,24 @@ export function CardRewardsPanel({
       <div className={`mt-4 grid gap-4 ${temPontos && temCashback ? "sm:grid-cols-2" : ""}`}>
         {temPontos ? (
           <div className="rounded-md border border-line bg-surface-sunken p-4">
-            <Label>Pontos disponíveis</Label>
+            <div className="flex items-start justify-between gap-2">
+              <Label>Pontos disponíveis</Label>
+              <PointsCheck
+                cardId={cartao.cardId}
+                cardName={cartao.cardName}
+                balanceMilli={cartao.balance.pointsMilli}
+                openingMilli={cartao.config.pointsOpeningMilli}
+              />
+            </div>
             <p className="tabular mt-1 text-figure text-ink">{pontos(cartao.balance.pointsMilli)}</p>
             {cartao.balance.pendingPointsMilli > 0 ? (
               <p className="mt-1 text-caption text-ink-subtle">
                 + {pontos(cartao.balance.pendingPointsMilli)} em faturas atuais e futuras, ainda não creditados
+              </p>
+            ) : null}
+            {cartao.config.pointsOpeningMilli > 0 ? (
+              <p className="mt-1 text-caption text-ink-subtle">
+                inclui {pontos(cartao.config.pointsOpeningMilli)} anteriores ao Fluxo
               </p>
             ) : null}
             {cartao.config.pointsGoal > 0 ? (

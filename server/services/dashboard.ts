@@ -82,6 +82,8 @@ export type CardSummary = {
   readonly brand: string;
   readonly last4: string;
   readonly color: string;
+  /** Caminho da foto do cartão, quando há uma. Os bytes vêm por rota própria. */
+  readonly imageUrl: string | null;
   readonly isPrimary: boolean;
   readonly limitCents: number;
   readonly availableLimitCents: number;
@@ -132,6 +134,13 @@ export type Dashboard = {
     readonly windowEnd: LocalDate;
     readonly horizonEnd: LocalDate;
   };
+  /**
+   * Folga do vale-alimentação, à parte da folga do dinheiro.
+   *
+   * Ausente quando não há conta de benefício — mostrar um vale de R$ 0,00 para
+   * quem não tem vale é ruído.
+   */
+  readonly benefitFreeToSpend: { readonly amountCents: number; readonly liquidBalanceCents: number } | null;
   readonly monthFlow: {
     readonly incomeCents: number;
     readonly expenseCents: number;
@@ -157,6 +166,37 @@ export type Dashboard = {
   }[];
   /** Só os projetos abertos. Os encerrados são histórico, e histórico não é painel. */
   readonly openProjects: readonly OpenProject[];
+  /**
+   * As tarefas que ainda não foram feitas, de todos os projetos abertos.
+   *
+   * Ficavam só na página do projeto e no Quadro — dois cliques longe de quem
+   * abre o Fluxo para saber o que fazer hoje. O painel já responde "quanto
+   * sobra"; passa a responder também "o que falta", que é a outra metade da
+   * pergunta de quem trabalha por conta própria.
+   */
+  readonly openTasks: readonly DashboardTask[];
+};
+
+/**
+ * Uma pendência, do jeito que o painel precisa dela.
+ *
+ * É a mesma forma do cartão do Quadro — e de propósito: são o mesmo objeto em
+ * duas telas, e dar dois formatos a ele obrigaria as duas a divergirem no dia
+ * em que uma ganhasse um campo.
+ */
+export type DashboardTask = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectColor: string | null;
+  readonly clientName: string | null;
+  readonly title: string;
+  readonly kind: string;
+  readonly priority: string;
+  readonly status: string;
+  readonly dueOn: LocalDate | null;
+  readonly billable: boolean;
+  readonly isLate: boolean;
 };
 
 /**
@@ -195,7 +235,10 @@ const OPEN_PROJECTS_LIMIT = 6;
  * usuário desconfiar das duas. Encerrado e cancelado não aparecem: histórico
  * não é painel.
  */
-async function loadOpenProjects(userId: string, today: LocalDate): Promise<OpenProject[]> {
+async function loadWork(
+  userId: string,
+  today: LocalDate,
+): Promise<{ projects: OpenProject[]; tasks: DashboardTask[] }> {
   const [projetos, clientes, parcelas, horas, tarefas] = await Promise.all([
     listProjects(userId),
     listClients(userId, true),
@@ -213,8 +256,10 @@ async function loadOpenProjects(userId: string, today: LocalDate): Promise<OpenP
     entregue: 4,
   };
 
-  return projetos
-    .filter((projeto) => isOpenStatus(projeto.status))
+  const abertos = projetos.filter((projeto) => isOpenStatus(projeto.status));
+  const porId = new Map(abertos.map((projeto) => [projeto.id, projeto]));
+
+  const projects = abertos
     .map((projeto) => {
       const doProjeto = parcelas.filter((parcela) => parcela.projectId === projeto.id);
       const recebido = doProjeto
@@ -251,6 +296,36 @@ async function loadOpenProjects(userId: string, today: LocalDate): Promise<OpenP
     })
     .sort((esquerda, direita) => peso[esquerda.deadlineStatus] - peso[direita.deadlineStatus])
     .slice(0, OPEN_PROJECTS_LIMIT);
+
+  /*
+   * As pendências saem de **todos** os projetos abertos, e não só dos seis que
+   * cabem na lista acima. O corte ali existe para a lista de projetos não
+   * virar uma segunda tela de projetos; aplicá-lo às tarefas esconderia
+   * trabalho do sétimo projeto sem dizer que existe.
+   */
+  const tasks = tarefas
+    .filter((tarefa) => tarefa.status !== "done" && porId.has(tarefa.projectId))
+    .map((tarefa) => {
+      const projeto = porId.get(tarefa.projectId)!;
+      const prazo = (tarefa.dueOn as LocalDate | null) ?? null;
+
+      return {
+        id: tarefa.id,
+        projectId: projeto.id,
+        projectName: projeto.name,
+        projectColor: projeto.color,
+        clientName: projeto.clientId ? (nomeCliente.get(projeto.clientId) ?? null) : null,
+        title: tarefa.title,
+        kind: tarefa.kind,
+        priority: tarefa.priority,
+        status: tarefa.status,
+        dueOn: prazo,
+        billable: tarefa.billable,
+        isLate: prazo !== null && prazo < today,
+      } satisfies DashboardTask;
+    });
+
+  return { projects, tasks };
 }
 
 const UPCOMING_DAYS = 30;
@@ -280,7 +355,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     ]);
 
   const competence = competenceOf(today);
-  const openProjects = await loadOpenProjects(userId, today);
+  const trabalho = await loadWork(userId, today);
 
   /**
    * As recorrências entram como lançamentos virtuais, calculados agora a
@@ -335,6 +410,13 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       netWorthCents: position.netWorth,
       committedCents: position.committed,
     },
+    benefitFreeToSpend:
+      position.benefitFreeToSpend.liquidBalance === 0 && position.benefitFreeToSpend.amount === 0
+        ? null
+        : {
+            amountCents: position.benefitFreeToSpend.amount,
+            liquidBalanceCents: position.benefitFreeToSpend.liquidBalance,
+          },
     freeToSpend: {
       amountCents: position.freeToSpend.amount,
       liquidBalanceCents: position.freeToSpend.liquidBalance,
@@ -365,7 +447,8 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       outflowCents: point.outflow,
       projectedBalanceCents: point.projectedBalance,
     })),
-    openProjects,
+    openProjects: trabalho.projects,
+    openTasks: trabalho.tasks,
     recentTransactions: recent.map((transaction) => ({
       id: transaction.id,
       description: transaction.description,
@@ -420,6 +503,7 @@ function summarizeCard(card: CardRecord, entries: readonly LedgerEntry[], today:
     brand: card.brand,
     last4: card.last4,
     color: card.color,
+    imageUrl: card.imageUrl ?? null,
     isPrimary: card.isPrimary,
     limitCents: card.limitCents,
     // Sem piso de competência: fatura atrasada continua ocupando limite.

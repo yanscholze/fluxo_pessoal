@@ -45,6 +45,18 @@ export type RecurrenceView = {
   readonly isActive: boolean;
   readonly originName: string;
   readonly categoryName: string | null;
+  /*
+   * Os identificadores acompanham os nomes porque esta lista não é só leitura:
+   * quem corrige uma regra precisa ver a conta, o cartão e a categoria atuais
+   * já escolhidos no formulário. Procurar de volta pelo nome erraria com duas
+   * contas de nome parecido.
+   */
+  readonly scheduleDay: number;
+  readonly accountId: string | null;
+  readonly cardId: string | null;
+  readonly categoryId: string | null;
+  readonly captureMatch: string | null;
+  readonly captureIgnore: string | null;
   readonly next: { competence: Competence; date: LocalDate; amountCents: number } | null;
   /** Ocorrência da competência corrente ainda não confirmada. */
   readonly pending: { competence: Competence; date: LocalDate; amountCents: number } | null;
@@ -134,6 +146,12 @@ export async function buildPlanningView(userId: string, now: Date = new Date()):
         ? (cardName.get(rule.cardId) ?? "Cartão removido")
         : (accountName.get(rule.accountId ?? "") ?? "Conta removida"),
       categoryName: rule.categoryId ? (categoryName.get(rule.categoryId) ?? null) : null,
+      scheduleDay: rule.scheduleDay,
+      accountId: rule.accountId ?? null,
+      cardId: rule.cardId ?? null,
+      categoryId: rule.categoryId ?? null,
+      captureMatch: rule.captureMatch ?? null,
+      captureIgnore: rule.captureIgnore ?? null,
       next: proxima
         ? { competence: proxima.competence, date: proxima.date, amountCents: proxima.amount }
         : null,

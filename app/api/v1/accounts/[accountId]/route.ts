@@ -26,6 +26,10 @@ export const PATCH = handle(async (request: Request) => {
   const input = read(await readJson(request));
 
   const name = input.optionalString("name", { max: 60 });
+  // Trocar a natureza da conta muda de que lado ela cai no "livre para gastar"
+  // — e é justamente o erro que se descobre depois, quando o número não bate.
+  // Sem isto, a única saída era apagar e recriar, o que o histórico impede.
+  const kind = input.optionalChoice("kind", ["checking", "savings", "cash", "benefit", "investment"] as const);
   const institution = input.optionalString("institution", { max: 60 });
   const color = input.optionalString("color", { max: 9 });
   const goalAmount = input.optionalMoney("goalAmount");
@@ -44,6 +48,7 @@ export const PATCH = handle(async (request: Request) => {
   input.done();
 
   await updateAccount(user.id, accountId, {
+    ...(kind !== null ? { kind } : {}),
     ...(name !== null ? { name } : {}),
     ...(institution !== null ? { institution } : {}),
     ...(color !== null ? { color } : {}),

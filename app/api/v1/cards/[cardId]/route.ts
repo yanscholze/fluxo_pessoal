@@ -34,6 +34,16 @@ export const PATCH = handle(async (request: Request) => {
     closingDay: input.optionalInteger("closingDay", { min: 1, max: 31 }),
     dueDay: input.optionalInteger("dueDay", { min: 1, max: 31 }),
     dueAdjustment: input.optionalChoice("dueAdjustment", ["previous", "next"] as const),
+    /*
+     * O fechamento também se corrige, e faltava.
+     *
+     * A rota de cadastro aceitava a regra do fechamento desde sempre; esta, de
+     * correção, não — então quem cadastrou o cartão com a regra errada não
+     * tinha como consertar sem apagar o cartão. E "errado" aqui move dinheiro
+     * de fatura: um fechamento que recua para a sexta joga a compra do sábado
+     * na fatura seguinte, e o total do app para de bater com o do banco.
+     */
+    closingAdjustment: input.optionalChoice("closingAdjustment", ["previous", "next", "none"] as const),
     limit: input.optionalMoney("limit"),
     brand: input.optionalString("brand", { max: 40 }),
     tier: input.optionalString("tier", { max: 40 }),
@@ -43,6 +53,7 @@ export const PATCH = handle(async (request: Request) => {
     pointsPerDollarMilli: input.optionalInteger("pointsPerDollarMilli", { min: 0, max: 1_000_000 }),
     cashbackBasisPoints: input.optionalInteger("cashbackBasisPoints", { min: 0, max: 10_000 }),
     pointsGoal: input.optionalInteger("pointsGoal", { min: 0 }),
+    pointsOpeningMilli: input.optionalInteger("pointsOpeningMilli", { min: 0 }),
     manualUsdRateMicros: input.optionalInteger("manualUsdRateMicros", { min: 0 }),
   };
   input.done();

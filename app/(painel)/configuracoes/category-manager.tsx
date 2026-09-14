@@ -174,7 +174,31 @@ export function CategoryManager({ categories }: { categories: readonly Categoria
               </div>
 
               {editando !== category.id ? (
-                <div className="mt-1.5 flex flex-wrap gap-4 pl-[1.125rem]">
+                <div className="mt-1.5 flex flex-wrap items-center gap-4 pl-[1.125rem]">
+                  {/*
+                    A cor da categoria é a cor do gráfico.
+
+                    Os gráficos já liam `category.color`, mas não havia por onde
+                    trocá-la: toda categoria nascia com o mesmo cinza padrão, e o
+                    "para onde foi" saía monocromático — um gráfico de pizza em
+                    que todas as fatias são iguais não separa nada.
+
+                    O seletor nativo do navegador em vez de uma paleta nossa:
+                    ele já traz conta-gotas e histórico, e limitar a doze cores
+                    escolhidas por nós seria decidir pelo dono o que combina com
+                    as categorias dele.
+                  */}
+                  <label className="flex items-center gap-1.5 text-caption text-ink-muted">
+                    <input
+                      type="color"
+                      value={category.color}
+                      onChange={(evento) => atualizar(category.id, { color: evento.target.value })}
+                      className="size-6 cursor-pointer rounded border border-line bg-transparent p-0"
+                      aria-label={`Cor de ${category.name}`}
+                    />
+                    Cor no gráfico
+                  </label>
+
                   {category.kind === "expense" ? (
                     <label className="flex items-center gap-1.5 text-caption text-ink-muted">
                       <input

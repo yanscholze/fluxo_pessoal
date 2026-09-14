@@ -115,6 +115,7 @@ export function DetailedReportBody({
                         value={grupo.amountCents}
                         total={Math.max(1, report.totalCents)}
                         size="sm"
+                        color={grupo.color}
                         tone={entrada ? "positive" : "accent"}
                         label={`${grupo.name}: ${percent(grupo.percent)}`}
                       />

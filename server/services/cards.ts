@@ -7,6 +7,7 @@
  * devo desta fatura" sem refazer a conta em cada tela.
  */
 
+import type { OptionalBusinessDayAdjustment } from "../../core/time/brazilian-calendar.ts";
 import {
   activeCompetence,
   closingDateFor,
@@ -46,6 +47,7 @@ export type CardView = {
   readonly brand: string;
   readonly last4: string;
   readonly color: string;
+  readonly imageUrl: string | null;
   readonly isPrimary: boolean;
   readonly paymentAccountId: string;
   readonly paymentAccountName: string;
@@ -55,10 +57,13 @@ export type CardView = {
   readonly closingDay: number;
   readonly dueDay: number;
   readonly dueAdjustment: "previous" | "next";
+  readonly closingAdjustment: OptionalBusinessDayAdjustment;
   readonly rewardMode: "none" | "points" | "cashback" | "both";
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  /** Pontos anteriores ao Fluxo, em milésimos. */
+  readonly pointsOpeningMilli: number;
   readonly manualUsdRateMicros: number;
   readonly usedLimitCents: number;
   readonly availableLimitCents: number;
@@ -173,6 +178,7 @@ function toCardView(
     brand: card.brand,
     last4: card.last4,
     color: card.color,
+    imageUrl: card.imageUrl ?? null,
     isPrimary: card.isPrimary,
     paymentAccountId: card.paymentAccountId,
     paymentAccountName: accountName.get(card.paymentAccountId) ?? "Conta removida",
@@ -181,10 +187,12 @@ function toCardView(
     closingDay: card.closingDay,
     dueDay: card.dueDay,
     dueAdjustment: card.dueAdjustment,
+    closingAdjustment: card.closingAdjustment ?? "previous",
     rewardMode: card.rewardMode,
     pointsPerDollarMilli: card.pointsPerDollarMilli,
     cashbackBasisPoints: card.cashbackBasisPoints,
     pointsGoal: card.pointsGoal,
+    pointsOpeningMilli: card.pointsOpeningMilli,
     manualUsdRateMicros: card.manualUsdRateMicros,
     usedLimitCents: usado,
     availableLimitCents:

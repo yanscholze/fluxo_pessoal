@@ -110,7 +110,7 @@ async function main() {
   console.log("1. Conta criada e sessão de dispositivo emitida");
 
   const categorias = await api("/api/v1/categories");
-  conferir("categorias padrão criadas", categorias.length, 9);
+  conferir("categorias padrão criadas", categorias.length, 11);
   const alimentacao = categorias.find((item) => item.name === "Alimentação");
   const salarioCat = categorias.find((item) => item.name === "Salário");
 

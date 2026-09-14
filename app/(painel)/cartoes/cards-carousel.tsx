@@ -15,6 +15,7 @@ function paraFace(card: CardView): FaceData {
     brand: card.brand,
     last4: card.last4,
     color: card.color,
+    imageUrl: card.imageUrl,
     kind: card.kind,
     isPrimary: card.isPrimary,
     closingOn: ativa?.closingDate ?? null,

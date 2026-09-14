@@ -8,6 +8,13 @@
  *
  * Regra de ouro deste arquivo: **nada aqui aceita `style` nem classe de cor
  * crua**. Se uma tela precisa de algo que não está aqui, a peça entra aqui.
+ *
+ * A única exceção é cor **escolhida pelo usuário** — a cor da categoria. Ela é
+ * conteúdo, não cromo: não existe token possível para um valor que o usuário
+ * inventa em tempo de execução, e a fatia do gráfico já a respeita. Uma barra
+ * que ignorasse essa cor faria a mesma categoria aparecer de duas cores na
+ * mesma tela. A exceção termina aí: é sempre um dado vindo do banco, nunca um
+ * literal escrito numa tela.
  */
 
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
@@ -251,6 +258,7 @@ export function Meter({
   value,
   total,
   tone = "accent",
+  color,
   size = "md",
   label,
   className,
@@ -258,6 +266,13 @@ export function Meter({
   value: number;
   total: number;
   tone?: Tone;
+  /**
+   * Cor exata da barra, quando o item tem uma escolhida pelo usuário — a cor
+   * da categoria, por exemplo. Vence o `tone`, que é a cor semântica do tema:
+   * numa lista de categorias a barra precisa combinar com a fatia do gráfico,
+   * senão a mesma categoria aparece com duas cores na mesma tela.
+   */
+  color?: string | null;
   size?: "sm" | "md";
   label?: string;
   className?: string;
@@ -277,8 +292,11 @@ export function Meter({
       )}
     >
       <div
-        className={join("h-full rounded-full transition-[width] duration-700 ease-out-soft", FILL[tone])}
-        style={{ width: `${razao}%` }}
+        className={join(
+          "h-full rounded-full transition-[width] duration-700 ease-out-soft",
+          color ? undefined : FILL[tone],
+        )}
+        style={{ width: `${razao}%`, backgroundColor: color ?? undefined }}
       />
     </div>
   );

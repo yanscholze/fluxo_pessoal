@@ -36,6 +36,8 @@ function toRecurrence(row: typeof recurrences.$inferSelect): Recurrence {
     startsOn: localDate(row.startsOn),
     endsOn: row.endsOn ? localDate(row.endsOn) : null,
     isActive: row.isActive,
+    captureMatch: row.captureMatch,
+    captureIgnore: row.captureIgnore,
   };
 }
 

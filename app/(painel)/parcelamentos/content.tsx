@@ -8,6 +8,7 @@ import { CircleCheck, Percent, Repeat, Wallet } from "../../ui/icons.tsx";
 import { SectionTitle, Stack } from "../../ui/page-frame.tsx";
 import { Empty, Panel } from "../../ui/primitives.tsx";
 import { PlanCard } from "./plan-card.tsx";
+import { SettledPlans } from "./settled-plans.tsx";
 
 
 /**
@@ -121,16 +122,7 @@ export default async function Parcelamentos() {
             </section>
           ) : null}
 
-          {view.settled.length ? (
-            <section>
-              <SectionTitle title="Quitados" hint="Compras que já terminaram de ser pagas" />
-              <div className="space-y-4">
-                {view.settled.map((plan) => (
-                  <PlanCard key={plan.planId} plan={plan} />
-                ))}
-              </div>
-            </section>
-          ) : null}
+          {view.settled.length ? <SettledPlans plans={view.settled} /> : null}
         </Stack>
       )}
     </>

@@ -52,11 +52,26 @@ export function resolveCapture(input: {
   token: string;
   captureId: string;
   decision: "confirmar" | "ignorar" | "duplicado";
+  /**
+   * Para onde vai o lançamento.
+   *
+   * Sem isto o servidor cai no padrão da fonte — o cartão ou a conta que o
+   * usuário amarrou àquele aplicativo. Quando não há padrão configurado, ele
+   * recusa com "Escolha a conta ou o cartão deste lançamento", e o aplicativo
+   * não tinha como responder: confirmava sempre sem destino.
+   */
+  accountId?: string | null;
+  cardId?: string | null;
 }): Promise<unknown> {
   return call("/api/v1/captures", {
     baseUrl: input.baseUrl,
     token: input.token,
     method: "PATCH",
-    body: { captureId: input.captureId, decision: input.decision },
+    body: {
+      captureId: input.captureId,
+      decision: input.decision,
+      ...(input.accountId ? { accountId: input.accountId } : {}),
+      ...(input.cardId ? { cardId: input.cardId } : {}),
+    },
   });
 }

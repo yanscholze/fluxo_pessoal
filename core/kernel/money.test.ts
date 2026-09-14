@@ -12,6 +12,7 @@ import {
   multiply,
   negate,
   parseMoney,
+  parseScaled,
   percentOf,
   sum,
   toDecimal,
@@ -77,6 +78,46 @@ describe("money", () => {
         assert.equal(parseMoney(entrada), esperado);
       });
     }
+  });
+
+  /**
+   * A mesma leitura, em outra unidade.
+   *
+   * Pontos de cartão e horas são guardados em milésimos, e quem precisava ler
+   * "2500,61" nessa unidade acabava pedindo um inteiro — o resgate de um saldo
+   * com casas voltava como "informe um número inteiro". O que estes casos
+   * fixam é que a parte difícil (qual separador é decimal) continua sendo a
+   * mesma do dinheiro, e que só a escala muda.
+   */
+  describe("parseScaled", () => {
+    const casos: Array<[string, number, number | null]> = [
+      ["2500,61", 3, 2_500_610],
+      ["2500.61", 3, 2_500_610],
+      ["2.500,61", 3, 2_500_610],
+      ["11257", 3, 11_257_000],
+      ["1,5", 3, 1500],
+      // Três casas é o que a unidade guarda; a quarta arredonda, não some.
+      ["0,0005", 3, 1],
+      ["1.500", 3, 1_500_000],
+      ["abc", 3, null],
+      ["", 3, null],
+      // Escala 0 é contagem pura: a fração arredonda para a unidade.
+      ["7,4", 0, 7],
+      ["7,6", 0, 8],
+      ["1.234,56", 2, 123_456],
+    ];
+
+    for (const [entrada, escala, esperado] of casos) {
+      it(`interpreta ${JSON.stringify(entrada)} na escala ${escala}`, () => {
+        assert.equal(parseScaled(entrada, escala), esperado);
+      });
+    }
+
+    it("concorda com parseMoney na escala do dinheiro", () => {
+      for (const [entrada] of casos) {
+        assert.equal(parseScaled(entrada, 2), parseMoney(entrada), entrada);
+      }
+    });
   });
 
   describe("allocate", () => {

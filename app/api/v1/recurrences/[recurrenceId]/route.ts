@@ -33,13 +33,24 @@ export const PATCH = handle(async (request: Request) => {
     amount: input.optionalMoney("amount"),
     scheduleDay: input.optionalInteger("scheduleDay", { min: 1, max: 31 }),
     interval: input.optionalChoice("interval", ["monthly", "yearly"] as const),
+    amountMode: input.optionalChoice("amountMode", ["fixed", "per_business_day"] as const),
+    scheduleMode: input.optionalChoice("scheduleMode", [
+      "day_of_month",
+      "business_day_of_month",
+    ] as const),
     cardId: input.optionalReference("cardId"),
     accountId: input.optionalReference("accountId"),
     categoryId: input.optionalReference("categoryId"),
     labelId: input.optionalReference("labelId"),
+    captureMatch: input.optionalString("captureMatch", { max: 120 }),
+    captureIgnore: input.optionalString("captureIgnore", { max: 120 }),
     // `provided` separa "não mandou o campo" de "mandou vazio para limpar".
     clearLabel: input.provided("labelId") && input.optionalReference("labelId") === null,
     clearCategory: input.provided("categoryId") && input.optionalReference("categoryId") === null,
+    clearCaptureMatch:
+      input.provided("captureMatch") && input.optionalString("captureMatch") === null,
+    clearCaptureIgnore:
+      input.provided("captureIgnore") && input.optionalString("captureIgnore") === null,
   };
   input.done();
 
@@ -50,12 +61,18 @@ export const PATCH = handle(async (request: Request) => {
     campos.amount !== null ||
     campos.scheduleDay !== null ||
     campos.interval !== null ||
+    campos.amountMode !== null ||
+    campos.scheduleMode !== null ||
     campos.cardId !== null ||
     campos.accountId !== null ||
     campos.categoryId !== null ||
     campos.labelId !== null ||
+    campos.captureMatch !== null ||
+    campos.captureIgnore !== null ||
     campos.clearLabel ||
-    campos.clearCategory;
+    campos.clearCategory ||
+    campos.clearCaptureMatch ||
+    campos.clearCaptureIgnore;
 
   if (mexeu) await updateSubscription(user.id, recurrenceId, campos);
 

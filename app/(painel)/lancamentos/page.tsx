@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default async function Lancamentos({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string; novo?: string }>;
+  searchParams: Promise<{ competencia?: string; novo?: string; cartao?: string }>;
 }) {
   const user = await currentUser();
   // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
@@ -31,23 +31,35 @@ export default async function Lancamentos({
   if (!user) return null;
 
   const params = await searchParams;
+  const cardId = params.cartao?.trim() || undefined;
   const statement = await buildStatement(user.id, {
     competence: parseCompetence(params.competencia) ?? undefined,
+    cardId,
   });
+  const selectedCard = cardId ? statement.options.cards.find((card) => card.id === cardId) : undefined;
 
   const saldo = statement.incomeCents - statement.expenseCents;
 
   return (
     <Page>
       <PageHeader
-        eyebrow={competenceLong(statement.competence)}
-        title="Lançamentos"
-        description="Tudo que entrou e saiu na competência, incluindo o que está previsto."
+        eyebrow={
+          selectedCard
+            ? `${selectedCard.name} · ${competenceLong(statement.competence)}`
+            : competenceLong(statement.competence)
+        }
+        title={selectedCard ? "Lançamentos da fatura" : "Lançamentos"}
+        description={
+          selectedCard
+            ? "Compras, estornos e pagamentos ligados somente a esta fatura."
+            : "Tudo que entrou e saiu na competência, incluindo o que está previsto."
+        }
         actions={
           <>
             <CompetenceNav
               anterior={shift(statement.competence, -1)}
               proxima={shift(statement.competence, 1)}
+              cardId={selectedCard?.id}
             />
             <Composer
               options={statement.options}
@@ -90,7 +102,7 @@ export default async function Lancamentos({
           ]}
         />
 
-        <StatementList rows={statement.rows} />
+        <StatementList rows={statement.rows} options={statement.options} />
       </Stack>
     </Page>
   );

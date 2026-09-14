@@ -8,7 +8,7 @@
 
 import { type FieldIssue, validationError } from "../../core/kernel/errors.ts";
 import { parseId } from "../../core/kernel/id.ts";
-import { type Cents, cents, parseMoney } from "../../core/kernel/money.ts";
+import { type Cents, cents, parseMoney, parseScaled } from "../../core/kernel/money.ts";
 import { type Competence, parseCompetence } from "../../core/time/competence.ts";
 import { type LocalDate, parseLocalDate } from "../../core/time/local-date.ts";
 
@@ -51,7 +51,38 @@ export class InputReader {
    * seria impossível pela API.
    */
   provided(path: string): boolean {
+    // Registra a leitura: perguntar se a chave veio **é** lê-la. Sem isto, uma
+    // rota que só consulta `provided` para um campo teria esse campo recusado
+    // por `done()` como não reconhecido.
+    this.lidos.add(path);
     return Object.hasOwn(this.body, path);
+  }
+
+  /**
+   * Uma lista, ainda crua.
+   *
+   * O leitor valida campo a campo, e um item de lista não é um campo do corpo.
+   * Forçá-lo a isso esconderia **qual** item está errado, que é justamente o
+   * que quem importa dezenas de parcelas precisa saber — então a rota valida os
+   * itens à mão e diz o índice.
+   *
+   * O que este método garante é o contorno: que veio lista, que o tamanho cabe,
+   * e — o motivo de ele existir — que o campo entra em `lidos`. Ler
+   * `body.parcels` direto, como a rota de parcelamento fazia, deixa a chave
+   * invisível para o leitor: `done()` a denuncia como "campo não reconhecido" e
+   * a rota devolve 400 em **toda** chamada, inclusive nas corretas.
+   */
+  list(path: string, options: { min?: number; max?: number } = {}): unknown[] {
+    const value = this.raw(path);
+    if (!Array.isArray(value)) {
+      this.fail(path, "Envie uma lista");
+      return [];
+    }
+    const min = options.min ?? 0;
+    const max = options.max ?? Number.MAX_SAFE_INTEGER;
+    if (value.length < min) this.fail(path, `Envie ao menos ${min} ${min === 1 ? "item" : "itens"}`);
+    if (value.length > max) this.fail(path, `Envie no máximo ${max} itens`);
+    return value;
   }
 
   string(path: string, options: { max?: number; min?: number } = {}): string {
@@ -109,6 +140,41 @@ export class InputReader {
   optionalMoney(path: string, options: { allowNegative?: boolean } = {}): Cents | null {
     if (this.missing(path)) return null;
     return this.money(path, { ...options, allowZero: true });
+  }
+
+  /**
+   * Número decimal lido na unidade mínima inteira que o domínio guarda.
+   *
+   * `scale` é quantas casas cabem na unidade — 3 para pontos e horas, que o
+   * Fluxo guarda em milésimos. É o mesmo leitor do dinheiro, que já sabe que
+   * "2.500,61" e "2500.61" são o mesmo número e que o ponto de "1.500" separa
+   * milhar. Pedir `integer` para um saldo que tem casas decimais é o que fazia
+   * um resgate legítimo voltar como "informe um número inteiro".
+   */
+  scaled(
+    path: string,
+    options: { scale: number; allowZero?: boolean; allowNegative?: boolean },
+  ): number {
+    const value = this.raw(path);
+    let parsed: number | null = null;
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      parsed = Math.round(value * 10 ** options.scale);
+    } else if (typeof value === "string") {
+      parsed = parseScaled(value, options.scale);
+    }
+
+    if (parsed === null) {
+      this.fail(path, "Informe um número válido");
+      return 0;
+    }
+    if (!options.allowNegative && parsed < 0) {
+      this.fail(path, "O valor não pode ser negativo");
+    }
+    if (!options.allowZero && parsed === 0) {
+      this.fail(path, "Informe um valor maior que zero");
+    }
+    return parsed;
   }
 
   date(path: string): LocalDate {
@@ -245,13 +311,28 @@ export class InputReader {
    * sem trocar cor nenhuma. O cliente não tem como descobrir que o campo foi
    * ignorado — ele pediu, recebeu sucesso, e nada mudou.
    */
-  done(message = "Revise os campos destacados"): void {
+  done(message?: string): void {
     for (const campo of Object.keys(this.body)) {
       if (!this.lidos.has(campo)) {
         this.fail(campo, "Campo não reconhecido por esta rota");
       }
     }
-    if (this.issues.length) throw validationError(message, this.issues);
+    if (!this.issues.length) return;
+
+    /*
+     * Com um problema só, a mensagem geral **é** esse problema.
+     *
+     * "Revise os campos destacados" pressupõe uma tela que destaca campos, e
+     * várias daqui não destacam: mostram a mensagem geral e mais nada. Quem
+     * digitava pontos com vírgula lia "revise os campos destacados" sem saber
+     * qual campo nem o quê — a informação existia, em `issues`, e não chegava
+     * a ninguém. Com dois ou mais, aí sim vale pedir para revisar, porque
+     * nenhuma frase única daria conta.
+     */
+    const geral =
+      message ?? (this.issues.length === 1 ? this.issues[0].message : "Revise os campos destacados");
+
+    throw validationError(geral, this.issues);
   }
 }
 

@@ -43,8 +43,9 @@ import {
   projects,
   proposals,
   timeEntries,
+  transactions,
 } from "../db/schema/index.ts";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   type PaymentRow,
   type ProjectRow,
@@ -670,6 +671,224 @@ export async function receivePayment(
   return { transactionId: ids[0] };
 }
 
+/**
+ * Dá baixa na parcela **apontando para uma receita que já existe**.
+ *
+ * `receivePayment` cria o lançamento; este não. A diferença importa quando o
+ * dinheiro entrou antes de o Fluxo saber do projeto — pagamento importado do
+ * extrato, ou registrado à mão na pressa. Ali a receita já está no razão, e
+ * criar outra dobraria a renda do mês, o patrimônio e o livre para gastar.
+ *
+ * O valor da baixa é o do lançamento, não o da parcela: quem manda sobre
+ * quanto entrou é o extrato.
+ */
+export async function linkPaymentToTransaction(
+  userId: string,
+  paymentId: string,
+  transactionId: string,
+  now: Date = new Date(),
+): Promise<{ transactionId: string; amountCents: number }> {
+  const database = getDatabase();
+
+  const [parcela] = await database
+    .select()
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.id, paymentId)))
+    .limit(1);
+  if (!parcela) throw notFound("Parcela", paymentId);
+  if (parcela.receivedOn) throw conflict("Esta parcela já foi recebida");
+
+  const [lancamento] = await database
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!lancamento) throw notFound("Lançamento", transactionId);
+
+  if (lancamento.kind !== "income") {
+    throw validationError("Só uma receita pode quitar uma parcela", [
+      { path: "transactionId", message: "O lançamento escolhido não é uma receita" },
+    ]);
+  }
+
+  // Uma receita quita uma parcela só. Sem esta checagem, o mesmo depósito
+  // daria baixa em duas parcelas e o projeto pareceria pago em dobro.
+  const [jaUsado] = await database
+    .select({ id: projectPayments.id })
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.transactionId, transactionId)))
+    .limit(1);
+  if (jaUsado) throw conflict("Este lançamento já quita outra parcela");
+
+  await database
+    .update(projectPayments)
+    .set({
+      receivedOn: lancamento.occurredOn as LocalDate,
+      receivedAmountCents:
+        lancamento.amountCents === parcela.amountCents ? null : lancamento.amountCents,
+      transactionId,
+      updatedAt: now.toISOString(),
+    })
+    .where(and(eq(projectPayments.userId, userId), eq(projectPayments.id, paymentId)));
+
+  await recordEvent({
+    id: newId(now.getTime()),
+    userId,
+    projectId: parcela.projectId,
+    kind: "payment",
+    summary: `Recebido: ${parcela.description}`,
+    occurredAt: now.toISOString(),
+  });
+
+  return { transactionId, amountCents: lancamento.amountCents };
+}
+
+/**
+ * Registra um recebimento que **já aconteceu**, sem parcela prévia.
+ *
+ * `linkPaymentToTransaction` resolve o caso de uma parcela em aberto encontrar a
+ * receita que a pagou. Falta o caso anterior a ele: o dinheiro entrou antes de o
+ * projeto existir no Fluxo, e portanto não há parcela nenhuma para dar baixa.
+ * Foi o que aconteceu com os projetos anteriores à área de trabalho — o cliente
+ * pagou, o extrato registrou, e o projeto nasceu depois, já com zero a receber.
+ *
+ * Sem isto o usuário ficava sem saída: criar a parcela e dar baixa pelo caminho
+ * normal criaria uma **segunda** receita, dobrando a renda daquele mês.
+ *
+ * A parcela nasce já quitada, com a data e o valor do lançamento — quem manda
+ * sobre quanto e quando entrou é o extrato, não o que foi combinado.
+ */
+export async function registerPastPayment(
+  userId: string,
+  input: {
+    projectId: string;
+    transactionId: string;
+    description?: string | null;
+  },
+  now: Date = new Date(),
+): Promise<{ paymentId: string; amountCents: number }> {
+  const database = getDatabase();
+
+  const projeto = await findProject(userId, input.projectId);
+  if (!projeto) throw notFound("Projeto", input.projectId);
+
+  const [lancamento] = await database
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, input.transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!lancamento) throw notFound("Lançamento", input.transactionId);
+
+  if (lancamento.kind !== "income") {
+    throw validationError("Só uma receita pode quitar uma parcela", [
+      { path: "transactionId", message: "O lançamento escolhido não é uma receita" },
+    ]);
+  }
+
+  // Uma receita quita uma parcela só: o mesmo depósito em dois projetos faria a
+  // renda do mês aparecer duas vezes no relatório de trabalho.
+  const [jaUsado] = await database
+    .select({ id: projectPayments.id })
+    .from(projectPayments)
+    .where(
+      and(eq(projectPayments.userId, userId), eq(projectPayments.transactionId, input.transactionId)),
+    )
+    .limit(1);
+  if (jaUsado) throw conflict("Este lançamento já quita outra parcela");
+
+  const paymentId = newId(now.getTime());
+  await database.insert(projectPayments).values({
+    id: paymentId,
+    userId,
+    projectId: input.projectId,
+    description: (input.description?.trim() || lancamento.description).slice(0, 160),
+    amountCents: lancamento.amountCents,
+    dueOn: lancamento.occurredOn,
+    receivedOn: lancamento.occurredOn,
+    // Nulo significa "entrou o combinado", e aqui o combinado **é** o que entrou.
+    receivedAmountCents: null,
+    transactionId: input.transactionId,
+    notes: null,
+  });
+
+  await recordEvent({
+    id: newId(now.getTime()),
+    userId,
+    projectId: input.projectId,
+    kind: "payment",
+    summary: `Recebido: ${(input.description?.trim() || lancamento.description).slice(0, 120)}`,
+    occurredAt: now.toISOString(),
+  });
+
+  return { paymentId, amountCents: lancamento.amountCents };
+}
+
+/**
+ * As receitas que ainda não quitaram parcela nenhuma.
+ *
+ * É a lista que a tela oferece na hora de vincular. Filtrar aqui, e não na
+ * tela, é o que impede oferecer um lançamento já usado — e o erro que viria
+ * depois, no meio do gesto.
+ */
+export async function unlinkedIncome(
+  userId: string,
+  limite = 60,
+): Promise<
+  readonly {
+    readonly id: string;
+    readonly description: string;
+    readonly occurredOn: string;
+    readonly amountCents: number;
+  }[]
+> {
+  const database = getDatabase();
+
+  const usados = await database
+    .select({ transactionId: projectPayments.transactionId })
+    .from(projectPayments)
+    .where(and(eq(projectPayments.userId, userId), isNotNull(projectPayments.transactionId)));
+  const jaVinculados = new Set(usados.map((linha) => linha.transactionId).filter(Boolean) as string[]);
+
+  const linhas = await database
+    .select({
+      id: transactions.id,
+      description: transactions.description,
+      occurredOn: transactions.occurredOn,
+      amountCents: transactions.amountCents,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.kind, "income"),
+        // Só o que entrou de verdade.
+        //
+        // Receita prevista é projeção — salário do mês que vem, parcela ainda
+        // por receber. Ordenadas por data decrescente, elas encabeçam a lista e
+        // viram a opção pré-selecionada: um clique distraído daria a parcela
+        // como recebida contra dinheiro que ainda não existe.
+        eq(transactions.state, "confirmed"),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .orderBy(desc(transactions.occurredOn))
+    .limit(limite + jaVinculados.size);
+
+  return linhas.filter((linha) => !jaVinculados.has(linha.id)).slice(0, limite);
+}
+
 // ---------------------------------------------------------------------------
 // Propostas
 // ---------------------------------------------------------------------------
@@ -799,6 +1018,15 @@ export type WorkOverview = {
     readonly contractedCents: number;
     readonly receivedCents: number;
     readonly pendingCents: number;
+    /**
+     * Contrato sem parcela agendada.
+     *
+     * É dinheiro combinado que ninguém marcou para cobrar — o vazamento mais
+     * comum de quem trabalha por projeto. Ficava só dentro do projeto e não
+     * subia para o total, então "a receber" mostrava R$ 0,00 para quem tinha
+     * R$ 900,00 combinados e nenhuma parcela criada.
+     */
+    readonly unscheduledCents: number;
     readonly overdueCents: number;
     readonly lateProjects: number;
     readonly weekMilli: number;
@@ -860,6 +1088,10 @@ export async function buildWorkOverview(userId: string, now: Date = new Date()):
       receivedCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.received, 0),
       pendingCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.pending, 0),
       overdueCents: projectSummaries.reduce((soma, item) => soma + item.health.finance.overdue, 0),
+      unscheduledCents: projectSummaries.reduce(
+        (soma, item) => soma + (isOpenStatus(item.status) ? item.health.finance.unscheduled : 0),
+        0,
+      ),
       lateProjects: projectSummaries.filter((item) => item.health.deadline.status === "atrasado").length,
       weekMilli,
     },
@@ -975,9 +1207,10 @@ export async function buildBoard(userId: string, now: Date = new Date()): Promis
   ]);
 
   const nomeCliente = new Map(listaClientes.map((cliente) => [cliente.id, cliente.name]));
-  const abertos = listaProjetos.filter(
-    (projeto) => !["done", "cancelled"].includes(projeto.status),
-  );
+  // A mesma definição de "aberto" que o painel e a tela de projetos usam. Era
+  // uma lista à parte aqui, e listas à parte discordam no dia em que uma
+  // situação nova aparece em duas delas e não na terceira.
+  const abertos = listaProjetos.filter((projeto) => isOpenStatus(projeto.status));
   const porId = new Map(abertos.map((projeto) => [projeto.id, projeto]));
 
   const doQuadro = tarefas.filter((tarefa) => porId.has(tarefa.projectId));

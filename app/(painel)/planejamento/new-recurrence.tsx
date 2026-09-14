@@ -9,9 +9,11 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { PlanningView } from "../../../server/services/planning.ts";
+import { Button } from "../../ui/controls.tsx";
+import { Dialog } from "../../ui/dialog.tsx";
 
 const PAPEIS = [
   ["standard", "Recorrente"],
@@ -35,6 +37,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [issues, setIssues] = useState<Record<string, string>>({});
+  const envioEmCurso = useRef(false);
 
   const categorias = options.categories.filter((item) =>
     tipo === "income" ? item.kind === "income" : item.kind === "expense",
@@ -52,6 +55,8 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
 
   async function enviar(evento: React.FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    if (envioEmCurso.current) return;
+    envioEmCurso.current = true;
     setEnviando(true);
     setErro(null);
     setIssues({});
@@ -74,58 +79,44 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
     if (noCartao && podeUsarCartao) corpo.cardId = dados.get("cardId");
     else corpo.accountId = dados.get("accountId");
 
-    const resposta = await fetch("/api/v1/recurrences", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(corpo),
-    });
+    try {
+      const resposta = await fetch("/api/v1/recurrences", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
 
-    setEnviando(false);
+      if (!resposta.ok) {
+        const body = (await resposta.json().catch(() => ({}))) as {
+          error?: { message?: string; issues?: { path: string; message: string }[] };
+        };
+        setErro(body.error?.message ?? "Não foi possível cadastrar a recorrência.");
+        setIssues(Object.fromEntries((body.error?.issues ?? []).map((issue) => [issue.path, issue.message])));
+        return;
+      }
 
-    if (!resposta.ok) {
-      const body = (await resposta.json().catch(() => ({}))) as {
-        error?: { message?: string; issues?: { path: string; message: string }[] };
-      };
-      setErro(body.error?.message ?? "Não foi possível cadastrar a recorrência.");
-      setIssues(Object.fromEntries((body.error?.issues ?? []).map((issue) => [issue.path, issue.message])));
-      return;
+      setAberto(false);
+      router.refresh();
+    } catch {
+      setErro("Não foi possível falar com o Fluxo. Confira sua conexão e tente de novo.");
+    } finally {
+      envioEmCurso.current = false;
+      setEnviando(false);
     }
-
-    setAberto(false);
-    router.refresh();
-  }
-
-  if (!aberto) {
-    return (
-      <button
-        type="button"
-        onClick={() => setAberto(true)}
-        className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45"
-      >
-        Nova recorrência
-      </button>
-    );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-6">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Nova recorrência"
-        className="max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
+    <>
+      <Button variant="primary" size="sm" onClick={() => setAberto(true)}>
+        Nova recorrência
+      </Button>
+      <Dialog
+        open={aberto}
+        onClose={() => setAberto(false)}
+        title="Nova recorrência"
+        description="Cadastre uma entrada ou saída que se repete e passa a fazer parte das projeções."
+        width="md"
       >
-        <header className="mb-4 flex items-center justify-between">
-          <h2 className="text-title font-semibold text-ink">Nova recorrência</h2>
-          <button
-            type="button"
-            onClick={() => setAberto(false)}
-            className="rounded-md px-2 py-1 text-body-sm text-ink-muted hover:bg-surface-sunken"
-          >
-            Fechar
-          </button>
-        </header>
-
         <form onSubmit={enviar} className="space-y-4" noValidate>
           <fieldset>
             <legend className="mb-1.5 text-body-sm font-medium text-ink">Papel</legend>
@@ -149,12 +140,19 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
           </fieldset>
 
           <Campo rotulo="Descrição" erro={issues.description}>
-            <input name="description" required maxLength={160} className={entrada(issues.description)} />
+            <input
+              name="description"
+              aria-label="Descrição"
+              required
+              maxLength={160}
+              className={entrada(issues.description)}
+            />
           </Campo>
 
           <div className="grid grid-cols-2 gap-3">
             <Campo rotulo="Tipo">
               <select
+                aria-label="Tipo"
                 value={tipo}
                 onChange={(evento) => setTipo(evento.target.value as Tipo)}
                 className={entrada()}
@@ -164,7 +162,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
               </select>
             </Campo>
             <Campo rotulo="Frequência">
-              <select name="interval" className={entrada()} defaultValue="monthly">
+              <select name="interval" aria-label="Frequência" className={entrada()} defaultValue="monthly">
                 <option value="monthly">Mensal</option>
                 <option value="yearly">Anual</option>
               </select>
@@ -178,6 +176,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
           >
             <input
               name="amount"
+              aria-label={porDiaUtil ? "Valor por dia útil" : "Valor"}
               required
               inputMode="decimal"
               placeholder="0,00"
@@ -237,6 +236,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
             >
               <input
                 name="scheduleDay"
+                aria-label={agenda === "business_day_of_month" ? "Qual dia útil" : "Dia"}
                 type="number"
                 min={1}
                 max={agenda === "business_day_of_month" ? 23 : 31}
@@ -246,7 +246,12 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
             </Campo>
             {agenda === "day_of_month" ? (
               <Campo rotulo="Se cair em dia não útil">
-                <select name="dayAdjustment" className={entrada()} defaultValue="next">
+                <select
+                  name="dayAdjustment"
+                  aria-label="Ajuste para dia útil"
+                  className={entrada()}
+                  defaultValue="next"
+                >
                   <option value="next">Próximo dia útil</option>
                   <option value="previous">Dia útil anterior</option>
                 </select>
@@ -267,7 +272,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
 
           {noCartao && podeUsarCartao ? (
             <Campo rotulo="Cartão" erro={issues.cardId}>
-              <select name="cardId" required className={entrada(issues.cardId)}>
+              <select name="cardId" aria-label="Cartão" required className={entrada(issues.cardId)}>
                 {options.cards.map((card) => (
                   <option key={card.id} value={card.id}>
                     {card.name}
@@ -277,7 +282,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
             </Campo>
           ) : (
             <Campo rotulo="Conta" erro={issues.accountId}>
-              <select name="accountId" required className={entrada(issues.accountId)}>
+              <select name="accountId" aria-label="Conta" required className={entrada(issues.accountId)}>
                 {options.accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -289,7 +294,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
 
           <div className="grid grid-cols-2 gap-3">
             <Campo rotulo="Categoria">
-              <select name="categoryId" className={entrada()}>
+              <select name="categoryId" aria-label="Categoria" className={entrada()}>
                 <option value="">Sem categoria</option>
                 {categorias.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -299,7 +304,7 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
               </select>
             </Campo>
             <Campo rotulo="Começa em" dica="Deixe vazio para hoje">
-              <input name="startsOn" type="date" className={entrada()} />
+              <input name="startsOn" aria-label="Começa em" type="date" className={entrada()} />
             </Campo>
           </div>
 
@@ -309,16 +314,17 @@ export function NewRecurrence({ options }: { options: PlanningView["options"] })
             </p>
           ) : null}
 
-          <button
+          <Button
             type="submit"
-            disabled={enviando}
-            className="inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-accent px-3.5 text-body-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-45 w-full"
+            variant="primary"
+            busy={enviando}
+            className="w-full"
           >
             {enviando ? "Cadastrando…" : "Cadastrar recorrência"}
-          </button>
+          </Button>
         </form>
-      </div>
-    </div>
+      </Dialog>
+    </>
   );
 }
 

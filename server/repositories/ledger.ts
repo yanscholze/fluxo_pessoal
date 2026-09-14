@@ -6,12 +6,13 @@
  * então não existe nada para corrigir.
  */
 
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 import { postTransaction } from "../../core/domain/ledger/posting.ts";
 import type { LedgerEntry, Transaction } from "../../core/domain/ledger/types.ts";
 import { newId } from "../../core/kernel/id.ts";
 import type { LocalDate } from "../../core/time/local-date.ts";
+import type { Competence } from "../../core/time/competence.ts";
 import { getDatabase } from "../db/client.ts";
 import { ledgerEntries, transactions } from "../db/schema/index.ts";
 import { partyColumns, toLedgerEntry, toTransaction } from "./mappers.ts";
@@ -70,6 +71,10 @@ export function categoriesFrom(index: ReadonlyMap<string, TransactionMeta>): Map
 export type TransactionQuery = {
   readonly from?: LocalDate;
   readonly to?: LocalDate;
+  /** Competência contábil, usada para abrir uma fatura específica. */
+  readonly competence?: Competence;
+  /** Traz compras, estornos e pagamentos ligados ao cartão. */
+  readonly cardId?: string;
   readonly limit?: number;
   /** Recorta por situação. Omitido, traz tudo que não foi excluído. */
   readonly states?: readonly Transaction["state"][];
@@ -80,6 +85,14 @@ export async function listTransactions(userId: string, query: TransactionQuery =
   const filters = [eq(transactions.userId, userId), isNull(transactions.deletedAt)];
   if (query.from) filters.push(gte(transactions.occurredOn, query.from));
   if (query.to) filters.push(lte(transactions.occurredOn, query.to));
+  if (query.competence) filters.push(eq(transactions.competence, query.competence));
+  if (query.cardId) {
+    const doCartao = or(
+      eq(transactions.originCardId, query.cardId),
+      eq(transactions.destinationCardId, query.cardId),
+    );
+    if (doCartao) filters.push(doCartao);
+  }
   if (query.states?.length) filters.push(inArray(transactions.state, [...query.states]));
 
   const rows = await database
@@ -236,6 +249,53 @@ function buildSaveStatements(transaction: Transaction, options: PersistOptions) 
  * permanece marcado para que a sincronização propague a exclusão aos outros
  * dispositivos.
  */
+/**
+ * Reclassifica um lançamento sem reescrevê-lo.
+ *
+ * O caminho normal de edição regrava a transação inteira — é o que faz mudar a
+ * data mover a competência e a fatura junto, sem ninguém precisar lembrar de
+ * recalcular. Para uma **parcela**, esse mesmo caminho é destrutivo: ele zera
+ * `installment_plan_id`, troca a origem `installment` por `manual` e re-deduz a
+ * competência. A parcela sairia do plano, e o plano ficaria descrevendo uma
+ * dívida da qual falta um pedaço.
+ *
+ * Aqui só mudam os três campos que dizem **o que aquilo é**, e nenhum deles
+ * participa do razão: a movimentação não é reescrita, o valor não muda, a
+ * competência fica onde estava.
+ */
+export async function reclassifyTransaction(
+  userId: string,
+  transactionId: string,
+  patch: {
+    categoryId?: string | null;
+    description?: string;
+    notes?: string | null;
+    setCategory?: boolean;
+    setNotes?: boolean;
+  },
+): Promise<boolean> {
+  const database = getDatabase();
+  const now = new Date().toISOString();
+
+  const campos: Record<string, unknown> = { updatedAt: now, version: sql`${transactions.version} + 1` };
+  if (patch.description !== undefined) campos.description = patch.description;
+  if (patch.setCategory) campos.categoryId = patch.categoryId ?? null;
+  if (patch.setNotes) campos.notes = patch.notes ?? null;
+
+  const resultado = await database
+    .update(transactions)
+    .set(campos)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.id, transactionId),
+        isNull(transactions.deletedAt),
+      ),
+    );
+
+  return Boolean(resultado);
+}
+
 export async function softDeleteTransaction(
   userId: string,
   transactionId: string,

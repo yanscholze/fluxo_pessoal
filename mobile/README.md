@@ -40,6 +40,20 @@ Depois do primeiro build, o ciclo do dia a dia é:
 cd mobile && npm start
 ```
 
+## Gerar o APK para instalar
+
+```bash
+bash scripts/apk-local.sh ~/Downloads/fluxo.apk
+```
+
+O script existe por causa de uma armadilha: **o build local precisa de um JDK
+17**. Do JDK 24 em diante a JVM imprime um aviso ao carregar biblioteca nativa,
+o gerador de prefabs do Android usa JNA e dispara esse aviso, e o plugin do
+Gradle trata qualquer linha em `stderr` daquela ferramenta como erro fatal. O
+build morre em `configureCMakeRelWithDebInfo` com "A restricted method in
+java.lang.System has been called" — uma mensagem que não sugere em nada que o
+problema é a versão do Java. A ferramenta funciona; é só o aviso que derruba.
+
 ## Conectar a uma conta
 
 O aplicativo não pede senha. O fluxo é:

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { InstallApp } from "../ui/install-app.tsx";
 import { currentUser } from "../auth-context.ts";
 import { ArrowUpRight, CreditCard, Wallet } from "../ui/icons.tsx";
 import { AccessForm } from "./access-form.tsx";
@@ -69,8 +70,17 @@ export default async function Entrar() {
         </p>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-12 sm:px-10">
+      <section className="flex flex-col items-center justify-center gap-6 px-5 py-12 sm:px-10">
         <AccessForm />
+
+        {/*
+          O convite de instalação vive aqui, e não só no painel.
+          É nesta página que alguém abre o Fluxo pela primeira vez no
+          computador, e é aqui que o Chrome decide se oferece a instalação. O
+          botão só aparece quando o navegador de fato oferece — instalado ou
+          sem suporte, ele some sozinho.
+        */}
+        <InstallApp />
       </section>
     </main>
   );

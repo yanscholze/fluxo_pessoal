@@ -39,6 +39,25 @@ export type DiscardReason =
 export type DiscardedRow = {
   readonly reason: DiscardReason;
   readonly rawText: string;
+  /**
+   * A linha que foi descartada, quando ela era legível.
+   *
+   * Descarte não é o mesmo que "não interessa a ninguém". Um pagamento de
+   * fatura não vira lançamento pelo lado do cartão, mas é exatamente ele que a
+   * conciliação precisa para casar com o débito do lado da conta — e o estorno
+   * só anula a compra se alguém ainda souber o valor e o `FITID` dele. Sem
+   * este campo a única saída seria reabrir o arquivo e reparsear.
+   *
+   * Fica ausente quando nem dá para ler a linha (`sem_data`, `sem_valor`,
+   * `sem_descricao`): aí não há o que recuperar.
+   */
+  readonly row?: ParsedRow;
+};
+
+/** Saldo que o próprio arquivo declara, para conferir o que foi importado. */
+export type StatementBalance = {
+  readonly amount: Cents;
+  readonly asOf: LocalDate;
 };
 
 /**
@@ -64,6 +83,16 @@ export type ParseResult = {
   readonly format: ImportFormat;
   readonly rows: readonly ParsedRow[];
   readonly discarded: readonly DiscardedRow[];
+  /**
+   * `LEDGERBAL` do OFX, quando o arquivo o traz.
+   *
+   * É a única testemunha independente de que a importação ficou certa: se a
+   * soma do que entrou não reproduz este número, alguma linha foi contada duas
+   * vezes, perdida ou trocada de sinal. Sem ele, um erro de conciliação só
+   * aparece meses depois, quando o saldo do app já não bate com o do banco e
+   * ninguém mais sabe de onde veio a diferença.
+   */
+  readonly balance?: StatementBalance;
 };
 
 /** Para onde o arquivo está sendo importado. Muda as regras de descarte. */

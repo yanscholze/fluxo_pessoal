@@ -20,7 +20,11 @@ import { read } from "../../../../../server/http/input.ts";
 import { handle, json, noContent, readJson } from "../../../../../server/http/respond.ts";
 import { segmentAfter } from "../../../../../server/http/route-params.ts";
 import { findTransaction } from "../../../../../server/repositories/ledger.ts";
-import { recordTransaction, removeTransaction } from "../../../../../server/services/transactions.ts";
+import {
+  reclassify,
+  recordTransaction,
+  removeTransaction,
+} from "../../../../../server/services/transactions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -65,15 +69,6 @@ export const PATCH = handle(async (request: Request) => {
   const atual = await findTransaction(user.id, transactionId);
   if (!atual) throw notFound("Lançamento", transactionId);
 
-  // Parcela não se edita sozinha: mudar o valor de uma faria a soma das
-  // parcelas deixar de bater com o total da compra, e o plano passaria a
-  // descrever uma dívida que não existe. O caminho é mexer no plano.
-  if (atual.installmentPlanId) {
-    throw conflict("Parcela não se edita isolada; altere o parcelamento", {
-      installmentPlanId: atual.installmentPlanId,
-    });
-  }
-
   // Pagamento de fatura tem regra própria — confere saldo, amarra a
   // competência quitada e liga o pagamento à fatura. Regravá-lo como
   // lançamento comum desfaria essa amarração em silêncio.
@@ -82,6 +77,19 @@ export const PATCH = handle(async (request: Request) => {
   }
 
   const input = read(await readJson(request));
+
+  /*
+   * Campo ausente é "não mexe"; campo enviado vazio é "apague".
+   *
+   * `optionalReference` e `optionalString` devolvem `null` nos dois casos —
+   * eles respondem "há valor utilizável aqui?", não "o cliente falou deste
+   * campo?". Sem `provided`, o `?? atual` abaixo preserva o valor antigo
+   * também quando o usuário pediu para remover, e a opção "Sem categoria" da
+   * tela de edição vira promessa quebrada: some do formulário e volta ao
+   * recarregar.
+   */
+  const limpaCategoria = input.provided("categoryId");
+  const limpaObservacao = input.provided("notes");
 
   const description = input.optionalString("description", { max: 160 });
   const amount = input.optionalMoney("amount");
@@ -95,6 +103,56 @@ export const PATCH = handle(async (request: Request) => {
   const state = input.optionalChoice("state", ["confirmed", "planned"] as const);
 
   input.done();
+
+  /*
+   * Parcela: o que classifica pode mudar, o que é dívida não.
+   *
+   * A recusa costumava ser total, e era ampla demais. Uma parcela existe dentro
+   * de um cronograma: mudar valor, data ou origem faria a soma das parcelas
+   * deixar de bater com o total da compra, e o plano passaria a descrever uma
+   * dívida que não existe.
+   *
+   * Categoria e observação não são isso. Elas dizem **o que aquilo é** —
+   * consumo do mês, ou empréstimo que alguém vai devolver — e é uma informação
+   * que só aparece depois, quando o extrato já foi importado. Sem poder
+   * classificar a parcela, o dono de um cartão que empresta ficava sem saída:
+   * as compras dos outros pesavam no livre para gastar dele para sempre, e a
+   * única alternativa era apagar a parcela e mentir sobre a fatura.
+   */
+  if (atual.installmentPlanId) {
+    const mexeNaDivida =
+      (amount !== null && amount !== atual.amount) ||
+      (occurredOn !== null && occurredOn !== atual.occurredOn) ||
+      (state !== null && state !== atual.state) ||
+      accountId !== null ||
+      cardId !== null ||
+      destinationAccountId !== null;
+
+    if (mexeNaDivida) {
+      throw conflict("Numa parcela só dá para mudar categoria, descrição e observação", {
+        installmentPlanId: atual.installmentPlanId,
+      });
+    }
+
+    /*
+     * Caminho próprio, e não o `recordTransaction` abaixo.
+     *
+     * Aquele regrava a transação inteira — é o que faz mudar a data mover a
+     * competência e a fatura junto. Numa parcela ele seria destrutivo: zera
+     * `installmentPlanId`, troca a origem `installment` por `manual` e re-deduz
+     * a competência. A parcela sairia do plano, e o plano ficaria descrevendo
+     * uma dívida da qual falta um pedaço.
+     */
+    await reclassify(user.id, transactionId, {
+      ...(description !== null ? { description } : {}),
+      categoryId,
+      setCategory: limpaCategoria,
+      notes,
+      setNotes: limpaObservacao,
+    });
+
+    return json({ data: { id: atual.id, competence: atual.competence } });
+  }
 
   const origemAtual =
     atual.origin.kind === "card"
@@ -113,14 +171,14 @@ export const PATCH = handle(async (request: Request) => {
     amount: amount ?? atual.amount,
     occurredOn: occurredOn ?? atual.occurredOn,
     state: state ?? atual.state,
-    categoryId: categoryId ?? atual.categoryId,
+    categoryId: categoryId ?? (limpaCategoria ? null : atual.categoryId),
     accountId: origemInformada ? accountId : origemAtual.accountId,
     cardId: origemInformada ? cardId : origemAtual.cardId,
     destinationAccountId:
       destinationAccountId ??
       (atual.destination?.kind === "account" ? atual.destination.accountId : null),
     tripId: tripId ?? atual.tripId,
-    notes: notes ?? atual.notes,
+    notes: notes ?? (limpaObservacao ? null : atual.notes),
   });
 
   return json({ data: { id: ids[0], competence } });

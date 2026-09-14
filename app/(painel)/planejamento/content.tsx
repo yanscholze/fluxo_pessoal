@@ -5,7 +5,6 @@ import { BarChart, ChartFrame } from "../../ui/charts.tsx";
 import {
   Amount,
   DataTable,
-  ListRow,
   MetricStrip,
   type MetricProps,
   Td,
@@ -28,6 +27,7 @@ import { SectionTitle, Stack } from "../../ui/page-frame.tsx";
 import { Badge, Divider, Empty, Panel, PanelHeader } from "../../ui/primitives.tsx";
 import { ConfirmOccurrence } from "./confirm-occurrence.tsx";
 import { NewRecurrence } from "./new-recurrence.tsx";
+import { RecurrenceActions } from "./recurrence-actions.tsx";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 
@@ -75,10 +75,6 @@ export default async function Planejamento() {
   const agenda = view.recurrences
     .filter((item): item is ComProxima => item.isActive && item.next !== null)
     .sort((esquerda, direita) => esquerda.next.date.localeCompare(direita.next.date));
-
-  // Pausada ou encerrada não entra na projeção; some da régua e vira nota de
-  // rodapé, para o usuário saber que a regra existe sem confundi-la com ativa.
-  const paradas = view.recurrences.filter((item) => !item.isActive || item.next === null);
 
   const mesAtual = view.projection[0];
   const assinaturas = view.subscriptions;
@@ -293,28 +289,56 @@ export default async function Planejamento() {
           </DataTable>
         </Panel>
 
-        {paradas.length ? (
+        {view.recurrences.length ? (
           <section>
             <SectionTitle
-              title="Fora da projeção"
-              hint="Regras pausadas ou já encerradas — não entram no cálculo dos próximos meses"
+              title="Regras cadastradas"
+              hint="Edite, pause ou exclua cada recorrência. Pausar tira da projeção sem apagar."
             />
-            <ul>
-              {paradas.map((item) => (
-                <ListRow
-                  key={item.id}
-                  title={item.description}
-                  subtitle={`${ROTULO_PAPEL[item.role] ?? item.role} · ${item.scheduleLabel} · ${item.originName}`}
-                  value={money(item.amountCents)}
-                  meta={item.interval === "yearly" ? "anual" : "mensal"}
-                  badge={
-                    <Badge tone={item.isActive ? "neutral" : "caution"}>
-                      {item.isActive ? "encerrada" : "pausada"}
+            <DataTable
+              caption="Recorrências cadastradas, com valor, agenda, situação e ações"
+              columns={[
+                { key: "regra", header: "Regra", flexible: true },
+                { key: "agenda", header: "Agenda", hideBelow: "md" },
+                { key: "valor", header: "Valor", align: "right" },
+                { key: "situacao", header: "Situação", hideBelow: "sm" },
+                { key: "acoes", header: "", align: "right" },
+              ]}
+            >
+              {view.recurrences.map((item) => (
+                <Tr key={item.id}>
+                  <Td truncate>
+                    <span className="block truncate text-body text-ink">{item.description}</span>
+                    <span className="block truncate text-caption text-ink-subtle">
+                      {ROTULO_PAPEL[item.role] ?? item.role} · {item.originName}
+                      {item.categoryName ? ` · ${item.categoryName}` : ""}
+                    </span>
+                  </Td>
+                  <Td hideBelow="md" className="text-body-sm text-ink-muted">
+                    {item.scheduleLabel}
+                    <span className="block text-caption text-ink-subtle">
+                      {item.interval === "yearly" ? "todo ano" : "todo mês"}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <Amount cents={item.amountCents} tone={item.kind === "income" ? "positive" : "neutral"} />
+                    {item.amountMode !== "fixed" && item.next ? (
+                      <span className="block text-caption text-ink-subtle">
+                        {money(item.next.amountCents)} neste mês
+                      </span>
+                    ) : null}
+                  </Td>
+                  <Td hideBelow="sm">
+                    <Badge tone={!item.isActive ? "caution" : item.next ? "positive" : "neutral"}>
+                      {!item.isActive ? "pausada" : item.next ? "ativa" : "encerrada"}
                     </Badge>
-                  }
-                />
+                  </Td>
+                  <Td align="right">
+                    <RecurrenceActions recurrence={item} options={view.options} />
+                  </Td>
+                </Tr>
               ))}
-            </ul>
+            </DataTable>
           </section>
         ) : null}
       </Stack>

@@ -12,6 +12,7 @@ import { and, count, eq, isNull, max, or } from "drizzle-orm";
 import { SUPPORTED_CURRENCIES, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
 import { assertValidCycle, type CycleConfig, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import { conflict, duplicate, notFound, validationError } from "../../core/kernel/errors.ts";
+import { bytesFromDataUrl } from "../../core/kernel/data-url.ts";
 import { newId } from "../../core/kernel/id.ts";
 import type { Cents } from "../../core/kernel/money.ts";
 import type { Competence } from "../../core/time/competence.ts";
@@ -19,6 +20,7 @@ import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
 import {
   accounts,
+  cardImages,
   cards,
   categories,
   invoices,
@@ -59,7 +61,9 @@ export async function createAccount(userId: string, input: AccountInput, now: Da
   const [existing] = await database
     .select({ id: accounts.id })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.name, input.name)))
+    // Arquivado não reserva nome: quem saiu de cena não pode impedir o nome de
+    // voltar a ser usado. O índice parcial da migration 0019 diz o mesmo.
+    .where(and(eq(accounts.userId, userId), eq(accounts.name, input.name), isNull(accounts.archivedAt)))
     .limit(1);
   if (existing) throw duplicate("Já existe uma conta com este nome");
 
@@ -225,7 +229,14 @@ export async function createCategory(userId: string, input: CategoryInput, now: 
   const [existing] = await database
     .select({ id: categories.id })
     .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.name, input.name), eq(categories.kind, input.kind)))
+    .where(
+      and(
+        eq(categories.userId, userId),
+        eq(categories.name, input.name),
+        eq(categories.kind, input.kind),
+        isNull(categories.archivedAt),
+      ),
+    )
     .limit(1);
   if (existing) throw duplicate("Já existe uma categoria com este nome neste fluxo");
 
@@ -301,6 +312,7 @@ export type CardInput = {
   readonly closingDay: number;
   readonly dueDay: number;
   readonly dueAdjustment?: "previous" | "next";
+  readonly closingAdjustment?: "previous" | "next" | "none";
   readonly limit?: Cents | null;
   readonly brand?: string | null;
   readonly tier?: string | null;
@@ -311,8 +323,23 @@ export type CardInput = {
   readonly pointsPerDollarMilli?: number | null;
   readonly cashbackBasisPoints?: number | null;
   readonly pointsGoal?: number | null;
+  readonly pointsOpeningMilli?: number | null;
   readonly manualUsdRateMicros?: number | null;
 };
+
+/**
+ * O que fazer quando o fechamento cai em dia não útil, quando ninguém diz.
+ *
+ * "Não faz nada" — a fatura fecha no dia, domingo ou feriado. É como a maioria
+ * dos emissores daqui trabalha: quem espera expediente é o **pagamento**, não o
+ * corte. Recuar por padrão, como era antes, joga tudo que foi comprado no fim
+ * de semana anterior ao corte para a fatura seguinte, e o total da tela deixa
+ * de bater com o do aplicativo do banco — sem que nada na tela explique por quê.
+ *
+ * Cartão já cadastrado não muda: o valor está gravado em cada linha, e agora
+ * também se corrige pela tela.
+ */
+const PADRAO_DE_FECHAMENTO = "none" as const;
 
 export async function createCard(userId: string, input: CardInput, now: Date = new Date()): Promise<string> {
   const database = getDatabase();
@@ -321,6 +348,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
+    closingAdjustment: input.closingAdjustment ?? PADRAO_DE_FECHAMENTO,
   });
 
   const [account] = await database
@@ -333,7 +361,7 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
   const [existing] = await database
     .select({ id: cards.id })
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.name, input.name)))
+    .where(and(eq(cards.userId, userId), eq(cards.name, input.name), isNull(cards.archivedAt)))
     .limit(1);
   if (existing) throw duplicate("Já existe um cartão com este nome");
 
@@ -363,10 +391,12 @@ export async function createCard(userId: string, input: CardInput, now: Date = n
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     dueAdjustment: input.dueAdjustment ?? "next",
+    closingAdjustment: input.closingAdjustment ?? PADRAO_DE_FECHAMENTO,
     rewardMode: input.rewardMode ?? "none",
     pointsPerDollarMilli: input.pointsPerDollarMilli ?? 0,
     cashbackBasisPoints: input.cashbackBasisPoints ?? 0,
     pointsGoal: input.pointsGoal ?? 0,
+    pointsOpeningMilli: input.pointsOpeningMilli ?? 0,
     manualUsdRateMicros: input.manualUsdRateMicros ?? 0,
     color: input.color ?? "#6b7280",
     isPrimary,
@@ -382,6 +412,7 @@ export type CardPatch = {
   readonly closingDay?: number | null;
   readonly dueDay?: number | null;
   readonly dueAdjustment?: "previous" | "next" | null;
+  readonly closingAdjustment?: "previous" | "next" | "none" | null;
   readonly limit?: Cents | null;
   readonly brand?: string | null;
   readonly tier?: string | null;
@@ -391,6 +422,7 @@ export type CardPatch = {
   readonly pointsPerDollarMilli?: number | null;
   readonly cashbackBasisPoints?: number | null;
   readonly pointsGoal?: number | null;
+  readonly pointsOpeningMilli?: number | null;
   readonly manualUsdRateMicros?: number | null;
 };
 
@@ -426,6 +458,7 @@ export async function updateCard(
     closingDay: patch.closingDay ?? atual.closingDay,
     dueDay: patch.dueDay ?? atual.dueDay,
     dueAdjustment: patch.dueAdjustment ?? atual.dueAdjustment,
+    closingAdjustment: patch.closingAdjustment ?? atual.closingAdjustment,
   };
   assertValidCycle(ciclo);
 
@@ -442,7 +475,7 @@ export async function updateCard(
     const [homonimo] = await database
       .select({ id: cards.id })
       .from(cards)
-      .where(and(eq(cards.userId, userId), eq(cards.name, patch.name)))
+      .where(and(eq(cards.userId, userId), eq(cards.name, patch.name), isNull(cards.archivedAt)))
       .limit(1);
     if (homonimo) throw duplicate("Já existe um cartão com este nome");
   }
@@ -453,6 +486,7 @@ export async function updateCard(
   if (patch.closingDay != null) campos.closingDay = patch.closingDay;
   if (patch.dueDay != null) campos.dueDay = patch.dueDay;
   if (patch.dueAdjustment) campos.dueAdjustment = patch.dueAdjustment;
+  if (patch.closingAdjustment) campos.closingAdjustment = patch.closingAdjustment;
   if (patch.limit != null) campos.limitCents = patch.limit as number;
   if (patch.brand != null) campos.brand = patch.brand;
   if (patch.tier != null) campos.tier = patch.tier;
@@ -462,6 +496,7 @@ export async function updateCard(
   if (patch.pointsPerDollarMilli != null) campos.pointsPerDollarMilli = patch.pointsPerDollarMilli;
   if (patch.cashbackBasisPoints != null) campos.cashbackBasisPoints = patch.cashbackBasisPoints;
   if (patch.pointsGoal != null) campos.pointsGoal = patch.pointsGoal;
+  if (patch.pointsOpeningMilli != null) campos.pointsOpeningMilli = patch.pointsOpeningMilli;
   if (patch.manualUsdRateMicros != null) campos.manualUsdRateMicros = patch.manualUsdRateMicros;
 
   await database
@@ -472,7 +507,8 @@ export async function updateCard(
   const mudouOCiclo =
     ciclo.closingDay !== atual.closingDay ||
     ciclo.dueDay !== atual.dueDay ||
-    ciclo.dueAdjustment !== atual.dueAdjustment;
+    ciclo.dueAdjustment !== atual.dueAdjustment ||
+    ciclo.closingAdjustment !== atual.closingAdjustment;
 
   if (mudouOCiclo) await reagendarFaturasAbertas(userId, cardId, ciclo, now);
 }
@@ -568,11 +604,118 @@ export async function seedDefaults(userId: string, now: Date = new Date()): Prom
     { name: "Lazer", kind: "expense", color: "#fb923c" },
     { name: "Compras", kind: "expense", color: "#c77700" },
     { name: "Assinaturas", kind: "expense", color: "#8f8f9c" },
+    {
+      name: "Empréstimo de cartão",
+      kind: "expense",
+      color: "#7056b8",
+      icon: "credit-card",
+      excludeFromFreeToSpend: true,
+    },
     { name: "Salário", kind: "income", color: "#0d9f6e" },
     { name: "Outras entradas", kind: "income", color: "#38bdf8" },
+    {
+      name: "Pagamento de empréstimo de cartão",
+      kind: "income",
+      color: "#7056b8",
+      icon: "credit-card",
+      excludeFromFreeToSpend: true,
+    },
   ];
 
   for (const categoria of padroes) {
     await createCategory(userId, categoria, now).catch(() => undefined);
   }
+}
+
+// --- foto do cartão ----------------------------------------------------------
+
+/**
+ * Teto da foto do cartão.
+ *
+ * Bem menor que o dos documentos (2 MB): é uma imagem de face de cartão, que
+ * nunca precisa de mais que isso, e ela é carregada toda vez que a tela de
+ * cartões abre. Aceitar um arquivo de câmera cru faria o aplicativo baixar
+ * megabytes para desenhar um retângulo de sete centímetros.
+ */
+export const MAX_CARD_IMAGE_BYTES = 400_000;
+
+const TIPOS_DE_IMAGEM = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+export async function setCardImage(
+  userId: string,
+  cardId: string,
+  dataUrl: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+  const [cartao] = await database
+    .select({ id: cards.id })
+    .from(cards)
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)))
+    .limit(1);
+  if (!cartao) throw notFound("Cartão", cardId);
+
+  const lido = bytesFromDataUrl(dataUrl);
+  if (!lido.ok) {
+    throw validationError("Não foi possível ler a imagem", [
+      { path: "dataUrl", message: "Envie a foto como data URL em base64" },
+    ]);
+  }
+  if (!TIPOS_DE_IMAGEM.has(lido.contentType)) {
+    throw validationError("Formato de imagem não aceito", [
+      { path: "dataUrl", message: "Use PNG, JPEG ou WebP" },
+    ]);
+  }
+  if (lido.bytes.length === 0 || lido.bytes.length > MAX_CARD_IMAGE_BYTES) {
+    throw conflict("Imagem grande demais", {
+      details: { maxBytes: MAX_CARD_IMAGE_BYTES, sizeBytes: lido.bytes.length },
+    });
+  }
+
+  const agora = now.toISOString();
+  await database
+    .insert(cardImages)
+    .values({
+      cardId,
+      userId,
+      content: lido.bytes,
+      contentType: lido.contentType,
+      sizeBytes: lido.bytes.length,
+      updatedAt: agora,
+    })
+    .onConflictDoUpdate({
+      target: cardImages.cardId,
+      set: { content: lido.bytes, contentType: lido.contentType, sizeBytes: lido.bytes.length, updatedAt: agora },
+    });
+
+  // A coluna guarda o caminho, não os bytes: é ela que a listagem carrega.
+  // O carimbo de tempo na ponta força o cliente a rebuscar depois de trocar a
+  // foto, em vez de continuar mostrando a antiga do cache.
+  await database
+    .update(cards)
+    .set({ imageUrl: `/api/v1/cards/${cardId}/image?v=${Date.parse(agora)}`, updatedAt: agora })
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)));
+}
+
+export async function removeCardImage(userId: string, cardId: string, now: Date = new Date()): Promise<void> {
+  const database = getDatabase();
+  await database.delete(cardImages).where(and(eq(cardImages.userId, userId), eq(cardImages.cardId, cardId)));
+  await database
+    .update(cards)
+    .set({ imageUrl: null, updatedAt: now.toISOString() })
+    .where(and(eq(cards.userId, userId), eq(cards.id, cardId)));
+}
+
+export async function findCardImage(
+  userId: string,
+  cardId: string,
+): Promise<{ content: Uint8Array; contentType: string; updatedAt: string } | null> {
+  const [linha] = await getDatabase()
+    .select({ content: cardImages.content, contentType: cardImages.contentType, updatedAt: cardImages.updatedAt })
+    .from(cardImages)
+    .where(and(eq(cardImages.userId, userId), eq(cardImages.cardId, cardId)))
+    .limit(1);
+
+  if (!linha) return null;
+  return { content: linha.content as Uint8Array, contentType: linha.contentType, updatedAt: linha.updatedAt };
 }

@@ -35,6 +35,7 @@ export function configOf(card: CardRecord): RewardConfig {
     pointsPerDollarMilli: card.pointsPerDollarMilli,
     cashbackBasisPoints: card.cashbackBasisPoints,
     pointsGoal: card.pointsGoal,
+    pointsOpeningMilli: card.pointsOpeningMilli,
     manualUsdRateMicros: card.manualUsdRateMicros,
   };
 }

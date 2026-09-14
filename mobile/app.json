@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 11,
+      "versionCode": 23,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon.png",
@@ -35,6 +35,13 @@
             "./assets/fonts/Figtree-SemiBold.ttf",
             "./assets/fonts/Figtree-Bold.ttf"
           ]
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#35b7aa",
+          "defaultChannel": "avisos"
         }
       ]
     ],

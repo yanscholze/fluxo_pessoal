@@ -7,7 +7,7 @@
 
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { users } from "./identity.ts";
 
@@ -96,6 +96,13 @@ export const cards = sqliteTable(
     closingDay: integer("closing_day").notNull(),
     dueDay: integer("due_day").notNull(),
     dueAdjustment: text("due_adjustment", { enum: ["previous", "next"] }).notNull().default("next"),
+    /**
+     * Ajuste do fechamento. `none` para emissor que fecha em dia fixo mesmo
+     * quando ele cai em fim de semana — o Nubank é um deles.
+     */
+    closingAdjustment: text("closing_adjustment", { enum: ["previous", "next", "none"] })
+      .notNull()
+      .default("previous"),
 
     // Recompensas
     rewardMode: text("reward_mode", { enum: ["none", "points", "cashback", "both"] }).notNull().default("none"),
@@ -103,6 +110,8 @@ export const cards = sqliteTable(
     pointsPerDollarMilli: integer("points_per_dollar_milli").notNull().default(0),
     cashbackBasisPoints: integer("cashback_basis_points").notNull().default(0),
     pointsGoal: integer("points_goal").notNull().default(0),
+    /** Pontos que o cartão já tinha antes do Fluxo, em milésimos. */
+    pointsOpeningMilli: integer("points_opening_milli").notNull().default(0),
     /** Cotação de contingência quando a PTAX não está disponível, em micros. */
     manualUsdRateMicros: integer("manual_usd_rate_micros").notNull().default(0),
 
@@ -142,4 +151,28 @@ export const trips = sqliteTable(
     uniqueIndex("trips_user_name_start_unq").on(table.userId, table.name, table.startDate),
     index("trips_user_period_idx").on(table.userId, table.startDate),
   ],
+);
+
+/**
+ * A foto do cartão, à parte da linha do cartão.
+ *
+ * Bytes numa tabela própria para que a listagem de cartões — carregada a cada
+ * abertura do painel e do aplicativo — continue pequena. `cards.image_url`
+ * guarda só o caminho de onde buscá-la.
+ */
+export const cardImages = sqliteTable(
+  "card_images",
+  {
+    cardId: text("card_id")
+      .primaryKey()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: blob("content").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (tabela) => [index("card_images_user_idx").on(tabela.userId)],
 );

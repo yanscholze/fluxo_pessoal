@@ -212,6 +212,23 @@ export type SubscriptionPatch = {
   readonly amount?: Cents | null;
   readonly scheduleDay?: number | null;
   readonly interval?: "monthly" | "yearly" | null;
+  /**
+   * Como o valor é calculado, e em que calendário o dia é contado.
+   *
+   * Eram imutáveis, e não deviam ser. Uma regra cadastrada como `per_business_day`
+   * multiplica o valor pelos dias úteis do mês: um seguro de R$ 91,50 virava
+   * R$ 1.921,50 na projeção, e a única saída era apagar e recriar. Recriar perde
+   * a classificação, o cartão e o histórico — e o erro de modo é o mais fácil de
+   * cometer no cadastro, porque os dois campos ficam lado a lado.
+   */
+  readonly amountMode?: "fixed" | "per_business_day" | null;
+  readonly scheduleMode?: "day_of_month" | "business_day_of_month" | null;
+  /** Texto que identifica esta cobrança na notificação do banco. */
+  readonly captureMatch?: string | null;
+  /** Texto que significa "isto é só o aviso de emissão". */
+  readonly captureIgnore?: string | null;
+  readonly clearCaptureMatch?: boolean;
+  readonly clearCaptureIgnore?: boolean;
   readonly cardId?: string | null;
   readonly accountId?: string | null;
   readonly categoryId?: string | null;
@@ -245,7 +262,7 @@ export async function updateSubscription(
     .from(recurrences)
     .where(and(eq(recurrences.userId, userId), eq(recurrences.id, recurrenceId)))
     .limit(1);
-  if (!existente) throw notFound("Assinatura", recurrenceId);
+  if (!existente) throw notFound("Recorrência", recurrenceId);
 
   if (patch.labelId) {
     const rotulos = await listLabels(userId);
@@ -267,8 +284,22 @@ export async function updateSubscription(
     if (!conta) throw notFound("Conta", patch.accountId);
   }
 
+  /*
+   * A validação do dia depende do calendário em que ele é contado: dia do mês
+   * vai até 31, dia útil não passa de 23. Fixar `day_of_month` aqui, como a
+   * versão anterior fazia, aceitaria "25º dia útil" — um dia que não existe em
+   * nenhum mês.
+   */
   if (patch.scheduleDay !== null && patch.scheduleDay !== undefined) {
-    assertValidSchedule({ scheduleMode: "day_of_month", scheduleDay: patch.scheduleDay });
+    const [atual] = await database
+      .select({ scheduleMode: recurrences.scheduleMode })
+      .from(recurrences)
+      .where(and(eq(recurrences.userId, userId), eq(recurrences.id, recurrenceId)))
+      .limit(1);
+    assertValidSchedule({
+      scheduleMode: patch.scheduleMode ?? atual?.scheduleMode ?? "day_of_month",
+      scheduleDay: patch.scheduleDay,
+    });
   }
 
   const campos: Record<string, unknown> = { updatedAt: now.toISOString() };
@@ -276,6 +307,12 @@ export async function updateSubscription(
   if (patch.amount !== null && patch.amount !== undefined) campos.amountCents = patch.amount;
   if (patch.scheduleDay !== null && patch.scheduleDay !== undefined) campos.scheduleDay = patch.scheduleDay;
   if (patch.interval) campos.interval = patch.interval;
+  if (patch.amountMode) campos.amountMode = patch.amountMode;
+  if (patch.scheduleMode) campos.scheduleMode = patch.scheduleMode;
+  if (patch.captureMatch) campos.captureMatch = patch.captureMatch.trim();
+  else if (patch.clearCaptureMatch) campos.captureMatch = null;
+  if (patch.captureIgnore) campos.captureIgnore = patch.captureIgnore.trim();
+  else if (patch.clearCaptureIgnore) campos.captureIgnore = null;
   if (patch.cardId) {
     campos.cardId = patch.cardId;
     campos.accountId = null;

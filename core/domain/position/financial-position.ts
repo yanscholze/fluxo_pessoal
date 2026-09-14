@@ -9,7 +9,7 @@
 import { type Cents, ZERO, clampToZero, sum } from "../../kernel/money.ts";
 import { type Competence, competenceOf } from "../../time/competence.ts";
 import { type LocalDate, firstDayOfMonth, lastDayOfMonth } from "../../time/local-date.ts";
-import { type Account, liquidAccounts } from "../account/types.ts";
+import { type Account, benefitAccounts, liquidAccounts, moneyAccounts } from "../account/types.ts";
 import {
   type CycleConfig,
   type CycleWindow,
@@ -17,7 +17,7 @@ import {
   activeCycleWindow,
   dueDateFor,
 } from "../card/invoice-cycle.ts";
-import { accountBalance, cardDebt, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
+import { accountBalance, cardDebtAsOf, invoiceTotals, overdueCompetences } from "../ledger/balance.ts";
 import type { LedgerEntry } from "../ledger/types.ts";
 
 /** O que um cartão precisa expor para participar da posição financeira. */
@@ -137,11 +137,45 @@ export type FreeToSpend = {
  * que cai antes do vencimento da fatura seja contado junto com ela, em vez de
  * um dos dois ficar de fora por acaso do calendário.
  */
-export function computeFreeToSpend(input: PositionInput): FreeToSpend {
+/**
+ * Qual bolso está sendo medido.
+ *
+ * `money` é conta corrente e espécie; `benefit`, o vale. A fatura do cartão só
+ * pesa no dinheiro — vale-alimentação não paga fatura —, e por isso o bolso não
+ * é um filtro cosmético: ele muda quais compromissos entram na conta.
+ */
+export type Purse = "money" | "benefit";
+
+/**
+ * Parcela da fatura que a política mandou ignorar.
+ *
+ * Existe porque a exclusão por categoria só alcançava previsto em conta, e o
+ * cartão entrava sempre pelo total. Quem marca "Empréstimo do Cartão" como fora
+ * do livre para gastar quer exatamente que aquelas parcelas não apertem a folga
+ * do mês — e era justamente onde a marcação não chegava.
+ */
+function excludedInvoiceCharges(
+  entries: readonly LedgerEntry[],
+  cardId: string,
+  competence: Competence,
+  isExcluded: (entry: LedgerEntry) => boolean,
+): number {
+  let total = 0;
+  for (const entry of entries) {
+    if (entry.party.kind !== "card" || entry.party.cardId !== cardId) continue;
+    if (entry.competence !== competence) continue;
+    if (entry.amount >= 0) continue;
+    if (!isExcluded(entry)) continue;
+    total -= entry.amount;
+  }
+  return total;
+}
+
+export function computeFreeToSpend(input: PositionInput, purse: Purse = "money"): FreeToSpend {
   const policy = input.policy ?? NO_EXCLUSIONS;
   const { start, end } = windowBounds(input.cards, input.today);
 
-  const liquid = liquidAccounts(input.accounts);
+  const liquid = purse === "benefit" ? benefitAccounts(input.accounts) : moneyAccounts(input.accounts);
   const liquidBalance = sum(
     liquid.map((account) => accountBalance(input.entries, account.id, input.today, account.openingBalance)),
   );
@@ -152,7 +186,9 @@ export function computeFreeToSpend(input: PositionInput): FreeToSpend {
     return categoryId !== null && policy.excludedCategoryIds.has(categoryId);
   };
 
-  const creditCards = input.cards.filter((card) => card.kind === "credit");
+  // O vale não paga fatura: medir o bolso do benefício contra o cartão faria a
+  // folga do vale desaparecer por causa de uma dívida que ele não quita.
+  const creditCards = purse === "money" ? input.cards.filter((card) => card.kind === "credit") : [];
 
   /**
    * Pagamentos de fatura esperados, cada um na data em que precisa sair.
@@ -166,9 +202,11 @@ export function computeFreeToSpend(input: PositionInput): FreeToSpend {
     const active = activeCompetence(card, input.today);
     for (const competence of [...overdueCompetences(input.entries, card.id, active), active]) {
       const { outstanding } = invoiceTotals(input.entries, card.id, competence);
-      if (outstanding <= 0) continue;
+      const ignorado = excludedInvoiceCharges(input.entries, card.id, competence, isExcluded);
+      const devido = Math.max(0, outstanding - ignorado);
+      if (devido <= 0) continue;
       const due = dueDateFor(card, competence);
-      invoiceDues.push({ on: due < input.today ? input.today : due, amount: outstanding });
+      invoiceDues.push({ on: due < input.today ? input.today : due, amount: devido as Cents });
     }
   }
 
@@ -218,9 +256,7 @@ export function computeFreeToSpend(input: PositionInput): FreeToSpend {
     }
   }
 
-  const openInvoices = sum(
-    creditCards.map((card) => openInvoiceTotal(input.entries, card, input.today)),
-  );
+  const openInvoices = sum(invoiceDues.map((pagamento) => pagamento.amount));
 
   return {
     liquidBalance,
@@ -249,11 +285,20 @@ export type FinancialPosition = {
   readonly netWorth: Cents;
   /** Obrigações já assumidas: faturas em aberto e previstos da janela. */
   readonly committed: Cents;
+  /** Folga do dinheiro: conta corrente e espécie, contra faturas e previstos. */
   readonly freeToSpend: FreeToSpend;
+  /**
+   * Folga do vale-alimentação, medida à parte.
+   *
+   * Vale não paga fatura nem aluguel; somá-lo ao dinheiro produzia uma folga
+   * que prometia comprar coisas que aquele saldo não compra.
+   */
+  readonly benefitFreeToSpend: FreeToSpend;
 };
 
 export function computeFinancialPosition(input: PositionInput): FinancialPosition {
-  const freeToSpend = computeFreeToSpend(input);
+  const freeToSpend = computeFreeToSpend(input, "money");
+  const benefitFreeToSpend = computeFreeToSpend(input, "benefit");
 
   /**
    * Só contas em reais entram no patrimônio.
@@ -272,8 +317,43 @@ export function computeFinancialPosition(input: PositionInput): FinancialPositio
     accountBalance(input.entries, account.id, input.today, account.openingBalance);
 
   const investments = sum(active.filter((account) => !liquidIds.has(account.id)).map(balanceOf));
-  const currentBalance = freeToSpend.liquidBalance;
-  const totalDebt = sum(input.cards.filter((card) => card.kind === "credit").map((card) => cardDebt(input.entries, card.id)));
+  // O saldo corrente continua somando os dois bolsos: é quanto o usuário tem.
+  // O que não se soma é a **folga**, que depende do que cada bolso paga.
+  const currentBalance = (freeToSpend.liquidBalance + benefitFreeToSpend.liquidBalance) as Cents;
+  /*
+   * O passivo do patrimônio é o que já foi cobrado, não o que ainda vai ser.
+   *
+   * `cardDebt` soma também o previsto, e num extrato com parcelamento longo
+   * isso é a diferença entre um patrimônio e uma ficção: as 67 parcelas
+   * futuras de um usuário real somavam R$ 13.319,68 e derrubavam o patrimônio
+   * para -R$ 14.531,00, num mês em que ele não devia nada além da fatura
+   * aberta de R$ 4.956,51.
+   *
+   * Parcela que ainda não virou cobrança é **compromisso** — e ela já aparece
+   * como tal em `committed` e em "parcelas a vencer". Contá-la aqui também
+   * seria contá-la duas vezes, uma delas no lugar errado.
+   *
+   * É o mesmo critério que a série histórica usa, o que faz o último ponto do
+   * gráfico finalmente falar a mesma língua dos anteriores.
+   */
+  /*
+   * O empréstimo de cartão sai do passivo, pela mesma razão que sai da folga.
+   *
+   * Ele é dívida com o emissor e valor a receber de quem pediu, na mesma
+   * quantia. Somar só a metade devida faria o patrimônio cair a cada favor —
+   * e o dono via o próprio patrimônio piorar por comprar para os outros.
+   */
+  const politica = input.policy ?? NO_EXCLUSIONS;
+  const excluida = (entry: LedgerEntry) => {
+    const categoryId = input.categoryByTransaction?.get(entry.transactionId) ?? null;
+    return categoryId !== null && politica.excludedCategoryIds.has(categoryId);
+  };
+
+  const totalDebt = sum(
+    input.cards
+      .filter((card) => card.kind === "credit")
+      .map((card) => cardDebtAsOf(input.entries, card.id, input.today, excluida)),
+  );
 
   return {
     asOf: input.today,
@@ -284,6 +364,7 @@ export function computeFinancialPosition(input: PositionInput): FinancialPositio
     netWorth: (currentBalance + investments - totalDebt) as Cents,
     committed: clampToZero((freeToSpend.openInvoices + freeToSpend.otherCommitments) as Cents),
     freeToSpend,
+    benefitFreeToSpend,
   };
 }
 

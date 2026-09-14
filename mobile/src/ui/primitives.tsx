@@ -117,7 +117,8 @@ export function Small({
   numberOfLines,
 }: {
   children: ReactNode;
-  tone?: "subtle" | "muted" | "positive" | "negative" | "caution";
+  /** `inverse` é para texto sobre o acento — uma pílula selecionada. */
+  tone?: "subtle" | "muted" | "positive" | "negative" | "caution" | "inverse";
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
 }) {
@@ -128,6 +129,7 @@ export function Small({
     positive: palette.positive,
     negative: palette.negative,
     caution: palette.caution,
+    inverse: palette.accentInk,
   }[tone];
 
   return (

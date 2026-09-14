@@ -3,11 +3,12 @@
 import { useState } from "react";
 
 import type { CardsView, CardView, InvoiceView } from "../../../server/services/cards.ts";
-import { Button } from "../../ui/controls.tsx";
+import { Button, LinkButton } from "../../ui/controls.tsx";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
 import { competenceShort, date, money, percent, relativeDay } from "../../ui/format.ts";
-import { CircleAlert, Pencil } from "../../ui/icons.tsx";
+import { CircleAlert, Pencil, Receipt } from "../../ui/icons.tsx";
 import { Badge, Divider, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
+import { CardPhoto } from "./card-photo.tsx";
 import { NewCard } from "./new-card.tsx";
 import { PayInvoice } from "./pay-invoice.tsx";
 
@@ -17,6 +18,10 @@ const SITUACAO: Record<InvoiceView["status"], { texto: string; tom: Tone }> = {
   atrasada: { texto: "Atrasada", tom: "negative" },
   futura: { texto: "Futura", tom: "neutral" },
 };
+
+function invoiceHref(cardId: string, competence: InvoiceView["competence"]): string {
+  return `/lancamentos?competencia=${competence}&cartao=${encodeURIComponent(cardId)}`;
+}
 
 export function CardPanel({
   card,
@@ -64,11 +69,13 @@ export function CardPanel({
           closingDay: card.closingDay,
           dueDay: card.dueDay,
           dueAdjustment: card.dueAdjustment,
+          closingAdjustment: card.closingAdjustment,
           rewardMode: card.rewardMode,
           pointsPerDollarMilli: card.pointsPerDollarMilli,
           cashbackBasisPoints: card.cashbackBasisPoints,
           pointsGoal: card.pointsGoal,
           manualUsdRateMicros: card.manualUsdRateMicros,
+          pointsOpeningMilli: card.pointsOpeningMilli,
         }}
       />
 
@@ -91,6 +98,8 @@ export function CardPanel({
         <Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditando(true)}>
           Editar
         </Button>
+
+        <CardPhoto cardId={card.id} hasPhoto={card.imageUrl !== null} />
 
         {card.kind === "credit" ? (
           <div className="text-right">
@@ -118,6 +127,14 @@ export function CardPanel({
                     <span className="tabular text-body-sm font-semibold text-negative">
                       {money(invoice.outstandingCents)}
                     </span>
+                    <LinkButton
+                      href={invoiceHref(card.id, invoice.competence)}
+                      variant="ghost"
+                      size="sm"
+                      icon={Receipt}
+                    >
+                      Lançamentos
+                    </LinkButton>
                     <Button variant="danger" size="sm" onClick={() => setPagando(invoice)}>
                       Pagar
                     </Button>
@@ -132,7 +149,13 @@ export function CardPanel({
               {fechadas.map((invoice) => (
                 <li key={invoice.competence} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-body-sm text-ink">Fatura fechada de {competenceShort(invoice.competence)} · vence em {date(invoice.dueDate)}</span>
-                  <span className="flex items-center gap-3"><span className="tabular text-body-sm font-semibold text-ink">{money(invoice.outstandingCents)}</span><Button variant="primary" size="sm" onClick={() => setPagando(invoice)}>Pagar</Button></span>
+                  <span className="flex items-center gap-2">
+                    <span className="tabular text-body-sm font-semibold text-ink">{money(invoice.outstandingCents)}</span>
+                    <LinkButton href={invoiceHref(card.id, invoice.competence)} variant="ghost" size="sm" icon={Receipt}>
+                      Lançamentos
+                    </LinkButton>
+                    <Button variant="primary" size="sm" onClick={() => setPagando(invoice)}>Pagar</Button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -167,11 +190,16 @@ export function CardPanel({
                     </dd>
                   </dl>
 
-                  {ativa.outstandingCents > 0 ? (
-                    <Button variant="primary" onClick={() => setPagando(ativa)}>
-                      Pagar fatura
-                    </Button>
-                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <LinkButton href={invoiceHref(card.id, ativa.competence)} icon={Receipt}>
+                      Ver lançamentos
+                    </LinkButton>
+                    {ativa.outstandingCents > 0 ? (
+                      <Button variant="primary" onClick={() => setPagando(ativa)}>
+                        Pagar fatura
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
@@ -197,6 +225,14 @@ export function CardPanel({
                       <p className="mt-0.5 text-caption text-ink-subtle">
                         {situacao.texto.toLowerCase()} · vence {date(invoice.dueDate)}
                       </p>
+                      <LinkButton
+                        href={invoiceHref(card.id, invoice.competence)}
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1 -ml-2"
+                      >
+                        Abrir lançamentos
+                      </LinkButton>
                     </li>
                   );
                 })}
@@ -249,6 +285,7 @@ export function CardPanel({
                     { key: "vencimento", header: "Vence", align: "right", hideBelow: "sm" },
                     { key: "total", header: "Total", align: "right" },
                     { key: "aberto", header: "Em aberto", align: "right" },
+                    { key: "acoes", header: "", align: "right" },
                   ]}
                 >
                   {card.invoices.map((invoice) => {
@@ -275,6 +312,15 @@ export function CardPanel({
                           >
                             {invoice.outstandingCents > 0 ? money(invoice.outstandingCents) : "—"}
                           </span>
+                        </Td>
+                        <Td align="right">
+                          <LinkButton
+                            href={invoiceHref(card.id, invoice.competence)}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            Abrir
+                          </LinkButton>
                         </Td>
                       </Tr>
                     );

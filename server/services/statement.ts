@@ -6,6 +6,7 @@
  * exibe.
  */
 
+import type { TransactionKind } from "../../core/domain/ledger/types.ts";
 import { competenceOf } from "../../core/time/competence.ts";
 import type { Competence } from "../../core/time/competence.ts";
 import { type LocalDate, firstDayOfMonth, lastDayOfMonth, todayIn } from "../../core/time/local-date.ts";
@@ -14,7 +15,7 @@ import { listTransactions } from "../repositories/ledger.ts";
 
 export type StatementRow = {
   readonly id: string;
-  readonly kind: "expense" | "income" | "transfer" | "invoice_payment";
+  readonly kind: TransactionKind;
   readonly state: "confirmed" | "planned" | "review";
   readonly description: string;
   readonly amountCents: number;
@@ -22,6 +23,16 @@ export type StatementRow = {
   readonly competence: Competence;
   readonly categoryName: string | null;
   readonly categoryColor: string | null;
+  /*
+   * Os identificadores acompanham os nomes porque a linha não é só leitura:
+   * quem corrige um lançamento precisa ver a categoria e a origem **atuais**
+   * já escolhidas no formulário. Mandar só o nome obrigaria a tela a procurar
+   * de volta pelo texto — e dois cartões podem se chamar quase igual.
+   */
+  readonly categoryId: string | null;
+  readonly originId: string;
+  readonly destinationId: string | null;
+  readonly notes: string | null;
   /** Onde o dinheiro saiu ou entrou, já com nome legível. */
   readonly originName: string;
   readonly originKind: "account" | "card";
@@ -31,6 +42,8 @@ export type StatementRow = {
 
 export type StatementFilters = {
   readonly competence?: Competence;
+  /** Quando presente, a competência passa a representar uma fatura. */
+  readonly cardId?: string;
   readonly limit?: number;
 };
 
@@ -55,11 +68,20 @@ export async function buildStatement(
   const reference = `${competence}-01` as LocalDate;
 
   const [transactions, accounts, cards, categories] = await Promise.all([
-    listTransactions(userId, {
-      from: firstDayOfMonth(reference),
-      to: lastDayOfMonth(reference),
-      limit: filters.limit ?? 300,
-    }),
+    listTransactions(
+      userId,
+      filters.cardId
+        ? {
+            cardId: filters.cardId,
+            competence,
+            limit: filters.limit ?? 300,
+          }
+        : {
+            from: firstDayOfMonth(reference),
+            to: lastDayOfMonth(reference),
+            limit: filters.limit ?? 300,
+          },
+    ),
     listAccounts(userId),
     listCards(userId),
     listCategories(userId),
@@ -92,6 +114,12 @@ export async function buildStatement(
       competence: transaction.competence,
       categoryName: category?.name ?? null,
       categoryColor: category?.color ?? null,
+      categoryId: transaction.categoryId,
+      originId:
+        transaction.origin.kind === "account" ? transaction.origin.accountId : transaction.origin.cardId,
+      destinationId:
+        transaction.destination?.kind === "account" ? transaction.destination.accountId : null,
+      notes: transaction.notes,
       originName: origin,
       originKind: transaction.origin.kind,
       destinationName: destination,

@@ -22,6 +22,43 @@ import { CircleAlert, X } from "./icons.tsx";
 const FOCALIZAVEIS =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Onde o cursor começa.
+ *
+ * **Não** é o primeiro elemento focalizável: esse é o "Cancelar" do cabeçalho,
+ * que vem antes do formulário no documento. Com o foco nele, digitar não
+ * escrevia em lugar nenhum e `Enter` fechava o diálogo — a pendência que a
+ * pessoa acabou de escrever simplesmente não existia, sem erro nem aviso.
+ *
+ * A ordem é: o campo que o React já focou por `autoFocus`, depois o primeiro
+ * campo **editável**, e só então o primeiro focalizável — que é o caso dos
+ * diálogos sem formulário nenhum, como a confirmação de apagar.
+ *
+ * `readonly` fica de fora, e não é detalhe. Vários diálogos daqui começam
+ * mostrando o número que o Fluxo calculou — o saldo de hoje, os pontos de
+ * hoje — num campo travado, e só o segundo campo é o que se digita. Cair no
+ * primeiro dava exatamente o mesmo sintoma de cair no botão: a pessoa digitava
+ * e nada aparecia.
+ */
+const CAMPOS =
+  'input:not([disabled]):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select:not([disabled]), textarea:not([disabled]):not([readonly])';
+
+/** Campos em que `Enter` significa "confirmar", e não "quebrar linha". */
+const CONFIRMA_COM_ENTER = new Set([
+  "text",
+  "search",
+  "url",
+  "tel",
+  "email",
+  "password",
+  "number",
+  "date",
+  "month",
+  "week",
+  "time",
+  "datetime-local",
+]);
+
 export function Dialog({
   open,
   onClose,
@@ -40,9 +77,26 @@ export function Dialog({
   width?: "sm" | "md" | "lg";
 }) {
   const painel = useRef<HTMLDivElement>(null);
+  const rodape = useRef<HTMLDivElement>(null);
   const anterior = useRef<HTMLElement | null>(null);
 
-  const fechar = useCallback(() => onClose(), [onClose]);
+  /*
+   * O `onClose` fica numa referência, e não na dependência do efeito.
+   *
+   * Quem abre o diálogo quase sempre passa uma seta escrita ali mesmo
+   * (`onClose={() => setAberto(false)}`), que é uma função nova a cada render.
+   * Com ela na dependência, o efeito de baixo desmontava e remontava a cada
+   * tecla digitada — e como ele dá foco ao primeiro campo ao montar, o cursor
+   * pulava para o começo do formulário a cada dígito.
+   *
+   * A referência mantém o comportamento (sempre chama a versão mais recente) e
+   * torna `fechar` estável, que é o que o efeito precisa.
+   */
+  const aoFechar = useRef(onClose);
+  useEffect(() => {
+    aoFechar.current = onClose;
+  }, [onClose]);
+  const fechar = useCallback(() => aoFechar.current(), []);
 
   useEffect(() => {
     if (!open) return;
@@ -51,15 +105,54 @@ export function Dialog({
     const rolagem = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // O primeiro foco vai para dentro do diálogo. Sem isto, quem navega por
-    // teclado continua no botão que abriu — atrás do véu, fora do alcance.
-    const primeiro = painel.current?.querySelector<HTMLElement>(FOCALIZAVEIS);
-    primeiro?.focus();
+    /*
+     * O primeiro foco vai para dentro do diálogo. Sem isto, quem navega por
+     * teclado continua no botão que abriu — atrás do véu, fora do alcance.
+     *
+     * Quem já está dentro fica onde está. É assim que o `autoFocus` de um campo
+     * continua valendo: o React o aplica antes deste efeito, e o React 19 não
+     * deixa o atributo no HTML para ser procurado depois. Sem esta guarda, o
+     * diálogo desfazia a escolha de quem sabia qual campo importa.
+     */
+    const jaDentro = painel.current?.contains(document.activeElement);
+    if (!jaDentro) {
+      const primeiro =
+        painel.current?.querySelector<HTMLElement>(CAMPOS) ??
+        painel.current?.querySelector<HTMLElement>(FOCALIZAVEIS);
+      primeiro?.focus();
+    }
 
     function aoTeclar(evento: KeyboardEvent) {
       if (evento.key === "Escape") {
         evento.preventDefault();
         fechar();
+        return;
+      }
+
+      /*
+       * `Enter` num campo confirma o diálogo.
+       *
+       * É o gesto que todo formulário tem e que este não tinha: sem um
+       * `<form>` por baixo, o navegador não submete nada, então digitar o
+       * título e apertar `Enter` não fazia rigorosamente nada — ou pior,
+       * disparava o botão que estivesse com o foco.
+       *
+       * A ação é o último botão habilitado do rodapé, que é onde a ação
+       * principal fica por convenção desta interface (o rodapé alinha à
+       * direita). Sem rodapé não há o que confirmar, e a tecla segue o seu
+       * caminho normal.
+       */
+      if (evento.key === "Enter") {
+        const alvo = evento.target;
+        if (!(alvo instanceof HTMLInputElement)) return;
+        if (!CONFIRMA_COM_ENTER.has(alvo.type)) return;
+
+        const acoes = [...(rodape.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? [])];
+        const principal = acoes[acoes.length - 1];
+        if (!principal) return;
+
+        evento.preventDefault();
+        principal.click();
         return;
       }
 
@@ -124,7 +217,11 @@ export function Dialog({
 
           {children}
 
-          {footer ? <div className="mt-6 flex justify-end gap-2">{footer}</div> : null}
+          {footer ? (
+            <div ref={rodape} className="mt-6 flex justify-end gap-2">
+              {footer}
+            </div>
+          ) : null}
         </div>
       </Panel>
     </div>
@@ -147,6 +244,7 @@ export function ConfirmDialog({
   consequence,
   confirmLabel = "Apagar",
   busy,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
@@ -155,6 +253,7 @@ export function ConfirmDialog({
   consequence: string;
   confirmLabel?: string;
   busy?: boolean;
+  error?: string | null;
 }) {
   return (
     <Dialog
@@ -172,6 +271,11 @@ export function ConfirmDialog({
         <CircleAlert size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-negative" aria-hidden />
         <span className="max-w-measure">{consequence}</span>
       </p>
+      {error ? (
+        <p role="alert" className="mt-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">
+          {error}
+        </p>
+      ) : null}
     </Dialog>
   );
 }

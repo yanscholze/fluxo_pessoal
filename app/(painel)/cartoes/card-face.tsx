@@ -26,6 +26,15 @@ export type FaceData = {
   readonly brand: string | null;
   readonly last4: string | null;
   readonly color: string;
+  /**
+   * Foto da face, quando o dono subiu uma.
+   *
+   * Fica **atrás** do conteúdo, não no lugar dele: nome, final e fatura
+   * continuam legíveis porque o véu de contraste que já existia passa por cima
+   * da imagem também. Uma foto que engolisse o texto tornaria o cartão bonito e
+   * inútil.
+   */
+  readonly imageUrl?: string | null;
   readonly kind: string;
   readonly isPrimary: boolean;
   /** Datas da fatura ativa, já resolvidas para dia útil. */
@@ -142,6 +151,7 @@ export function CardFace({
   if (!onSelect) {
     return (
       <div id={id} className={forma} style={{ backgroundColor: data.color }}>
+        <Foto url={data.imageUrl} />
         {conteudo}
       </div>
     );
@@ -157,7 +167,31 @@ export function CardFace({
       className={join(forma, "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4")}
       style={{ backgroundColor: data.color }}
     >
+      <Foto url={data.imageUrl} />
       {conteudo}
     </button>
+  );
+}
+
+/**
+ * A foto da face.
+ *
+ * `object-cover` porque a proporção do cartão é fixa e a foto do usuário não é:
+ * deformar para caber deixa o logotipo torto, e deixar barra branca sobrando
+ * quebra a ilusão de cartão.
+ */
+function Foto({ url }: { url?: string | null }) {
+  if (!url) return null;
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element -- a foto vem da nossa
+       própria rota, já dimensionada no cliente antes de subir; `next/image`
+       traria um otimizador que não tem o que otimizar e um custo por imagem. */
+    <img
+      src={url}
+      alt=""
+      aria-hidden
+      className="pointer-events-none absolute inset-0 size-full rounded-[inherit] object-cover"
+    />
   );
 }

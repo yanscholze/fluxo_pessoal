@@ -109,6 +109,12 @@ export function TarsOverview({
               <p className={styles.metricHint}>Nas contas de uso corrente em reais</p>
               <dl className={styles.financialRows}>
                 <div><dt>Comprometido até {dateShort(freeToSpend.horizonEnd)}</dt><dd>{money(position.committedCents)}</dd></div>
+                {dashboard.benefitFreeToSpend ? (
+                  <div>
+                    <dt>Livre no vale-alimentação</dt>
+                    <dd>{money(dashboard.benefitFreeToSpend.amountCents)}</dd>
+                  </div>
+                ) : null}
                 <div><dt>Entradas do mês <ArrowDownRight aria-hidden="true" size={13} /></dt><dd className={styles.positive}>{money(monthFlow.incomeCents)}</dd></div>
                 <div><dt>Saídas do mês <ArrowUpRight aria-hidden="true" size={13} /></dt><dd>{money(monthFlow.expenseCents)}</dd></div>
               </dl>

@@ -24,9 +24,11 @@ import { Label, Meter } from "../primitives.tsx";
 
 export function FreeToSpend({
   data,
+  benefit,
   today,
 }: {
   data: Dashboard["freeToSpend"];
+  benefit: Dashboard["benefitFreeToSpend"];
   today: Dashboard["today"];
 }) {
   const negativo = data.amountCents < 0;
@@ -60,6 +62,20 @@ export function FreeToSpend({
           <p className={`tabular mt-2 text-display ${negativo ? "text-negative" : "text-ink"}`}>
             {money(data.amountCents)}
           </p>
+
+          {/*
+            O vale vem ao lado, nunca somado.
+            Vale-alimentação compra comida e nada mais: juntá-lo ao número
+            principal prometeria pagar aluguel e fatura com um saldo que não
+            paga nenhum dos dois. Separado, cada um responde pelo que cobre.
+          */}
+          {benefit ? (
+            <p className="mt-2 flex items-baseline gap-2 text-body-sm text-ink-muted">
+              <span>e mais</span>
+              <span className="tabular font-medium text-ink">{money(benefit.amountCents)}</span>
+              <span>em vale-alimentação, que só compra comida</span>
+            </p>
+          ) : null}
 
           <p className="mt-3 flex items-start gap-2 text-body-sm text-ink-muted">
             {negativo ? (

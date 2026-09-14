@@ -16,6 +16,8 @@
 
 import { lastDay } from "../../../core/time/competence.ts";
 import { type AccountView, buildAccountsView } from "../../../server/services/accounts.ts";
+import { BalanceCheck } from "./balance-check.tsx";
+import { EditAccount } from "./edit-account.tsx";
 import { currentUser } from "../../auth-context.ts";
 import { ChartFrame, LineChart, chartColor } from "../../ui/charts.tsx";
 import {
@@ -249,6 +251,7 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
           { key: "saidas", header: "Saídas", align: "right", hideBelow: "lg" },
           { key: "previsto", header: "Previsto no fim do mês", align: "right", hideBelow: "sm" },
           { key: "saldo", header: "Saldo hoje", align: "right" },
+          { key: "acoes", header: "Ações", align: "right", width: "1%" },
         ]}
       >
         {accounts.map((conta) => (
@@ -280,10 +283,36 @@ function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
                 tone={conta.balanceCents < 0 ? "negative" : "neutral"}
               />
             </Td>
+            <Td align="right">
+              <Acoes conta={conta} />
+            </Td>
           </Tr>
         ))}
       </DataTable>
     </section>
+  );
+}
+
+/**
+ * Acertar saldo e editar, em coluna própria.
+ *
+ * Moravam dentro da célula do saldo, encostados no número — que é onde a
+ * pergunta "isto bate com o meu banco?" nasce. Só que três coisas numa célula
+ * de tabela não cabem: a célula recebe a largura do número e o conteúdo
+ * transborda **para a esquerda**, por cima da coluna do previsto. Era o
+ * "R$ 3.815,R$ 3.215,23" que aparecia na tela.
+ *
+ * Em coluna própria, os controles continuam na mesma linha e logo ao lado do
+ * saldo — a vizinhança que importava se manteve — e cada coluna volta a ter a
+ * largura do que ela mostra. `width: 1%` com `whitespace-nowrap` é o jeito de
+ * pedir à tabela exatamente a largura do conteúdo, e nem um pixel a mais.
+ */
+function Acoes({ conta }: { conta: AccountView }) {
+  return (
+    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+      <BalanceCheck accountId={conta.id} accountName={conta.name} balanceCents={conta.balanceCents} />
+      <EditAccount accountId={conta.id} name={conta.name} color={conta.color} />
+    </span>
   );
 }
 
@@ -311,6 +340,7 @@ function Reserva({ accounts }: { accounts: readonly AccountView[] }) {
           { key: "rendimento", header: "Rendimento estimado", align: "right", hideBelow: "md" },
           { key: "meta", header: "Meta", width: "34%", hideBelow: "sm" },
           { key: "saldo", header: "Saldo hoje", align: "right" },
+          { key: "acoes", header: "Ações", align: "right", width: "1%" },
         ]}
       >
         {accounts.map((conta) => (
@@ -353,6 +383,15 @@ function Reserva({ accounts }: { accounts: readonly AccountView[] }) {
                 tone={conta.balanceCents < 0 ? "negative" : "neutral"}
               />
             </Td>
+            {/*
+              Reserva também se corrige.
+              O acerto e a edição existiam só no uso corrente, e não havia razão
+              para isso: o saldo de uma reserva também sai do lugar, e o nome
+              também se digita errado. Quem guardava dinheiro ficava sem conserto.
+            */}
+            <Td align="right">
+              <Acoes conta={conta} />
+            </Td>
           </Tr>
         ))}
       </DataTable>
@@ -366,8 +405,17 @@ function Identidade({ conta }: { conta: AccountView }) {
 
   return (
     <span className="flex min-w-0 items-center gap-2.5">
+      {/*
+        O anel é o que deixa a cor livre ser livre.
+
+        A bolinha nua some quando a cor escolhida é parecida com a superfície —
+        um cinza claro no tema claro, um azul quase preto no escuro. O contorno
+        de 10% de tinta desenha a borda em qualquer um dos dois casos, e é o que
+        permite oferecer o seletor do sistema sem que a conta possa desaparecer
+        da lista.
+      */}
       <span
-        className="size-2.5 shrink-0 rounded-full"
+        className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink/15"
         style={{ backgroundColor: conta.color }}
         aria-hidden
       />

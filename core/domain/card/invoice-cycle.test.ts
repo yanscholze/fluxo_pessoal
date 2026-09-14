@@ -150,7 +150,36 @@ describe("ciclo de fatura", () => {
     assert.equal(daysUntilClosing(fecha13, localDate("2026-08-20")), 22);
   });
 
-  describe("fechamento que recua para o mês anterior", () => {
+  describe("emissor que não recua o fechamento", () => {
+  /*
+   * O Nubank fecha dia 13 mesmo quando ele cai em sábado ou domingo. Com o
+   * recuo padrão para o dia útil anterior, tudo que foi comprado no fim de
+   * semana anterior ao fechamento migrava para a fatura seguinte, e a fatura do
+   * app deixava de bater com a do banco — num extrato real de nove faturas, 91
+   * das 238 linhas caíam na fatura errada.
+   */
+  const semRecuo = { closingDay: 12, dueDay: 20, dueAdjustment: "next", closingAdjustment: "none" } as const;
+  const comRecuo = { closingDay: 12, dueDay: 20, dueAdjustment: "next" } as const;
+
+  it("mantém o fechamento no dia escolhido quando ele cai no fim de semana", () => {
+    // 12/07/2026 é domingo.
+    assert.equal(closingDateFor(semRecuo, competence("2026-07")), localDate("2026-07-12"));
+    assert.equal(closingDateFor(comRecuo, competence("2026-07")), localDate("2026-07-10"));
+  });
+
+  it("a compra da véspera do fechamento fica na fatura do mês", () => {
+    assert.equal(competenceForPurchase(semRecuo, localDate("2026-07-11")), competence("2026-07"));
+    // Com o recuo, a mesma compra escorrega para agosto.
+    assert.equal(competenceForPurchase(comRecuo, localDate("2026-07-11")), competence("2026-08"));
+  });
+
+  it("ausente vale o recuo, para não mudar o cartão de quem já existe", () => {
+    assert.equal(closingDateFor(comRecuo, competence("2026-07")), closingDateFor({ ...comRecuo }, competence("2026-07")));
+    assert.notEqual(closingDateFor(comRecuo, competence("2026-07")), closingDateFor(semRecuo, competence("2026-07")));
+  });
+});
+
+describe("fechamento que recua para o mês anterior", () => {
     // Fechamento no dia 1: sempre que 1º cai em fim de semana ou feriado, o
     // fechamento efetivo cai no mês anterior.
     const fecha1: CycleConfig = { closingDay: 1, dueDay: 10, dueAdjustment: "next" };

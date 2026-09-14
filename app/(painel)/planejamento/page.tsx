@@ -1,8 +1,8 @@
 import { Page, PageHeader } from "../../ui/page-frame.tsx";
 import { SectionTabs } from "../../ui/section-tabs.tsx";
-import RecorrenciasContent from "./content.tsx";
-import ParcelamentosContent from "../parcelamentos/content.tsx";
 import AssinaturasContent from "../assinaturas/content.tsx";
+import ParcelamentosContent from "../parcelamentos/content.tsx";
+import RecorrenciasContent from "./content.tsx";
 
 export const dynamic = "force-dynamic";
 

@@ -62,9 +62,22 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
     const termo = normalizar(busca);
 
     const visiveis = transactions.filter((item) => {
+      /*
+       * "Saídas" e "Entradas" mostram o que **aconteceu**, não o que está
+       * projetado.
+       *
+       * A versão anterior filtrava só pela natureza, e com 67 parcelas
+       * projetadas até 2027 o extrato abria mostrando compras que ainda nem
+       * foram cobradas — todas marcadas "previsto", todas em datas à frente,
+       * empurrando o gasto de verdade para fora da tela. Quem abre o extrato
+       * quer conferir o que saiu; para o que vem, existe a aba própria.
+       *
+       * Por isso "Previsto" é uma aba irmã e não um acréscimo: as três se
+       * excluem, e "Tudo" continua sendo o lugar de ver os dois juntos.
+       */
       if (filtro === "previsto" && item.state !== "planned") return false;
-      if (filtro === "entradas" && item.kind !== "income") return false;
-      if (filtro === "saidas" && item.kind !== "expense") return false;
+      if (filtro === "entradas" && (item.kind !== "income" || item.state === "planned")) return false;
+      if (filtro === "saidas" && (item.kind !== "expense" || item.state === "planned")) return false;
       if (!termo) return true;
 
       const categoria = item.categoryId ? (nomeDaCategoria.get(item.categoryId) ?? "") : "";
@@ -97,7 +110,7 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
   }, [transactions, filtro, busca, nomeDaCategoria]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, gap: space.md }}>
         <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
           <Texto style={[type.title, { color: palette.ink }]}>Extrato</Texto>
@@ -131,8 +144,12 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
             return (
               <Pressable
                 key={opcao.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: ativo }}
                 onPress={() => setFiltro(opcao.id)}
-                style={{
+                // O recuo no toque é o que dá peso ao filtro: ele reordena a
+                // tela inteira, e sem resposta tátil o dedo não sabe se pegou.
+                style={({ pressed }) => ({
                   flex: 1,
                   height: 34,
                   alignItems: "center",
@@ -141,7 +158,9 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
                   backgroundColor: ativo ? palette.accentWash : palette.surfaceSunken,
                   borderWidth: 1,
                   borderColor: ativo ? palette.accentEdge : palette.line,
-                }}
+                  transform: [{ scale: pressed ? 0.96 : 1 }],
+                  opacity: pressed ? 0.85 : 1,
+                })}
               >
                 <Texto
                   style={[
@@ -259,6 +278,15 @@ function Linha({
   return (
     <Pressable
       onPress={onPress}
+      /*
+       * A ondulação nativa, além do fundo que muda.
+       *
+       * Numa lista longa uma animação por linha custaria caro — um valor
+       * compartilhado por item, num extrato de trezentas linhas. O `ripple` do
+       * Android roda no sistema, não no JavaScript: custa zero e é a resposta
+       * tátil que a mão espera de uma lista.
+       */
+      android_ripple={{ color: palette.accentWash }}
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",

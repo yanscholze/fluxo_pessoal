@@ -30,6 +30,12 @@ import classificacoes from "./migrations/0014_subscription-labels.sql?raw";
 import cobrancaDeAssinatura from "./migrations/0015_subscription-charges.sql?raw";
 import valorRecebido from "./migrations/0016_received-amount.sql?raw";
 import categoriaDeTempo from "./migrations/0017_time-activity-and-documents.sql?raw";
+import ajusteDeFechamento from "./migrations/0018_closing-adjustment.sql?raw";
+import nomeLivre from "./migrations/0019_nome-livre-apos-arquivar.sql?raw";
+import fotoDoCartao from "./migrations/0020_foto-do-cartao.sql?raw";
+import saldoAnteriorDePontos from "./migrations/0021_saldo-anterior-de-pontos.sql?raw";
+import casadorDeCaptura from "./migrations/0022_casador-de-captura.sql?raw";
+import categoriasDeEmprestimoDoCartao from "./migrations/0023_categorias-emprestimo-cartao.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -111,6 +117,12 @@ const TODO_O_SQL: readonly string[] = [
   cobrancaDeAssinatura,
   valorRecebido,
   categoriaDeTempo,
+  ajusteDeFechamento,
+  nomeLivre,
+  fotoDoCartao,
+  saldoAnteriorDePontos,
+  casadorDeCaptura,
+  categoriasDeEmprestimoDoCartao,
 ];
 
 /**
@@ -197,6 +209,12 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 15, name: "cobranca-de-assinatura-fora-da-fila", run: fromSql(cobrancaDeAssinatura) },
   { id: 16, name: "valor-efetivamente-recebido", run: fromSql(valorRecebido) },
   { id: 17, name: "categoria-de-tempo-e-documentos", run: fromSql(categoriaDeTempo) },
+  { id: 18, name: "ajuste-de-fechamento", run: fromSql(ajusteDeFechamento) },
+  { id: 19, name: "nome-livre-apos-arquivar", run: fromSql(nomeLivre) },
+  { id: 20, name: "foto-do-cartao", run: fromSql(fotoDoCartao) },
+  { id: 21, name: "saldo-anterior-de-pontos", run: fromSql(saldoAnteriorDePontos) },
+  { id: 22, name: "casador-de-captura", run: fromSql(casadorDeCaptura) },
+  { id: 23, name: "categorias-de-emprestimo-do-cartao", run: fromSql(categoriasDeEmprestimoDoCartao) },
 ];
 
 let applied: Promise<void> | null = null;

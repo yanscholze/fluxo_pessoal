@@ -56,6 +56,15 @@ export type Account = {
 /** Contas cujo dinheiro está disponível para gastar no dia a dia. */
 const SPENDABLE_KINDS: readonly AccountKind[] = ["checking", "cash", "benefit"];
 
+/**
+ * Dinheiro de verdade: o que paga qualquer coisa.
+ *
+ * Benefício fica de fora porque não é fungível. Vale-alimentação compra comida
+ * e nada mais — somá-lo ao saldo da conta produz um "livre para gastar" que
+ * promete um dinheiro que não paga aluguel nem fatura.
+ */
+const MONEY_KINDS: readonly AccountKind[] = ["checking", "cash"];
+
 export function isSpendable(account: Account): boolean {
   return SPENDABLE_KINDS.includes(account.kind);
 }
@@ -78,6 +87,21 @@ export function liquidAccounts(accounts: readonly Account[]): Account[] {
   return accounts.filter(
     (account) => isActive(account) && account.includeInTotals && account.currency === "BRL" && isSpendable(account),
   );
+}
+
+/**
+ * Contas de dinheiro e contas de benefício, separadas.
+ *
+ * São bolsos com regras próprias: o vale tem competência e destino próprios, e
+ * o saldo de um não cobre o compromisso do outro. Misturá-los num total só era
+ * o que fazia o "livre para gastar" prometer mais do que existe.
+ */
+export function moneyAccounts(accounts: readonly Account[]): Account[] {
+  return liquidAccounts(accounts).filter((account) => MONEY_KINDS.includes(account.kind));
+}
+
+export function benefitAccounts(accounts: readonly Account[]): Account[] {
+  return liquidAccounts(accounts).filter((account) => account.kind === "benefit");
 }
 
 /** Contas que somam no patrimônio, incluindo reservas e investimentos. */

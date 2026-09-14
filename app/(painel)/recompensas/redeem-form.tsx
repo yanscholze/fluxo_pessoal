@@ -60,8 +60,16 @@ export function RedeemForm({
         }),
       });
       if (!resposta.ok) {
-        const corpo = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
-        setErro(corpo.error?.message ?? "Não foi possível registrar o resgate.");
+        const corpo = (await resposta.json().catch(() => ({}))) as {
+          error?: { message?: string; issues?: readonly { path?: string; message?: string }[] };
+        };
+        const geral = corpo.error?.message ?? null;
+        const detalhes = (corpo.error?.issues ?? [])
+          .map((problema) => problema.message)
+          .filter((mensagem): mensagem is string => Boolean(mensagem) && mensagem !== geral);
+        setErro(
+          [geral, ...detalhes].filter(Boolean).join(" · ") || "Não foi possível registrar o resgate.",
+        );
         return;
       }
       setAberto(false);
@@ -111,8 +119,7 @@ export function RedeemForm({
               name="amount"
               required
               disabled={enviando}
-              inputMode={tipo === "points" ? "numeric" : "decimal"}
-              pattern={tipo === "points" ? "[0-9]+" : undefined}
+              inputMode="decimal"
               placeholder={tipo === "points" ? "0" : "0,00"}
               className="tabular"
             />

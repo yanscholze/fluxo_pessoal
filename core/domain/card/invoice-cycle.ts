@@ -11,6 +11,7 @@
 import { validationError } from "../../kernel/errors.ts";
 import {
   type BusinessDayAdjustment,
+  type OptionalBusinessDayAdjustment,
   adjustToBusinessDay,
 } from "../../time/brazilian-calendar.ts";
 import {
@@ -41,6 +42,16 @@ export type CycleConfig = {
   readonly dueDay: number;
   /** Como resolver um vencimento que cai em dia não útil. */
   readonly dueAdjustment: BusinessDayAdjustment;
+  /**
+   * Como resolver um fechamento que cai em dia não útil.
+   *
+   * Ausente vale `"previous"`, que é o comportamento histórico. Emissor que
+   * fecha em dia fixo — o Nubank fecha dia 13 mesmo aos domingos — precisa de
+   * `"none"`: sem isso, tudo que foi comprado no fim de semana anterior ao
+   * fechamento migra para a fatura seguinte e o total do app deixa de bater
+   * com o do banco.
+   */
+  readonly closingAdjustment?: OptionalBusinessDayAdjustment;
 };
 
 /** Janela de datas cobertas por uma competência. Início e fim inclusivos. */
@@ -81,7 +92,7 @@ function dayInMonth(competence: Competence, nominalDay: number): LocalDate {
  * seguinte.
  */
 export function closingDateFor(config: CycleConfig, competence: Competence): LocalDate {
-  return adjustToBusinessDay(dayInMonth(competence, config.closingDay), "previous");
+  return adjustToBusinessDay(dayInMonth(competence, config.closingDay), config.closingAdjustment ?? "previous");
 }
 
 /**

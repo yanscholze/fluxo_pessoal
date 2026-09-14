@@ -20,6 +20,7 @@ function config(overrides: Partial<RewardConfig> = {}): RewardConfig {
     pointsPerDollarMilli: 1500,
     cashbackBasisPoints: 150,
     pointsGoal: 50_000,
+    pointsOpeningMilli: 0,
     manualUsdRateMicros: 5_000_000,
     ...overrides,
   };

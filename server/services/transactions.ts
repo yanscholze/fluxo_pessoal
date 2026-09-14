@@ -34,12 +34,13 @@ import {
   findTransaction,
   loadLedger,
   saveTransactionBatch,
+  reclassifyTransaction,
   softDeleteTransaction,
 } from "../repositories/ledger.ts";
 
 export type RecordTransactionInput = {
   readonly id?: string | null;
-  readonly kind: "expense" | "income" | "transfer";
+  readonly kind: "expense" | "income" | "transfer" | "refund";
   readonly description: string;
   readonly amount: Cents;
   readonly occurredOn: LocalDate;
@@ -126,6 +127,112 @@ export async function recordTransaction(
     { transaction, options: { deviceId: input.deviceId ?? null, reward } },
   ]);
   return { ids: [transaction.id], installmentPlanId: null, competence };
+}
+
+/**
+ * Cria um parcelamento a partir de parcelas que já aconteceram.
+ *
+ * Diferente de `recordInstallmentPurchase`, que **gera** o cronograma a partir
+ * da compra: aqui o cronograma já existe, veio da fatura, e gerar outro por
+ * cima produziria números que não batem com o extrato do banco.
+ *
+ * A diferença é concreta. Uma compra em doze vezes cujo extrato começa na
+ * segunda parcela — porque a primeira é anterior ao período exportado — tem
+ * onze parcelas conhecidas e uma que nunca existiu para o Fluxo. O gerador
+ * criaria doze iguais, com datas próprias, e a fatura de cada mês deixaria de
+ * fechar com a do emissor. Aqui cada parcela entra com o valor, a data e a
+ * competência que o banco cobrou.
+ *
+ * Sem isto, a importação por conciliação gravava cada parcela como uma despesa
+ * solta: a tela de parcelamentos nascia vazia e não havia como saber quanto
+ * faltava de nada.
+ */
+export type ImportedInstallmentPlan = {
+  readonly cardId: string;
+  readonly description: string;
+  readonly categoryId?: string | null;
+  /** Soma das parcelas conhecidas, não o valor original da compra. */
+  readonly totalAmount: Cents;
+  readonly installmentCount: number;
+  readonly purchaseDate: LocalDate;
+  readonly parcels: readonly {
+    readonly number: number;
+    readonly amount: Cents;
+    readonly occurredOn: LocalDate;
+    readonly competence: Competence;
+    readonly state: TransactionState;
+  }[];
+};
+
+export async function importInstallmentPlan(
+  userId: string,
+  input: ImportedInstallmentPlan,
+  now: Date = new Date(),
+): Promise<{ planId: string; ids: string[] }> {
+  const cardRecord = await findCard(userId, input.cardId);
+  if (!cardRecord) throw notFound("Cartão", input.cardId);
+  if (cardRecord.kind !== "credit") throw conflict("Parcelamento exige um cartão de crédito");
+  if (input.parcels.length === 0) {
+    throw validationError("Informe as parcelas", [{ path: "parcels", message: "A lista está vazia" }]);
+  }
+
+  const ordenadas = [...input.parcels].sort((esquerda, direita) => esquerda.number - direita.number);
+  const planId = newId(now.getTime());
+  const database = getDatabase();
+
+  await database.insert(installmentPlans).values({
+    id: planId,
+    userId,
+    cardId: input.cardId,
+    categoryId: input.categoryId ?? null,
+    description: input.description,
+    totalAmountCents: input.totalAmount as number,
+    installmentCount: input.installmentCount,
+    purchaseDate: input.purchaseDate as string,
+    firstCompetence: ordenadas[0].competence as string,
+    monthlyInterestBasisPoints: 0,
+    label: null,
+    status: "active",
+  });
+
+  await ensureInvoices({
+    userId,
+    cardId: input.cardId,
+    cycle: cardRecord,
+    competences: ordenadas.map((parcela) => parcela.competence),
+  });
+
+  const recompensas = await Promise.all(
+    ordenadas.map((parcela) => earningForPurchase(cardRecord, parcela.amount, now)),
+  );
+
+  const transactions = ordenadas.map((parcela, indice) => ({
+    transaction: {
+      id: newId(now.getTime()),
+      userId,
+      kind: "expense",
+      state: parcela.state,
+      source: "installment",
+      description: input.description,
+      categoryId: input.categoryId ?? null,
+      amount: parcela.amount,
+      currency: "BRL",
+      occurredOn: parcela.occurredOn,
+      origin: cardParty(input.cardId),
+      destination: null,
+      competence: parcela.competence,
+      tripId: null,
+      installmentPlanId: planId,
+      installmentNumber: parcela.number,
+      recurrenceId: null,
+      notes: null,
+    } satisfies Transaction,
+    options: { deviceId: null, reward: recompensas[indice] },
+  }));
+
+  await saveTransactionBatch(transactions);
+
+  return { planId, ids: transactions.map((entry) => entry.transaction.id) };
 }
 
 async function recordInstallmentPurchase(
@@ -223,8 +330,12 @@ async function resolveOrigin(userId: string, input: RecordTransactionInput): Pro
   }
 
   if (input.cardId) {
-    if (input.kind !== "expense") {
-      throw conflict("Só despesa pode ser lançada no cartão de crédito");
+    // Estorno acompanha a despesa: a loja devolve na mesma fatura em que
+    // cobrou, e a dívida cai sem que entre dinheiro em conta nenhuma. Receita e
+    // transferência continuam de fora — cartão não recebe salário nem serve de
+    // origem de transferência.
+    if (input.kind !== "expense" && input.kind !== "refund") {
+      throw conflict("No cartão de crédito só entram despesa e estorno");
     }
     const card = await findCard(userId, input.cardId);
     if (!card) throw notFound("Cartão", input.cardId);
@@ -392,6 +503,39 @@ export async function payInvoice(
 // ---------------------------------------------------------------------------
 // Exclusão
 // ---------------------------------------------------------------------------
+
+/**
+ * Muda como um lançamento é **classificado**, e nada além disso.
+ *
+ * Existe para a parcela de um parcelamento, que não pode passar pelo caminho
+ * normal de edição sem se soltar do plano. Categoria e observação não afetam a
+ * dívida — dizem se aquilo é consumo do mês ou empréstimo que alguém devolve,
+ * e é justamente essa distinção que decide se a compra pesa no livre para
+ * gastar.
+ */
+export async function reclassify(
+  userId: string,
+  transactionId: string,
+  patch: {
+    categoryId?: string | null;
+    description?: string;
+    notes?: string | null;
+    setCategory?: boolean;
+    setNotes?: boolean;
+  },
+): Promise<boolean> {
+  const existing = await findTransaction(userId, transactionId);
+  if (!existing) return false;
+  if (patch.setCategory && patch.categoryId) {
+    // Reaproveita a mesma checagem do caminho normal: categoria de saída para
+    // despesa, de entrada para receita. Duas validações divergiriam.
+    await assertCategory(userId, {
+      kind: existing.kind,
+      categoryId: patch.categoryId,
+    } as RecordTransactionInput);
+  }
+  return reclassifyTransaction(userId, transactionId, patch);
+}
 
 export async function removeTransaction(
   userId: string,

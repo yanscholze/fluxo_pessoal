@@ -62,6 +62,13 @@ npx wrangler secret put OPENAI_API_KEY --config dist/server/wrangler.json
 npx wrangler secret put GITHUB_TOKEN --config dist/server/wrangler.json
 ```
 
+Quem prefere não abrir terminal faz o mesmo pelo painel da Cloudflare:
+**Workers & Pages → fluxo-pessoal → Settings → Variables and Secrets → Add**,
+tipo *Secret*, nome exatamente `GITHUB_TOKEN` (ou `OPENAI_API_KEY`), e o valor
+colado. O segredo só vale para as execuções que vierem **depois**: se o Worker
+já estava no ar, reimplante — ou use *Deployments → Rollback* para a mesma
+versão, que reinicia com o segredo já visível.
+
 | Segredo | Liga | Permissão mínima |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | Assistente e leitura de comprovante | — |

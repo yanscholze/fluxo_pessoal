@@ -38,6 +38,8 @@ export type CardRecord = PositionCard & {
   readonly pointsPerDollarMilli: number;
   readonly cashbackBasisPoints: number;
   readonly pointsGoal: number;
+  /** Pontos anteriores ao Fluxo, em milésimos. */
+  readonly pointsOpeningMilli: number;
   readonly manualUsdRateMicros: number;
   readonly color: string;
   readonly imageUrl: string | null;
@@ -111,6 +113,7 @@ export async function listCards(userId: string): Promise<CardRecord[]> {
     pointsPerDollarMilli: row.pointsPerDollarMilli,
     cashbackBasisPoints: row.cashbackBasisPoints,
     pointsGoal: row.pointsGoal,
+    pointsOpeningMilli: row.pointsOpeningMilli,
     manualUsdRateMicros: row.manualUsdRateMicros,
     color: row.color,
     imageUrl: row.imageUrl,
@@ -139,6 +142,7 @@ export async function findCard(userId: string, cardId: string): Promise<CardReco
     pointsPerDollarMilli: row.pointsPerDollarMilli,
     cashbackBasisPoints: row.cashbackBasisPoints,
     pointsGoal: row.pointsGoal,
+    pointsOpeningMilli: row.pointsOpeningMilli,
     manualUsdRateMicros: row.manualUsdRateMicros,
     color: row.color,
     imageUrl: row.imageUrl,

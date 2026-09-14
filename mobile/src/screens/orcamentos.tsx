@@ -53,7 +53,7 @@ export function OrcamentosScreen() {
   const totais = dados?.totals;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
         refreshControl={

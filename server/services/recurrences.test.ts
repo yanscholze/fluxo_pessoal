@@ -137,6 +137,56 @@ describe("recorrência", () => {
     );
   });
 
+  it("mostra, edita e exclui uma recorrência de entrada", async () => {
+    const { createCategory } = await import("./catalog.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const { createRecurrence, removeRecurrence } = await import("./recurrences.ts");
+    const { updateSubscription } = await import("./subscriptions.ts");
+    const alvo = await ambiente();
+    const categoriaDeEntrada = await createCategory(alvo.userId, {
+      name: "Recebimentos recorrentes",
+      kind: "income",
+    });
+
+    const regra = await createRecurrence(
+      alvo.userId,
+      {
+        kind: "income",
+        description: "Reembolso mensal",
+        amount: cents(25_000),
+        scheduleDay: 12,
+        accountId: alvo.contaId,
+        categoryId: categoriaDeEntrada,
+        startsOn: localDate("2026-01-01"),
+      },
+      AGORA,
+    );
+
+    const criada = (await buildPlanningView(alvo.userId, AGORA)).recurrences.find(
+      (item) => item.id === regra,
+    );
+    assert.equal(criada?.kind, "income");
+    assert.equal(criada?.description, "Reembolso mensal");
+
+    await updateSubscription(
+      alvo.userId,
+      regra,
+      { description: "Reembolso ajustado", amount: cents(27_500) },
+      AGORA,
+    );
+    const editada = (await buildPlanningView(alvo.userId, AGORA)).recurrences.find(
+      (item) => item.id === regra,
+    );
+    assert.equal(editada?.description, "Reembolso ajustado");
+    assert.equal(editada?.amountCents, 27_500);
+
+    assert.equal(await removeRecurrence(alvo.userId, regra), true);
+    assert.equal(
+      (await buildPlanningView(alvo.userId, AGORA)).recurrences.some((item) => item.id === regra),
+      false,
+    );
+  });
+
   it("recusa confirmar competência anterior à vigência", async () => {
     const { createRecurrence, confirmOccurrence } = await import("./recurrences.ts");
     const alvo = await ambiente();

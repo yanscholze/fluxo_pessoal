@@ -5,13 +5,22 @@
  * está no Fluxo?". A resposta vira uma string estável — o *fingerprint* — que
  * é gravada junto do lançamento e comparada nas importações seguintes.
  *
- * Duas armadilhas moldam as regras daqui:
+ * Três armadilhas moldam as regras daqui:
  *
  * 1. **FITID não pode ser escopado por competência.** O `FITID` do OFX já é
  *    único por emissor. Amarrá-lo à fatura em que o arquivo foi importado faz
  *    a mesma transação, reimportada num arquivo de outra competência, nascer
  *    com identidade nova e duplicar.
- * 2. **Parcela vem com centavo dançando.** O emissor distribui o resto do
+ * 2. **FITID sozinho não é identidade.** A especificação do OFX promete um
+ *    `FITID` por transação, mas emissor nenhum é obrigado a cumprir isso do
+ *    jeito que a gente gostaria — e o Nubank não cumpre. Ele reusa o **mesmo**
+ *    `FITID` em todas as parcelas de uma compra parcelada, no estorno da
+ *    compra estornada e no IOF da compra internacional. Num extrato real de
+ *    nove faturas, 42 dos 123 `FITID` do cartão se repetem: as nove parcelas
+ *    do "Samsung - Shop.com" dividem um `FITID` só. Identidade por `FITID` cru
+ *    colapsaria as nove numa linha e marcaria oito como duplicadas — a fatura
+ *    importada fecharia com um doze avos da dívida real.
+ * 3. **Parcela vem com centavo dançando.** O emissor distribui o resto do
  *    arredondamento entre as parcelas, e nem sempre da mesma forma entre um
  *    arquivo e outro. A mesma parcela pode voltar com 1 ou 2 centavos de
  *    diferença; sem tolerância, ela entra duas vezes.
@@ -102,12 +111,39 @@ function compositeFingerprint(row: ParsedRow, target: ImportTarget, amount: Cent
 }
 
 /**
- * Identidade da linha: o `FITID` puro quando o arquivo o traz, senão a
+ * Identidade da linha quando o arquivo traz `FITID`.
+ *
+ * O `FITID` entra como **escopo**, não como identidade inteira: ele agrupa as
+ * linhas irmãs que o emissor emitiu sob o mesmo número — as parcelas de uma
+ * compra, o estorno dela, o IOF dela — e a parcela, a descrição e o valor
+ * separam uma da outra dentro do grupo.
+ *
+ * A data fica de fora de propósito. É ela que muda quando a mesma transação
+ * reaparece num arquivo de outra competência (o Nubank reposta a parcela na
+ * data de fechamento de cada fatura), e era justamente essa reimportação que a
+ * identidade por `FITID` protegia. Descrição e valor bastam para separar as
+ * irmãs sem reabrir esse buraco: "Parcela 3/12" nunca colide com "Parcela
+ * 4/12", nem o débito de R$ 48,45 com o estorno de +R$ 48,45.
+ */
+function externalFingerprint(row: ParsedRow, externalId: string, target: ImportTarget, amount: Cents): string {
+  const fields = [
+    targetScope(target),
+    "fitid",
+    externalId,
+    normalizeDescription(row.description),
+    String(amount),
+  ];
+  if (row.installment) fields.push(`${row.installment.current}/${row.installment.total}`);
+  return fields.join(SEPARATOR);
+}
+
+/**
+ * Identidade da linha: o escopo por `FITID` quando o arquivo o traz, senão a
  * composição de alvo, data, descrição e valor.
  */
 export function fingerprintOf(row: ParsedRow, target: ImportTarget): string {
   const externalId = externalIdOf(row);
-  if (externalId) return `${targetScope(target)}${SEPARATOR}fitid${SEPARATOR}${externalId}`;
+  if (externalId) return externalFingerprint(row, externalId, target, row.amount);
   return compositeFingerprint(row, target, row.amount);
 }
 
@@ -137,10 +173,18 @@ export function duplicateCandidates(row: ParsedRow, target: ImportTarget): strin
   // Sem `FITID` a canônica já é a composta, e o `push` descarta a repetição.
   push(compositeFingerprint(row, target, row.amount));
 
+  const externalId = externalIdOf(row);
   if (row.installment) {
     for (let delta = 1; delta <= INSTALLMENT_CENT_TOLERANCE; delta += 1) {
       push(compositeFingerprint(row, target, cents(row.amount + delta)));
       push(compositeFingerprint(row, target, cents(row.amount - delta)));
+      // A tolerância vale também para a identidade por `FITID`: agora que o
+      // valor faz parte dela, a mesma parcela que voltou com um centavo a mais
+      // num arquivo reexportado geraria identidade nova sem isto.
+      if (externalId) {
+        push(externalFingerprint(row, externalId, target, cents(row.amount + delta)));
+        push(externalFingerprint(row, externalId, target, cents(row.amount - delta)));
+      }
     }
   }
 

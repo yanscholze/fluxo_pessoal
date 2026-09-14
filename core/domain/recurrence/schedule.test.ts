@@ -9,6 +9,7 @@ import {
   type Recurrence,
   appliesTo,
   assertValidSchedule,
+  matchesCapture,
   nextOccurrence,
   occurrenceAmount,
   occurrenceDate,
@@ -185,5 +186,46 @@ describe("agendamento de recorrência", () => {
       DomainError,
     );
     assert.doesNotThrow(() => assertValidSchedule({ scheduleMode: "day_of_month", scheduleDay: 31 }));
+  });
+});
+
+describe("casador de captura", () => {
+  const regra = { captureMatch: "STAR PROTECAO", captureIgnore: "emitido" };
+
+  it("reconhece o pagamento do boleto", () => {
+    assert.equal(
+      matchesCapture(regra, "Pagamento de R$ 91,50 para STAR PROTECAO VEICULAR realizado"),
+      "pagamento",
+    );
+  });
+
+  it("o aviso de emissão não é pagamento", () => {
+    /*
+     * O banco notifica o mesmo boleto duas vezes. A emissão **cita** o credor,
+     * então sem a precedência do ignorar ela daria baixa num pagamento que
+     * ainda não aconteceu — e o mês seguinte chegaria já quitado.
+     */
+    assert.equal(
+      matchesCapture(regra, "Boleto de R$ 91,50 emitido para STAR PROTECAO VEICULAR"),
+      "ignorar",
+    );
+  });
+
+  it("ignora acento e caixa", () => {
+    // O emissor escreve o mesmo credor de formas diferentes entre a emissão e a
+    // baixa; exigir igualdade exata quebraria no mês em que mudasse um acento.
+    assert.equal(
+      matchesCapture({ captureMatch: "Star Proteção", captureIgnore: null }, "PAGO A STAR PROTECAO"),
+      "pagamento",
+    );
+  });
+
+  it("outra cobrança não casa", () => {
+    assert.equal(matchesCapture(regra, "Compra aprovada em SUPERMERCADO"), "nao");
+  });
+
+  it("regra sem casador nunca casa", () => {
+    assert.equal(matchesCapture({ captureMatch: null, captureIgnore: null }, "qualquer coisa"), "nao");
+    assert.equal(matchesCapture({ captureMatch: "   ", captureIgnore: null }, "qualquer coisa"), "nao");
   });
 });
