@@ -86,6 +86,73 @@ describe("compra parcelada", () => {
     assert.equal(view.totals.totalCents, 0, "e não infla o total");
   });
 
+  it("edita nome, categoria e total sem soltar as parcelas do plano", async () => {
+    const alvo = await ambiente();
+    const compra = await comprarParcelado(alvo.userId, alvo.cartaoId, alvo.categoriaId, 10_000, 3);
+    const { createCategory } = await import("./catalog.ts");
+    const { updateInstallmentPlan, buildInstallmentsView } = await import("./installments.ts");
+    const outraCategoria = await createCategory(alvo.userId, { name: "Tecnologia", kind: "expense" });
+
+    await updateInstallmentPlan(alvo.userId, compra.installmentPlanId as string, {
+      description: "Computador de trabalho",
+      categoryId: outraCategoria,
+      setCategory: true,
+      totalAmount: cents(12_000),
+    }, AGORA);
+
+    const plano = (await buildInstallmentsView(alvo.userId, AGORA)).active[0];
+    assert.equal(plano?.label, "Computador de trabalho");
+    assert.equal(plano?.categoryId, outraCategoria);
+    assert.equal(plano?.totalAmount, 12_000);
+    assert.deepEqual(plano?.entries.map((item) => item.amountCents), [4_000, 4_000, 4_000]);
+    assert.equal(plano?.entries.reduce((total, item) => total + item.amountCents, 0), 12_000);
+  });
+
+  it("agrupa e desagrupa lançamentos sem alterar o razão", async () => {
+    const alvo = await ambiente();
+    const { recordTransaction } = await import("./transactions.ts");
+    const { groupTransactionsIntoInstallmentPlan, ungroupInstallmentPlan, buildInstallmentsView } = await import(
+      "./installments.ts"
+    );
+    const primeira = await recordTransaction(alvo.userId, {
+      kind: "expense",
+      description: "GTA VI",
+      amount: cents(10_010),
+      occurredOn: localDate("2026-08-05"),
+      cardId: alvo.cartaoId,
+      categoryId: alvo.categoriaId,
+      state: "confirmed",
+    }, AGORA);
+    const segunda = await recordTransaction(alvo.userId, {
+      kind: "expense",
+      description: "GTA VI",
+      amount: cents(20_019),
+      occurredOn: localDate("2026-08-06"),
+      cardId: alvo.cartaoId,
+      categoryId: alvo.categoriaId,
+      state: "confirmed",
+    }, AGORA);
+
+    const { planId } = await groupTransactionsIntoInstallmentPlan(alvo.userId, {
+      transactionIds: [primeira.ids[0], segunda.ids[0]],
+      description: "GTA VI",
+      categoryId: alvo.categoriaId,
+    }, AGORA);
+
+    const plano = (await buildInstallmentsView(alvo.userId, AGORA)).active[0];
+    assert.equal(plano?.planId, planId);
+    assert.equal(plano?.totalAmount, 30_029);
+    assert.equal(plano?.entries.length, 2);
+
+    await ungroupInstallmentPlan(alvo.userId, planId, AGORA);
+    const view = await buildInstallmentsView(alvo.userId, AGORA);
+    assert.equal(view.active.length, 0, "só o agrupamento foi removido");
+    const { listTransactions } = await import("../repositories/ledger.ts");
+    const soltos = await listTransactions(alvo.userId, { limit: 10 });
+    assert.ok(soltos.every((item) => item.installmentPlanId === null));
+    assert.equal(soltos.reduce((total, item) => total + item.amount, 0), 30_029, "nenhum valor mudou");
+  });
+
   it("cada parcela cai numa competência consecutiva", async () => {
     const alvo = await ambiente();
     await comprarParcelado(alvo.userId, alvo.cartaoId, alvo.categoriaId, 30_000, 3);

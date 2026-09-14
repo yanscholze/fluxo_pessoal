@@ -1,5 +1,6 @@
 import { SectionIntro } from "../../ui/section-tabs.tsx";
 import { buildInstallmentsView } from "../../../server/services/installments.ts";
+import { listCategories } from "../../../server/repositories/catalog.ts";
 import { currentUser } from "../../auth-context.ts";
 import { BarChart, ChartFrame } from "../../ui/charts.tsx";
 import { MetricStrip } from "../../ui/data-display.tsx";
@@ -26,7 +27,10 @@ export default async function Parcelamentos() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const view = await buildInstallmentsView(user.id);
+  const [view, categories] = await Promise.all([buildInstallmentsView(user.id), listCategories(user.id)]);
+  const expenseCategories = categories
+    .filter((category) => category.kind === "expense")
+    .map((category) => ({ id: category.id, name: category.name }));
   const temPlanos = view.active.length > 0 || view.settled.length > 0;
 
   const proximoMes = view.commitment[0];
@@ -116,13 +120,13 @@ export default async function Parcelamentos() {
               />
               <div className="space-y-4">
                 {view.active.map((plan) => (
-                  <PlanCard key={plan.planId} plan={plan} />
+                  <PlanCard key={plan.planId} plan={plan} categories={expenseCategories} />
                 ))}
               </div>
             </section>
           ) : null}
 
-          {view.settled.length ? <SettledPlans plans={view.settled} /> : null}
+          {view.settled.length ? <SettledPlans plans={view.settled} categories={expenseCategories} /> : null}
         </Stack>
       )}
     </>

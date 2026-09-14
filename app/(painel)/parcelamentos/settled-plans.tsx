@@ -20,7 +20,13 @@ import { ChevronDown, ChevronRight } from "../../ui/icons.tsx";
 import { SectionTitle } from "../../ui/page-frame.tsx";
 import { PlanCard } from "./plan-card.tsx";
 
-export function SettledPlans({ plans }: { plans: readonly PlanView[] }) {
+export function SettledPlans({
+  plans,
+  categories,
+}: {
+  plans: readonly PlanView[];
+  categories: readonly { id: string; name: string }[];
+}) {
   const [mostrar, setMostrar] = useState(false);
 
   return (
@@ -44,7 +50,7 @@ export function SettledPlans({ plans }: { plans: readonly PlanView[] }) {
       {mostrar ? (
         <div className="space-y-4">
           {plans.map((plan) => (
-            <PlanCard key={plan.planId} plan={plan} />
+            <PlanCard key={plan.planId} plan={plan} categories={categories} />
           ))}
         </div>
       ) : null}

@@ -145,8 +145,9 @@ const DEBIT_HINT = /\b(debito|pix|boleto|transferencia|ted|doc)\b/;
 /** `R$ 1.234,56` em qualquer lugar do texto. */
 const AMOUNT = /r\$\s*([\d.,]+)/i;
 
-/** `3/10`, `parcela 3 de 10`, `em 3x`. */
-const INSTALLMENT = /(?:parcela\s*)?\b(\d{1,2})\s*(?:\/|\s+de\s+|x\s+de\s+)\s*(\d{1,2})\b|\bem\s+(\d{1,2})x\b/i;
+/** `3/10`, `parcela 3 de 10`, `em 3x` e `em 3 parcelas`. */
+const INSTALLMENT =
+  /(?:parcela\s*)?\b(\d{1,2})\s*(?:\/|\s+de\s+|x\s+de\s+)\s*(\d{1,2})\b|\bem\s+(\d{1,2})\s*(?:x|vezes|parcelas?)\b/i;
 
 /** O estabelecimento costuma vir depois de "em", "para" ou "no". */
 const MERCHANT = /\b(?:em|no|na|para|pra)\s+([A-Za-zÀ-ÿ0-9][^.,;\n]{2,48})/i;

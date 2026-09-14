@@ -195,6 +195,7 @@ export function CaptureQueue({
                       amount: dados.get("amount"),
                       occurredOn: dados.get("occurredOn"),
                       categoryId: dados.get("categoryId") || null,
+                      installmentCount: dados.get("installmentCount"),
                       ...(cardId ? { cardId } : { accountId: dados.get("accountId") }),
                     });
                   }}
@@ -215,6 +216,22 @@ export function CaptureQueue({
                     <Campo rotulo="Data">
                       <input name="occurredOn" type="date" defaultValue={item.occurredOn} className={entrada} />
                     </Campo>
+                    {item.kind === "expense" ? (
+                      <Campo
+                        rotulo="Parcelas"
+                        dica="O valor acima é o total da compra; as parcelas serão distribuídas nas faturas."
+                      >
+                        <input
+                          name="installmentCount"
+                          type="number"
+                          min="1"
+                          max="48"
+                          defaultValue={item.installment?.total ?? 1}
+                          aria-label="Número de parcelas"
+                          className={`${entrada} tabular`}
+                        />
+                      </Campo>
+                    ) : null}
                     <Campo
                       rotulo="Categoria"
                       dica={

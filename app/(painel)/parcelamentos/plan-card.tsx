@@ -8,13 +8,15 @@
  * a resposta no detalhe.
  */
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { PlanView } from "../../../server/services/installments.ts";
-import { Button } from "../../ui/controls.tsx";
+import { Button, Field, Input, MoneyInput, Select } from "../../ui/controls.tsx";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
+import { ConfirmDialog, Dialog } from "../../ui/dialog.tsx";
 import { competenceShort, date, money, percent } from "../../ui/format.ts";
-import { CalendarClock, Percent, Zap } from "../../ui/icons.tsx";
+import { CalendarClock, Pencil, Percent, Unlink, Zap } from "../../ui/icons.tsx";
 import { Badge, Meter, Panel, type Tone } from "../../ui/primitives.tsx";
 import { AnticipationPanel } from "./anticipation-panel.tsx";
 
@@ -24,9 +26,72 @@ const SITUACAO: Record<string, { texto: string; tom: Tone }> = {
   open: { texto: "Em aberto", tom: "neutral" },
 };
 
-export function PlanCard({ plan }: { plan: PlanView }) {
+export function PlanCard({
+  plan,
+  categories,
+}: {
+  plan: PlanView;
+  categories: readonly { id: string; name: string }[];
+}) {
+  const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [simulando, setSimulando] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [desagrupando, setDesagrupando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [nome, setNome] = useState("");
+  const [total, setTotal] = useState("");
+  const [categoria, setCategoria] = useState("");
+
+  function abrirEditor() {
+    setNome(plan.label);
+    setTotal((plan.totalAmount / 100).toFixed(2).replace(".", ","));
+    setCategoria(plan.categoryId ?? "");
+    setErro(null);
+    setEditando(true);
+  }
+
+  function fecharEditor() {
+    setEditando(false);
+    setErro(null);
+  }
+
+  async function salvar() {
+    setEnviando(true);
+    setErro(null);
+    const resposta = await fetch(`/api/v1/installments/${plan.planId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ description: nome, totalAmount: total, categoryId: categoria || null }),
+    });
+    setEnviando(false);
+
+    if (!resposta.ok) {
+      const body = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(body.error?.message ?? "Não foi possível atualizar o parcelamento.");
+      return;
+    }
+
+    fecharEditor();
+    router.refresh();
+  }
+
+  async function desagrupar() {
+    setEnviando(true);
+    setErro(null);
+    const resposta = await fetch(`/api/v1/installments/${plan.planId}`, { method: "DELETE" });
+    setEnviando(false);
+
+    if (!resposta.ok) {
+      const body = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(body.error?.message ?? "Não foi possível desagrupar as parcelas.");
+      return;
+    }
+
+    setDesagrupando(false);
+    router.refresh();
+  }
 
   return (
     <Panel as="article">
@@ -86,6 +151,12 @@ export function PlanCard({ plan }: { plan: PlanView }) {
         <Button size="sm" variant="secondary" onClick={() => setAberto((valor) => !valor)}>
           {aberto ? "Ocultar parcelas" : "Ver parcelas"}
         </Button>
+        <Button size="sm" variant="ghost" icon={Pencil} onClick={abrirEditor}>
+          Editar
+        </Button>
+        <Button size="sm" variant="ghost" icon={Unlink} onClick={() => setDesagrupando(true)}>
+          Desagrupar
+        </Button>
         {!plan.isSettled ? (
           <Button
             size="sm"
@@ -141,6 +212,52 @@ export function PlanCard({ plan }: { plan: PlanView }) {
           </DataTable>
         </div>
       ) : null}
+
+      <Dialog
+        open={editando}
+        onClose={fecharEditor}
+        title="Editar parcelamento"
+        description="O total é distribuído novamente entre as parcelas, sem alterar suas datas ou faturas."
+        footer={
+          <Button variant="primary" busy={enviando} onClick={() => void salvar()}>
+            Salvar alterações
+          </Button>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nome" htmlFor={`nome-${plan.planId}`} className="sm:col-span-2">
+            <Input id={`nome-${plan.planId}`} value={nome} onChange={(event) => setNome(event.target.value)} />
+          </Field>
+          <Field label="Valor total" htmlFor={`total-${plan.planId}`}>
+            <MoneyInput id={`total-${plan.planId}`} value={total} onChange={(event) => setTotal(event.target.value)} />
+          </Field>
+          <Field label="Categoria" htmlFor={`categoria-${plan.planId}`}>
+            <Select id={`categoria-${plan.planId}`} value={categoria} onChange={(event) => setCategoria(event.target.value)}>
+              <option value="">Sem categoria</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {erro ? <p role="alert" className="mt-4 text-body-sm text-negative">{erro}</p> : null}
+      </Dialog>
+
+      <ConfirmDialog
+        open={desagrupando}
+        onClose={() => {
+          setDesagrupando(false);
+          setErro(null);
+        }}
+        onConfirm={() => void desagrupar()}
+        title="Desagrupar lançamentos"
+        consequence={`As ${plan.totalCount} parcelas voltarão a ser lançamentos separados. Valores, datas e faturas continuam iguais.`}
+        confirmLabel="Desagrupar"
+        busy={enviando}
+        error={erro}
+      />
     </Panel>
   );
 }

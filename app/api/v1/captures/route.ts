@@ -98,6 +98,7 @@ export const PATCH = handle(async (request: Request) => {
     description: input.optionalString("description", { max: 160 }),
     amount: input.optionalMoney("amount"),
     occurredOn: input.optionalDate("occurredOn"),
+    installmentCount: input.optionalInteger("installmentCount", { min: 1, max: 48 }),
   };
 
   input.done();

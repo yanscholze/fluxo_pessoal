@@ -92,6 +92,7 @@ export {
   TrendingDown,
   TrendingUp,
   Upload,
+  Unlink,
   Wallet,
   X,
   Zap,

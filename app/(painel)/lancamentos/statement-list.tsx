@@ -1,10 +1,18 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+
 import type { Statement, StatementRow } from "../../../server/services/statement.ts";
+import { Button, Field, Input, Select } from "../../ui/controls.tsx";
 import { DataTable, Td, Tr } from "../../ui/data-display.tsx";
+import { Dialog } from "../../ui/dialog.tsx";
 import { dateShort, money } from "../../ui/format.ts";
 import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
+  Link2,
   type LucideIcon,
   Receipt,
 } from "../../ui/icons.tsx";
@@ -38,6 +46,66 @@ export function StatementList({
   rows: readonly StatementRow[];
   options: Statement["options"];
 }) {
+  const router = useRouter();
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [agrupando, setAgrupando] = useState(false);
+  const [nomeDoGrupo, setNomeDoGrupo] = useState("");
+  const [categoriaDoGrupo, setCategoriaDoGrupo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const idsSelecionados = useMemo(() => new Set(selecionados), [selecionados]);
+  const selecionadas = rows.filter((row) => idsSelecionados.has(row.id));
+  const despesasSelecionaveis = (row: StatementRow) =>
+    row.kind === "expense" && row.originKind === "card" && !row.installmentLabel;
+
+  function alternarSelecao(row: StatementRow) {
+    if (!despesasSelecionaveis(row)) return;
+
+    setSelecionados((atual) => {
+      if (atual.includes(row.id)) return atual.filter((id) => id !== row.id);
+      const primeira = rows.find((item) => item.id === atual[0]);
+      // Um parcelamento é de um cartão só. Ao trocar de cartão, começar outra
+      // seleção é mais claro que permitir uma combinação que o servidor recusa.
+      if (primeira && primeira.originId !== row.originId) return [row.id];
+      return [...atual, row.id];
+    });
+  }
+
+  function abrirAgrupamento() {
+    const descricoesIguais = selecionadas.every((row) => row.description === selecionadas[0]?.description);
+    const categoriasIguais = selecionadas.every((row) => row.categoryId === selecionadas[0]?.categoryId);
+    setNomeDoGrupo(descricoesIguais ? (selecionadas[0]?.description ?? "") : "Compra parcelada");
+    setCategoriaDoGrupo(categoriasIguais ? (selecionadas[0]?.categoryId ?? "") : "");
+    setErro(null);
+    setAgrupando(true);
+  }
+
+  async function agrupar() {
+    setEnviando(true);
+    setErro(null);
+    const resposta = await fetch("/api/v1/installments/group", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        transactionIds: selecionados,
+        description: nomeDoGrupo,
+        categoryId: categoriaDoGrupo || null,
+      }),
+    });
+    setEnviando(false);
+
+    if (!resposta.ok) {
+      const body = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+      setErro(body.error?.message ?? "Não foi possível agrupar os lançamentos.");
+      return;
+    }
+
+    setAgrupando(false);
+    setSelecionados([]);
+    router.refresh();
+  }
+
   if (!rows.length) {
     return (
       <Panel>
@@ -52,6 +120,22 @@ export function StatementList({
 
   return (
     <Panel>
+      {selecionados.length ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md bg-accent-wash px-3 py-2">
+          <p className="text-body-sm text-ink">
+            {selecionados.length} lançamento{selecionados.length > 1 ? "s" : ""} selecionado
+            {selecionados.length > 1 ? "s" : ""}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setSelecionados([])}>
+              Limpar
+            </Button>
+            <Button size="sm" variant="primary" icon={Link2} disabled={selecionados.length < 2} onClick={abrirAgrupamento}>
+              Agrupar em parcelamento
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <DataTable
         caption="Lançamentos da competência"
         columns={[
@@ -62,6 +146,7 @@ export function StatementList({
           { key: "data", header: "Data", align: "right", width: "5.5rem", hideBelow: "sm" },
           { key: "valor", header: "Valor", align: "right", width: "8rem" },
           { key: "acoes", header: "Ações", align: "right", width: "4.5rem" },
+          { key: "selecionar", header: "Agrupar", align: "right", width: "4.25rem" },
         ]}
       >
         {rows.map((row) => {
@@ -162,10 +247,55 @@ export function StatementList({
               <Td align="right">
                 <RowActions row={row} options={options} />
               </Td>
+              <Td align="right">
+                {despesasSelecionaveis(row) ? (
+                  <input
+                    type="checkbox"
+                    checked={idsSelecionados.has(row.id)}
+                    onChange={() => alternarSelecao(row)}
+                    aria-label={`Selecionar ${row.description} para agrupar`}
+                    className="size-4 accent-[var(--color-accent)]"
+                  />
+                ) : null}
+              </Td>
             </Tr>
           );
         })}
       </DataTable>
+
+      <Dialog
+        open={agrupando}
+        onClose={() => {
+          setAgrupando(false);
+          setErro(null);
+        }}
+        title="Agrupar em parcelamento"
+        description={`Os ${selecionados.length} lançamentos manterão seus valores, datas e faturas; apenas passarão a aparecer como uma compra só.`}
+        footer={
+          <Button variant="primary" busy={enviando} onClick={() => void agrupar()}>
+            Criar parcelamento
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Nome do parcelamento" htmlFor="nome-do-grupo">
+            <Input id="nome-do-grupo" value={nomeDoGrupo} onChange={(event) => setNomeDoGrupo(event.target.value)} />
+          </Field>
+          <Field label="Categoria" htmlFor="categoria-do-grupo">
+            <Select id="categoria-do-grupo" value={categoriaDoGrupo} onChange={(event) => setCategoriaDoGrupo(event.target.value)}>
+              <option value="">Sem categoria</option>
+              {options.categories
+                .filter((category) => category.kind === "expense")
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          {erro ? <p role="alert" className="text-body-sm text-negative">{erro}</p> : null}
+        </div>
+      </Dialog>
     </Panel>
   );
 }

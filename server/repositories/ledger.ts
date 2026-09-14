@@ -116,6 +116,18 @@ export async function findTransaction(userId: string, transactionId: string): Pr
   return row && !row.deletedAt ? toTransaction(row) : null;
 }
 
+/** Busca vários lançamentos vivos preservando o formato do domínio. */
+export async function findTransactionsByIds(userId: string, transactionIds: readonly string[]): Promise<Transaction[]> {
+  if (!transactionIds.length) return [];
+
+  const rows = await getDatabase()
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.userId, userId), inArray(transactions.id, [...transactionIds]), isNull(transactions.deletedAt)));
+
+  return rows.map(toTransaction);
+}
+
 export async function currentVersion(userId: string, transactionId: string): Promise<number | null> {
   const database = getDatabase();
   const [row] = await database
@@ -172,6 +184,17 @@ export async function saveTransactionBatch(
   const database = getDatabase();
   const statements = entries.flatMap((entry) => buildSaveStatements(entry.transaction, entry.options ?? {}));
   await database.batch(statements as never);
+}
+
+/**
+ * Statements que gravam um lançamento e seu efeito no razão.
+ *
+ * Alguns casos de uso atualizam o cabeçalho de um parcelamento junto com todas
+ * as parcelas. Expor os statements mantém essa alteração numa única transação
+ * D1, em vez de deixar o plano e o razão momentaneamente divergentes.
+ */
+export function transactionSaveStatements(transaction: Transaction, options: PersistOptions = {}) {
+  return buildSaveStatements(transaction, options);
 }
 
 function buildSaveStatements(transaction: Transaction, options: PersistOptions) {

@@ -18,7 +18,7 @@ import {
 import { scheduleInstallments } from "../../core/domain/installment/plan.ts";
 import { invoiceTotals } from "../../core/domain/ledger/balance.ts";
 import { accountBalance } from "../../core/domain/ledger/balance.ts";
-import type { Party, Transaction, TransactionState } from "../../core/domain/ledger/types.ts";
+import type { Party, Transaction, TransactionSource, TransactionState } from "../../core/domain/ledger/types.ts";
 import { accountParty, cardParty } from "../../core/domain/ledger/types.ts";
 import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
 import { newId } from "../../core/kernel/id.ts";
@@ -57,6 +57,8 @@ export type RecordTransactionInput = {
   readonly monthlyInterestBasisPoints?: number | null;
   readonly notes?: string | null;
   readonly deviceId?: string | null;
+  /** Origem informativa do lançamento. A captura preserva que veio do celular. */
+  readonly source?: TransactionSource | null;
 };
 
 export type RecordedTransaction = {
@@ -100,7 +102,7 @@ export async function recordTransaction(
     userId,
     kind: input.kind,
     state: input.state,
-    source: "manual",
+    source: input.source ?? "manual",
     description: input.description,
     categoryId: input.kind === "transfer" ? null : (input.categoryId ?? null),
     amount: input.amount,
@@ -292,7 +294,7 @@ async function recordInstallmentPurchase(
         // A primeira parcela é fato consumado; as seguintes são compromisso
         // futuro, e por isso entram como previstas.
         state: installment.number === 1 ? input.state : "planned",
-        source: "installment",
+        source: input.source ?? "installment",
         description: input.description,
         categoryId: input.categoryId ?? null,
         amount: installment.amount,

@@ -7,6 +7,10 @@
 
 import { activeCompetence } from "../../core/domain/card/invoice-cycle.ts";
 import { simulateAnticipation, anticipationLadder } from "../../core/domain/installment/anticipation.ts";
+import type { Transaction } from "../../core/domain/ledger/types.ts";
+import { conflict, notFound, validationError } from "../../core/kernel/errors.ts";
+import { newId } from "../../core/kernel/id.ts";
+import { cents, sum } from "../../core/kernel/money.ts";
 import {
   type InstallmentProgress,
   type ScheduledInstallment,
@@ -15,11 +19,15 @@ import {
   summarizeProgress,
 } from "../../core/domain/installment/plan.ts";
 import { overdueCompetences } from "../../core/domain/ledger/balance.ts";
-import { notFound } from "../../core/kernel/errors.ts";
 import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
-import { listPlans } from "../repositories/installments.ts";
-import { loadLedger } from "../repositories/ledger.ts";
+import { and, eq, isNull } from "drizzle-orm";
+import { getDatabase } from "../db/client.ts";
+import { installmentPlans, transactions } from "../db/schema/index.ts";
+import { findCard, listCategories } from "../repositories/catalog.ts";
+import { findPlan, listPlans } from "../repositories/installments.ts";
+import { findTransactionsByIds, loadLedger, transactionSaveStatements } from "../repositories/ledger.ts";
+import { earningForPurchase } from "./rewards.ts";
 
 export type InstallmentEntryView = {
   readonly number: number;
@@ -33,6 +41,7 @@ export type InstallmentEntryView = {
 export type PlanView = InstallmentProgress & {
   readonly cardId: string;
   readonly cardName: string;
+  readonly categoryId: string | null;
   readonly purchaseDate: LocalDate;
   readonly monthlyInterestBasisPoints: number;
   readonly entries: readonly InstallmentEntryView[];
@@ -87,6 +96,7 @@ export async function buildInstallmentsView(userId: string, now: Date = new Date
       overdueCount: installmentEntries.filter((item) => item.status === "overdue").length,
       cardId: plan.cardId,
       cardName: card?.name ?? "Cartão removido",
+      categoryId: plan.categoryId,
       purchaseDate: plan.purchaseDate,
       monthlyInterestBasisPoints: plan.monthlyInterestBasisPoints,
       entries: installmentEntries,
@@ -197,3 +207,184 @@ export async function simulatePlanAnticipation(
 }
 
 export { simulateAnticipation };
+
+// ---------------------------------------------------------------------------
+// Manutenção do plano
+// ---------------------------------------------------------------------------
+
+export type UpdatePlanInput = {
+  readonly description?: string | null;
+  readonly categoryId?: string | null;
+  readonly setCategory?: boolean;
+  /** Valor total da compra, não apenas a próxima parcela. */
+  readonly totalAmount?: number | null;
+};
+
+/**
+ * Corrige o cabeçalho e, quando necessário, reparte de novo o valor total.
+ *
+ * As parcelas continuam nas mesmas datas, faturas e situações. Só seus valores
+ * mudam de forma proporcional e sem perder centavos. Assim uma correção de
+ * total não transforma uma compra em outra nem solta seus lançamentos do plano.
+ */
+export async function updateInstallmentPlan(
+  userId: string,
+  planId: string,
+  input: UpdatePlanInput,
+  now: Date = new Date(),
+): Promise<void> {
+  const existente = await findPlan(userId, planId);
+  if (!existente) throw notFound("Parcelamento", planId);
+
+  const plan = existente.plan;
+  const description = input.description?.trim() || plan.description;
+  const categoryId = input.setCategory ? (input.categoryId ?? null) : plan.categoryId;
+
+  if (categoryId) await assertExpenseCategory(userId, categoryId);
+
+  const ids = [...existente.transactionIdByNumber.values()];
+  const parcelas = await findTransactionsByIds(userId, ids);
+  if (parcelas.length !== ids.length) {
+    throw conflict("Não é possível editar um parcelamento com parcelas removidas");
+  }
+
+  const total = input.totalAmount ?? plan.totalAmount;
+  if (total <= 0) {
+    throw validationError("Informe um valor maior que zero", [
+      { path: "totalAmount", message: "Informe um valor maior que zero" },
+    ]);
+  }
+
+  const valores = distributeTotal(total, parcelas.length);
+  const card = await findCard(userId, plan.cardId);
+  if (!card || card.kind !== "credit") throw conflict("O cartão deste parcelamento não está disponível");
+
+  const atualizadas = [...parcelas]
+    .sort((left, right) => (left.installmentNumber ?? 0) - (right.installmentNumber ?? 0))
+    .map((parcela, index) => ({
+      ...parcela,
+      description,
+      categoryId,
+      amount: valores[index],
+    } satisfies Transaction));
+
+  const rewards = await Promise.all(atualizadas.map((parcela) => earningForPurchase(card, parcela.amount, now)));
+  const database = getDatabase();
+  await database.batch([
+    database
+      .update(installmentPlans)
+      .set({
+        description,
+        // O apelido é o nome exibido. Mantê-lo igual evita editar o nome e a
+        // tela continuar mostrando o texto anterior salvo como apelido.
+        label: description,
+        categoryId,
+        totalAmountCents: total,
+        updatedAt: now.toISOString(),
+      })
+      .where(and(eq(installmentPlans.userId, userId), eq(installmentPlans.id, planId))),
+    ...atualizadas.flatMap((parcela, index) =>
+      transactionSaveStatements(parcela, { reward: rewards[index] }),
+    ),
+  ] as never);
+}
+
+/** Junta lançamentos já existentes sem mudar valor, data, fatura ou razão. */
+export async function groupTransactionsIntoInstallmentPlan(
+  userId: string,
+  input: { readonly transactionIds: readonly string[]; readonly description: string; readonly categoryId?: string | null },
+  now: Date = new Date(),
+): Promise<{ planId: string }> {
+  const ids = [...new Set(input.transactionIds)];
+  if (ids.length < 2) {
+    throw validationError("Selecione ao menos dois lançamentos", [
+      { path: "transactionIds", message: "Selecione ao menos dois lançamentos" },
+    ]);
+  }
+
+  const items = await findTransactionsByIds(userId, ids);
+  if (items.length !== ids.length) throw notFound("Lançamento", "selecionado");
+  if (items.some((item) => item.kind !== "expense" || item.origin.kind !== "card" || item.installmentPlanId)) {
+    throw conflict("Só despesas avulsas no mesmo cartão podem formar um parcelamento");
+  }
+
+  const cardId = items[0].origin.kind === "card" ? items[0].origin.cardId : null;
+  if (!cardId || items.some((item) => item.origin.kind !== "card" || item.origin.cardId !== cardId)) {
+    throw conflict("Selecione lançamentos do mesmo cartão");
+  }
+
+  const categoryId = input.categoryId ?? items[0].categoryId;
+  if (categoryId) await assertExpenseCategory(userId, categoryId);
+
+  const ordered = [...items].sort((left, right) => {
+    const competenceOrder = left.competence.localeCompare(right.competence);
+    return competenceOrder || left.occurredOn.localeCompare(right.occurredOn) || left.id.localeCompare(right.id);
+  });
+  const planId = newId(now.getTime());
+  const total = sum(ordered.map((item) => item.amount));
+  const database = getDatabase();
+
+  await database.batch([
+    database.insert(installmentPlans).values({
+      id: planId,
+      userId,
+      cardId,
+      categoryId,
+      description: input.description.trim(),
+      totalAmountCents: total,
+      installmentCount: ordered.length,
+      purchaseDate: ordered[0].occurredOn,
+      firstCompetence: ordered[0].competence,
+      monthlyInterestBasisPoints: 0,
+      label: input.description.trim(),
+      status: "active",
+    }),
+    ...ordered.map((item, index) =>
+      database
+        .update(transactions)
+        .set({
+          description: input.description.trim(),
+          categoryId,
+          source: "installment",
+          installmentPlanId: planId,
+          installmentNumber: index + 1,
+          updatedAt: now.toISOString(),
+        })
+        .where(and(eq(transactions.userId, userId), eq(transactions.id, item.id), isNull(transactions.deletedAt))),
+    ),
+  ] as never);
+
+  return { planId };
+}
+
+/** Desfaz só a organização: os lançamentos e seus efeitos no razão permanecem. */
+export async function ungroupInstallmentPlan(userId: string, planId: string, now: Date = new Date()): Promise<void> {
+  const existente = await findPlan(userId, planId);
+  if (!existente) throw notFound("Parcelamento", planId);
+
+  const database = getDatabase();
+  await database.batch([
+    database
+      .update(transactions)
+      .set({
+        source: "manual",
+        installmentPlanId: null,
+        installmentNumber: null,
+        updatedAt: now.toISOString(),
+      })
+      .where(and(eq(transactions.userId, userId), eq(transactions.installmentPlanId, planId), isNull(transactions.deletedAt))),
+    database.delete(installmentPlans).where(and(eq(installmentPlans.userId, userId), eq(installmentPlans.id, planId))),
+  ] as never);
+}
+
+function distributeTotal(total: number, count: number) {
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  return Array.from({ length: count }, (_, index) => cents(base + (index < remainder ? 1 : 0)));
+}
+
+async function assertExpenseCategory(userId: string, categoryId: string): Promise<void> {
+  const category = (await listCategories(userId)).find((item) => item.id === categoryId);
+  if (!category) throw notFound("Categoria", categoryId);
+  if (category.kind !== "expense") throw conflict("Parcelamento precisa de uma categoria de saída");
+}

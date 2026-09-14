@@ -41,6 +41,7 @@ import { findAccount, findCard, listAccounts, listCards, listCategories } from "
 import { ensureInvoices } from "../repositories/invoices.ts";
 import { saveTransactionBatch } from "../repositories/ledger.ts";
 import { earningForPurchase } from "./rewards.ts";
+import { recordTransaction } from "./transactions.ts";
 
 /** Janela consultada para a checagem de duplicidade. */
 const RECENT_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -411,6 +412,8 @@ export type ConfirmInput = {
   readonly description?: string | null;
   readonly amount?: Cents | null;
   readonly occurredOn?: LocalDate | null;
+  /** Total de parcelas da compra, ajustável antes de registrar. */
+  readonly installmentCount?: number | null;
 };
 
 /**
@@ -455,6 +458,7 @@ export async function confirmCapture(
 
   const amount = input.amount ?? cents(evento.amountCents);
   const occurredOn = input.occurredOn ?? localDate(evento.occurredOn);
+  const installmentCount = input.installmentCount ?? evento.installmentTotal ?? 1;
 
   /*
    * Se esta notificação paga uma recorrência, a confirmação dá **baixa** nela.
@@ -487,6 +491,43 @@ export async function confirmCapture(
   }
 
   const origem = await resolveOrigin(userId, evento, input);
+
+  /*
+   * A notificação informa a compra inteira e, quando vier, o número de vezes.
+   *
+   * Antes, o contador era salvo na captura mas ignorado aqui: uma compra de
+   * R$ 1.200,00 em 12x virava uma despesa avulsa de R$ 1.200,00. Agora a fila
+   * mostra os campos para revisão e este caminho reaproveita o mesmo gerador
+   * de parcelas usado pelo lançamento manual, com distribuição exata de
+   * centavos e as faturas certas.
+   */
+  if (installmentCount > 1) {
+    if (!origem.card) throw conflict("Parcelamento exige um cartão de crédito");
+
+    const recorded = await recordTransaction(
+      userId,
+      {
+        kind: evento.kind,
+        description: input.description ?? evento.description,
+        amount,
+        occurredOn,
+        state: "confirmed",
+        categoryId: input.categoryId ?? null,
+        cardId: origem.card.id,
+        installmentCount,
+        source: "capture",
+        deviceId: "capture",
+      },
+      now,
+    );
+
+    await database
+      .update(captureEvents)
+      .set({ status: "confirmado", transactionId: recorded.ids[0] })
+      .where(and(eq(captureEvents.userId, userId), eq(captureEvents.id, captureId)));
+
+    return { transactionId: recorded.ids[0], competence: recorded.competence };
+  }
 
   const competence =
     origem.card !== null ? competenceForPurchase(origem.card, occurredOn) : competenceOf(occurredOn);
