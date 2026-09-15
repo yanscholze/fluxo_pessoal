@@ -1,27 +1,15 @@
-/**
- * Tokens visuais do aplicativo.
- *
- * Espelham `app/globals.css` — os mesmos valores, porque site e aplicativo
- * precisam parecer o mesmo produto. Não dá para importar de lá: React Native
- * não lê CSS. É a única duplicação aceita neste projeto, e é de aparência, não
- * de regra: um token errado desalinha uma cor, não um saldo.
- *
- * Tudo o que uma tela usa sai daqui. Cor solta no meio de um componente é como
- * a versão anterior chegou a ter cinco cinzas diferentes.
- *
- * As três decisões do sistema valem igual aqui:
- *
- * 1. **Escuro é o tema nativo.** Os valores escuros vieram primeiro, pensados
- *    para leitura longa de tabela financeira; o claro foi derivado depois.
- *
- * 2. **Cor tem função.** O acento veste cromo interativo — aba ativa, botão
- *    primário, foco. Positivo e negativo vestem **valor**. Contextos disjuntos,
- *    então o verde de marca nunca disputa significado com o verde de receita.
- *
- * 3. **Superfície separa, borda não.** Hierarquia por elevação e espaço.
- */
+import * as SecureStore from "expo-secure-store";
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import { useColorScheme } from "react-native";
+export type AccentId = "blurple" | "azul" | "verde" | "coral";
 
 export type Palette = {
   readonly canvas: string;
@@ -46,118 +34,120 @@ export type Palette = {
   readonly cautionWash: string;
   readonly info: string;
   readonly infoWash: string;
-  /** Série de apoio para gráficos e para categorias sem cor própria. */
   readonly viz: readonly string[];
 };
 
-const LIGHT: Palette = {
-  canvas: "#f4f3f8",
-  surface: "#ffffff",
-  surfaceRaised: "#ffffff",
-  surfaceSunken: "#f0f2f5",
-  surfaceInset: "#eaedf1",
-  line: "#e2e6ec",
-  lineStrong: "#cdd3dc",
-  ink: "#10151c",
-  inkMuted: "#5b6572",
-  inkSubtle: "#8b95a3",
-  accent: "#7565d7",
-  accentInk: "#ffffff",
-  accentWash: "#ebe8fb",
-  accentEdge: "#b6afe5",
-  positive: "#16a34a",
-  positiveWash: "#e4f4ea",
-  negative: "#dc2626",
-  negativeWash: "#fce9e9",
-  caution: "#b45309",
-  cautionWash: "#f8eddf",
-  info: "#2563eb",
-  infoWash: "#e5ecfc",
-  viz: ["#0d9668", "#2563eb", "#b45309", "#9333ea", "#0891b2", "#db2777", "#65a30d", "#64748b"],
+const ACCENTS: Record<AccentId, { base: string; wash: string; edge: string; soft: string }> = {
+  blurple: { base: "#9184d9", wash: "#2b2741", edge: "#5d5294", soft: "#d2cefd" },
+  azul: { base: "#72a7df", wash: "#202d42", edge: "#4c6f98", soft: "#c9e1fa" },
+  verde: { base: "#69b69f", wash: "#1d3732", edge: "#477f70", soft: "#c6eadf" },
+  coral: { base: "#d7877f", wash: "#432927", edge: "#965e59", soft: "#f2d0cd" },
 };
 
-const DARK: Palette = {
-  canvas: "#161826",
-  surface: "#202335",
-  surfaceRaised: "#292d42",
-  surfaceSunken: "#12141f",
-  surfaceInset: "#1b1e2d",
-  line: "#31364d",
-  lineStrong: "#474d68",
-  ink: "#f1f0f7",
-  inkMuted: "#c0bed0",
-  inkSubtle: "#9290a7",
-  accent: "#9184d9",
-  accentInk: "#17152a",
-  accentWash: "#302c50",
-  accentEdge: "#625b99",
-  positive: "#4ade80",
-  positiveWash: "#12251a",
-  negative: "#ff6b6b",
-  negativeWash: "#2a1517",
-  caution: "#fbbf24",
-  cautionWash: "#2a2110",
-  info: "#60a5fa",
-  infoWash: "#111c2c",
-  viz: ["#21c99a", "#60a5fa", "#fbbf24", "#c084fc", "#22d3ee", "#fb7185", "#a3e635", "#94a3b8"],
+const makePalette = (accentId: AccentId): Palette => {
+  const accent = ACCENTS[accentId];
+  return {
+    canvas: "#161826",
+    surface: "#232532",
+    surfaceRaised: "#292b31",
+    surfaceSunken: "#1c1e29",
+    surfaceInset: "#292b31",
+    line: "#3f424d",
+    lineStrong: "#595d6c",
+    ink: "#e9e9ed",
+    inkMuted: "#b2b6ca",
+    inkSubtle: "#9397ab",
+    accent: accent.base,
+    accentInk: "#161826",
+    accentWash: accent.wash,
+    accentEdge: accent.edge,
+    positive: "#9bceb7",
+    positiveWash: "#1d332b",
+    negative: "#e59a9a",
+    negativeWash: "#402528",
+    caution: "#d4b275",
+    cautionWash: "#3b3120",
+    info: accent.base,
+    infoWash: accent.wash,
+    viz: [accent.base, "#72a7df", "#d4b275", "#d7877f", "#69b69f", "#b991cf", "#9cb568", "#9397ab"],
+  };
 };
 
-/**
- * Escala tipográfica.
- *
- * Os mesmos degraus do site, em pixels e com um ajuste: `display` é menor aqui.
- * Os 40 px do site estouram numa tela de 360 px assim que o valor passa de seis
- * dígitos, e um número que quebra em duas linhas deixa de ser leitura de
- * relance.
- *
- * `fontFamily` fica de fora de propósito: quem a aplica é `<Texto>` em
- * `primitives.tsx`, uma vez, lendo a família carregada. Repeti-la em cada
- * estilo faria um esquecimento virar um bloco em Roboto no meio da tela.
- */
+type AppearanceContextValue = {
+  readonly accentId: AccentId;
+  readonly setAccentId: (accent: AccentId) => void;
+  readonly accents: typeof ACCENTS;
+  readonly palette: Palette;
+};
+
+const AppearanceContext = createContext<AppearanceContextValue | null>(null);
+const ACCENT_STORAGE_KEY = "fluxo.appearance.accent";
+
+export function AppearanceProvider({ children }: { children: ReactNode }) {
+  const [accentId, setAccentState] = useState<AccentId>("blurple");
+
+  useEffect(() => {
+    void SecureStore.getItemAsync(ACCENT_STORAGE_KEY).then((saved) => {
+      if (saved && saved in ACCENTS) setAccentState(saved as AccentId);
+    });
+  }, []);
+
+  const setAccentId = (accent: AccentId) => {
+    setAccentState(accent);
+    void SecureStore.setItemAsync(ACCENT_STORAGE_KEY, accent);
+  };
+
+  const value = useMemo(
+    () => ({ accentId, setAccentId, accents: ACCENTS, palette: makePalette(accentId) }),
+    [accentId],
+  );
+
+  return createElement(AppearanceContext.Provider, { value }, children);
+}
+
+export function useAppearance(): AppearanceContextValue {
+  const value = useContext(AppearanceContext);
+  if (!value) throw new Error("useAppearance precisa de AppearanceProvider");
+  return value;
+}
+
+export function usePalette(): Palette {
+  return useAppearance().palette;
+}
+
+export function useIsDark(): boolean {
+  return true;
+}
+
 export const type = {
-  display: { fontSize: 32, lineHeight: 36, fontWeight: "700" as const, letterSpacing: -1 },
-  figure: { fontSize: 25, lineHeight: 29, fontWeight: "700" as const, letterSpacing: -0.55 },
-  figureSm: { fontSize: 19, lineHeight: 23, fontWeight: "600" as const, letterSpacing: -0.3 },
-  title: { fontSize: 19, lineHeight: 25, fontWeight: "600" as const, letterSpacing: -0.35 },
-  heading: { fontSize: 15, lineHeight: 20, fontWeight: "600" as const, letterSpacing: -0.1 },
-  body: { fontSize: 15, lineHeight: 21, fontWeight: "400" as const },
-  bodyStrong: { fontSize: 15, lineHeight: 21, fontWeight: "600" as const },
-  bodySm: { fontSize: 13, lineHeight: 18, fontWeight: "400" as const },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: "400" as const },
-  label: { fontSize: 11, lineHeight: 14, fontWeight: "700" as const, letterSpacing: 0.7 },
+  display: { fontSize: 42, lineHeight: 44, fontWeight: "500" as const, letterSpacing: -1.35 },
+  figure: { fontSize: 26, lineHeight: 30, fontWeight: "500" as const, letterSpacing: -0.62 },
+  figureSm: { fontSize: 19, lineHeight: 23, fontWeight: "500" as const, letterSpacing: -0.34 },
+  title: { fontSize: 22, lineHeight: 27, fontWeight: "500" as const, letterSpacing: -0.44 },
+  heading: { fontSize: 17, lineHeight: 21, fontWeight: "500" as const, letterSpacing: -0.25 },
+  body: { fontSize: 14, lineHeight: 20, fontWeight: "400" as const },
+  bodyStrong: { fontSize: 14, lineHeight: 20, fontWeight: "500" as const },
+  bodySm: { fontSize: 12.5, lineHeight: 18, fontWeight: "400" as const },
+  caption: { fontSize: 11.5, lineHeight: 16, fontWeight: "400" as const },
+  label: { fontSize: 10.5, lineHeight: 13, fontWeight: "500" as const, letterSpacing: 1.25 },
 };
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
-export const radius = { xs: 6, sm: 9, md: 12, lg: 16, xl: 22, pill: 999 };
+export const space = { xs: 3, sm: 6, md: 8, lg: 11, xl: 17, xxl: 22 };
+export const radius = { xs: 4, sm: 4, md: 8, lg: 14, xl: 14, pill: 999 };
 
-/**
- * Elevação.
- *
- * Duas sombras, discretas. No Android quem manda é `elevation`; `shadowColor` e
- * companhia existem para o iOS, que ignora a primeira — declarar as duas é o
- * que mantém a mesma peça parecida nos dois sistemas.
- */
 export const elevation = {
   panel: {
     elevation: 1,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.28,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
   },
   float: {
-    elevation: 6,
+    elevation: 9,
     shadowColor: "#000",
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
 };
-
-export function usePalette(): Palette {
-  return useColorScheme() === "dark" ? DARK : LIGHT;
-}
-
-export function useIsDark(): boolean {
-  return useColorScheme() === "dark";
-}

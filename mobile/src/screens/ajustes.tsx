@@ -15,7 +15,7 @@ import { isBridgeAvailable, openListenerSettings } from "../notifications/bridge
 import { useLedger } from "../state/ledger.tsx";
 import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Divider, Label, Notice, Row, Small } from "../ui/primitives.tsx";
-import { space, usePalette } from "../ui/theme.ts";
+import { space, useAppearance, usePalette, type AccentId } from "../ui/theme.ts";
 
 export function AjustesScreen({
   onAbrirCapturas,
@@ -25,6 +25,7 @@ export function AjustesScreen({
   onVoltar: () => void;
 }) {
   const palette = usePalette();
+  const { accentId, setAccentId, accents } = useAppearance();
   const { state, disconnect } = useSession();
   const { sync, conflicts, synchronize, resolveConflict } = useLedger();
   const [desconectando, setDesconectando] = useState(false);
@@ -50,6 +51,40 @@ export function AjustesScreen({
             <Small>{conectado?.credentials.user.email ?? ""}</Small>
             <Small style={{ marginTop: space.sm }}>{conectado?.credentials.baseUrl ?? ""}</Small>
           </View>
+        </Card>
+
+        <Card>
+          <Label>Cor principal</Label>
+          <Body muted style={{ marginTop: space.sm }}>
+            Roxo é a cor oficial do Fluxo. A escolha vale para toda a interface deste aparelho.
+          </Body>
+          <View style={{ flexDirection: "row", gap: 12, marginTop: space.lg }}>
+            {(Object.keys(accents) as AccentId[]).map((id) => {
+              const selecionada = id === accentId;
+              return (
+                <Pressable
+                  key={id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selecionada }}
+                  accessibilityLabel={id === "blurple" ? "Roxo oficial" : id}
+                  onPress={() => setAccentId(id)}
+                  style={({ pressed }) => ({
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: selecionada ? accents[id].soft : palette.line,
+                    opacity: pressed ? 0.68 : 1,
+                  })}
+                >
+                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: accents[id].base }} />
+                </Pressable>
+              );
+            })}
+          </View>
+          <Small style={{ marginTop: space.sm }}>{accentId === "blurple" ? "Roxo oficial" : accentId}</Small>
         </Card>
 
         <Card>

@@ -1,38 +1,18 @@
-/**
- * A face do cartão.
- *
- * A mesma peça do site, redesenhada para React Native. Existe por um motivo
- * prático, não decorativo: numa carteira com quatro cartões, ler "Nubank
- * Roxinho" numa lista de texto é mais lento do que reconhecer a cor. O cérebro
- * identifica o objeto físico antes de ler o nome — e no celular, onde a lista
- * cabe menos, isso pesa mais ainda.
- *
- * A proporção é a do cartão real (85,6 × 53,98 mm). Fugir dela produz um
- * retângulo que *lembra* um cartão sem ser um, que é pior do que não ter.
- */
-
+import { CreditCard } from "phosphor-react-native";
 import { View } from "react-native";
 
 import type { CardSummary } from "../finance/derive.ts";
-import { competence as formatCompetence, money, relativeDate } from "./format.ts";
+import { money } from "./format.ts";
 import { Texto } from "./primitives.tsx";
-import { elevation, radius, space, type } from "./theme.ts";
+import { elevation, radius, usePalette } from "./theme.ts";
 
-/** Largura fixa: o carrossel precisa de um passo previsível para o snap. */
-export const LARGURA_DA_FACE = 288;
-const ALTURA_DA_FACE = Math.round(LARGURA_DA_FACE / 1.586);
+export const LARGURA_DA_FACE = 302;
+const ALTURA_DA_FACE = Math.round(LARGURA_DA_FACE / 1.58);
 
-export function CardFace({
-  resumo,
-  hoje,
-  atenuada,
-}: {
-  resumo: CardSummary;
-  hoje: string;
-  atenuada?: boolean;
-}) {
+export function CardFace({ resumo, atenuada }: { resumo: CardSummary; hoje: string; atenuada?: boolean }) {
+  const palette = usePalette();
   const { card } = resumo;
-  const estourado = resumo.available !== null && resumo.available <= 0;
+  const cor = card.color ?? palette.accent;
 
   return (
     <View
@@ -40,73 +20,50 @@ export function CardFace({
         {
           width: LARGURA_DA_FACE,
           height: ALTURA_DA_FACE,
-          borderRadius: radius.xl,
-          backgroundColor: card.color ?? "#1f2937",
-          padding: space.lg,
+          borderRadius: radius.lg,
+          backgroundColor: palette.surface,
+          padding: 18,
           justifyContent: "space-between",
           overflow: "hidden",
           opacity: atenuada ? 0.55 : 1,
           transform: [{ scale: atenuada ? 0.94 : 1 }],
+          borderWidth: 1,
+          borderColor: palette.line,
         },
         elevation.float,
       ]}
     >
-      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.md }}>
+      <View style={{ position: "absolute", right: -80, top: -90, width: 260, height: 260, borderRadius: 130, backgroundColor: cor, opacity: 0.16 }} />
+      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: cor }} />
+
+      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Texto numberOfLines={1} style={[type.bodyStrong, { color: "#fff" }]}>
+          <Texto style={{ color: cor, fontSize: 11, lineHeight: 13, fontWeight: "500", letterSpacing: 1.75 }}>
+            {card.kind === "credit" ? "CRÉDITO" : "DÉBITO"}
+          </Texto>
+          <Texto numberOfLines={1} style={{ color: palette.ink, fontSize: 19, lineHeight: 23, fontWeight: "500", letterSpacing: -0.34, marginTop: 8 }}>
             {card.name}
           </Texto>
-          <Texto style={[type.caption, { color: "rgba(255,255,255,0.7)", marginTop: 2 }]}>
-            {card.kind === "credit" ? "Crédito" : "Débito"}
-          </Texto>
         </View>
-
-        {estourado ? (
-          <View
-            style={{
-              backgroundColor: "rgba(0,0,0,0.35)",
-              borderRadius: radius.sm,
-              paddingHorizontal: space.sm,
-              paddingVertical: 2,
-            }}
-          >
-            <Texto style={[type.label, { color: "#fff" }]}>SEM LIMITE</Texto>
-          </View>
-        ) : null}
+        <CreditCard size={22} color={palette.inkSubtle} />
       </View>
 
-      {/* O chip. Pequeno detalhe, mas é o que faz o retângulo virar cartão. */}
-      <View
-        style={{
-          width: 34,
-          height: 25,
-          borderRadius: radius.xs,
-          backgroundColor: "#d9c48f",
-          borderWidth: 1,
-          borderColor: "rgba(0,0,0,0.15)",
-        }}
-      />
-
-      <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: space.md }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Texto style={[type.bodySm, { color: "rgba(255,255,255,0.9)", letterSpacing: 2.5 }]}>
-            •••• ••••
-          </Texto>
-          <Texto style={[type.caption, { color: "rgba(255,255,255,0.65)", marginTop: 3 }]}>
-            {card.kind === "credit"
-              ? `fecha ${relativeDate(resumo.dueDate, hoje as never)}`
-              : "sai direto do saldo"}
-          </Texto>
-        </View>
-
-        {card.kind === "credit" ? (
-          <View style={{ alignItems: "flex-end" }}>
-            <Texto style={[type.label, { color: "rgba(255,255,255,0.6)" }]}>
-              {formatCompetence(resumo.competence).toUpperCase()}
+      <View>
+        <Texto style={{ color: palette.inkMuted, fontSize: 15, lineHeight: 17, fontWeight: "500", letterSpacing: 2.7 }}>••••</Texto>
+        <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 11, marginTop: 14 }}>
+          <View>
+            <Texto style={{ color: palette.inkSubtle, fontSize: 11, lineHeight: 14 }}>Fatura atual</Texto>
+            <Texto style={{ color: palette.ink, fontSize: 24, lineHeight: 26, fontWeight: "500", letterSpacing: -0.67, marginTop: 3 }}>
+              {card.kind === "credit" ? money(resumo.outstanding) : "Débito"}
             </Texto>
-            <Texto style={[type.bodyStrong, { color: "#fff" }]}>{money(resumo.outstanding)}</Texto>
           </View>
-        ) : null}
+          <View style={{ alignItems: "flex-end" }}>
+            <Texto style={{ color: palette.inkSubtle, fontSize: 11, lineHeight: 14 }}>Disponível</Texto>
+            <Texto style={{ color: palette.inkMuted, fontSize: 14, lineHeight: 16, fontWeight: "500", marginTop: 3 }}>
+              {resumo.available === null ? "—" : money(resumo.available)}
+            </Texto>
+          </View>
+        </View>
       </View>
     </View>
   );

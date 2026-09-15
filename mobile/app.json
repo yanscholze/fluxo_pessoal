@@ -2,19 +2,19 @@
   "expo": {
     "name": "Fluxo",
     "slug": "fluxo-pessoal",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "owner": "yan.scholze",
     "scheme": "fluxo",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 23,
+      "versionCode": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#35b7aa"
+        "backgroundColor": "#161826"
       },
       "predictiveBackGestureEnabled": true
     },
@@ -26,21 +26,11 @@
         }
       ],
       "expo-sqlite",
-      [
-        "expo-font",
-        {
-          "fonts": [
-            "./assets/fonts/Figtree-Regular.ttf",
-            "./assets/fonts/Figtree-Medium.ttf",
-            "./assets/fonts/Figtree-SemiBold.ttf",
-            "./assets/fonts/Figtree-Bold.ttf"
-          ]
-        }
-      ],
+      "expo-font",
       [
         "expo-notifications",
         {
-          "color": "#35b7aa",
+          "color": "#9184d9",
           "defaultChannel": "avisos"
         }
       ]

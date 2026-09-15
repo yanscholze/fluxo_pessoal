@@ -18,11 +18,13 @@ import { useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { cents } from "@fluxo/core/kernel/money.ts";
 import { call } from "../net/client.ts";
 import { useConnectedSession } from "../state/session.tsx";
 import { useRemoto } from "../state/remote.tsx";
-import { fetchAssistente, type RespostaDoAssistente } from "../net/views.ts";
+import { fetchAssistente, fetchDashboard, type DashboardView, type RespostaDoAssistente } from "../net/views.ts";
 import { familiaDoPeso } from "../ui/fonts.ts";
+import { money } from "../ui/format.ts";
 import { Body, Button, Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
@@ -43,6 +45,7 @@ export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
   const estado = useRemoto(fetchAssistente);
+  const painel = useRemoto(fetchDashboard);
 
   const [pergunta, setPergunta] = useState("");
   const [resposta, setResposta] = useState<RespostaDoAssistente | null>(null);
@@ -79,22 +82,18 @@ export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
   const restantes = estado.dados?.advice.remaining ?? null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}
         keyboardShouldPersistTaps="handled"
       >
         <View>
-          <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.6 }]}>
-            TARS // STATUS DO FLUXO
-          </Texto>
-          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 4 }]}>
-            Tudo que pede sua atenção.
-          </Texto>
-          <Small style={{ marginTop: 2 }}>
-            Pergunte sobre o seu dinheiro. A resposta usa os seus números, não exemplos.
-          </Small>
+          <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.8 }]}>TARS // SISTEMA FINANCEIRO</Texto>
+          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 6 }]}>Status do Fluxo</Texto>
+          <Small style={{ marginTop: 3 }}>Visão imediata do ciclo e comando do assistente.</Small>
         </View>
+
+        <NucleoTars dados={painel.dados} />
 
         {!configurado ? (
           <Notice tone="caution">
@@ -223,4 +222,60 @@ export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function NucleoTars({ dados }: { dados: DashboardView | null }) {
+  const palette = usePalette();
+  const alertas = dados
+    ? [
+        ...dados.cards.filter((item) => (item.currentInvoice?.outstandingCents ?? 0) > 0).slice(0, 2).map((item) => `${item.name}: ${money(cents(item.currentInvoice?.outstandingCents ?? 0))}`),
+        ...dados.openTasks.slice(0, 2).map((item) => item.title),
+      ]
+    : [];
+
+  return (
+    <View style={{ borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surfaceSunken, padding: 12, overflow: "hidden" }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <Texto style={[type.label, { color: palette.inkSubtle }]}>NÚCLEO // ONLINE</Texto>
+        <Texto style={[type.label, { color: palette.accent }]}>CICLO ATIVO</Texto>
+      </View>
+
+      <View style={{ height: 276, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ position: "absolute", width: 250, height: 250, borderRadius: 125, borderWidth: 1, borderColor: palette.accentEdge }} />
+        <View style={{ position: "absolute", width: 204, height: 204, borderRadius: 102, borderWidth: 1, borderColor: palette.lineStrong }} />
+        <View style={{ position: "absolute", width: 142, height: 142, borderRadius: 71, borderWidth: 1, borderColor: palette.accentEdge }} />
+        <View style={{ position: "absolute", width: 86, height: 86, borderRadius: 43, borderWidth: 2, borderColor: palette.accent }} />
+        <View style={{ position: "absolute", left: 30, right: 30, height: 1, backgroundColor: palette.accentEdge, opacity: 0.45 }} />
+        <View style={{ position: "absolute", top: 18, bottom: 18, width: 1, backgroundColor: palette.accentEdge, opacity: 0.45 }} />
+        <View style={{ zIndex: 2, width: 190, alignItems: "center" }}>
+          <Texto style={[type.label, { color: palette.inkSubtle }]}>LIVRE PARA GASTAR</Texto>
+          <Texto style={{ color: dados && dados.freeToSpend.amountCents < 0 ? palette.negative : palette.accent, fontSize: 27, lineHeight: 32, fontWeight: "500", letterSpacing: -0.8, marginTop: 6 }}>
+            {dados ? money(cents(dados.freeToSpend.amountCents)) : "—"}
+          </Texto>
+          <Small style={{ textAlign: "center", marginTop: 4 }}>projeção do ciclo</Small>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.line, borderBottomWidth: 1, borderBottomColor: palette.line }}>
+        <PainelTars label="Em conta" value={dados ? money(cents(dados.freeToSpend.liquidBalanceCents)) : "—"} />
+        <View style={{ width: 1, backgroundColor: palette.line }} />
+        <PainelTars label="Faturas" value={dados ? money(cents(dados.freeToSpend.openInvoicesCents)) : "—"} />
+      </View>
+
+      <View style={{ marginTop: 12 }}>
+        <Texto style={[type.label, { color: palette.inkSubtle }]}>SINAIS PRIORITÁRIOS</Texto>
+        {alertas.length ? alertas.map((alerta, indice) => (
+          <View key={`${alerta}-${indice}`} style={{ flexDirection: "row", gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.line }}>
+            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.accent, marginTop: 7 }} />
+            <Small tone="muted" style={{ flex: 1 }}>{alerta}</Small>
+          </View>
+        )) : <Small style={{ marginTop: 8 }}>Nenhuma pendência crítica detectada.</Small>}
+      </View>
+    </View>
+  );
+}
+
+function PainelTars({ label, value }: { label: string; value: string }) {
+  const palette = usePalette();
+  return <View style={{ flex: 1, paddingVertical: 11, paddingHorizontal: 8 }}><Texto style={[type.label, { color: palette.inkSubtle }]}>{label.toUpperCase()}</Texto><Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 4 }]}>{value}</Texto></View>;
 }

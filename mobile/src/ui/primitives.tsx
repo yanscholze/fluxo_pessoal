@@ -42,10 +42,8 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
       style={[
         {
           backgroundColor: palette.surface,
-          borderColor: palette.line,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderRadius: radius.xl,
-          padding: space.lg,
+          borderRadius: radius.md,
+          padding: space.md,
         },
         style,
       ]}
@@ -58,7 +56,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 export function Label({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const palette = usePalette();
   return (
-    <Texto style={[type.label, { color: palette.inkSubtle, textTransform: "uppercase" }, style]}>
+    <Texto style={[type.label, { color: palette.accent, textTransform: "uppercase" }, style]}>
       {children}
     </Texto>
   );
@@ -158,9 +156,9 @@ export function Button({
 
   const fundo = {
     primary: palette.accent,
-    secondary: palette.surfaceSunken,
+    secondary: palette.surface,
     ghost: "transparent",
-    danger: palette.negativeWash,
+    danger: "transparent",
   }[variant];
 
   const texto = {
@@ -179,14 +177,15 @@ export function Button({
       style={({ pressed }) => [
         {
           backgroundColor: fundo,
-          borderRadius: radius.lg,
-          paddingVertical: 14,
+          minHeight: 40,
+          borderRadius: radius.md,
+          paddingVertical: 10,
           paddingHorizontal: space.lg,
           alignItems: "center",
           justifyContent: "center",
           opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
-          borderWidth: variant === "ghost" || variant === "secondary" ? StyleSheet.hairlineWidth : 0,
-          borderColor: palette.line,
+          borderWidth: variant === "secondary" || variant === "danger" ? 1 : 0,
+          borderColor: variant === "danger" ? palette.negative : palette.line,
         },
         style,
       ]}
@@ -214,8 +213,9 @@ export function Row({
           alignItems: "center",
           justifyContent: "space-between",
           gap: space.md,
-          paddingVertical: space.md,
-          borderBottomWidth: StyleSheet.hairlineWidth,
+          minHeight: 44,
+          paddingVertical: space.lg,
+          borderBottomWidth: 1,
           borderBottomColor: palette.line,
         },
         style,
@@ -265,7 +265,7 @@ export function Notice({
   }[tone];
 
   return (
-    <View style={{ backgroundColor: fundo, borderRadius: radius.md, padding: space.md }}>
+    <View style={{ backgroundColor: fundo, borderLeftWidth: 1, borderLeftColor: cor, padding: space.lg }}>
       <Texto style={[type.bodySm, { color: cor }]}>{children}</Texto>
     </View>
   );

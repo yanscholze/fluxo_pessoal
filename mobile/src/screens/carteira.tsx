@@ -71,7 +71,7 @@ const LIMIAR = 90;
 /** Mola única para toda a tela: dois tempos diferentes leriam como dois eventos. */
 const MOLA = { damping: 18, stiffness: 190, mass: 0.9 } as const;
 
-export function CarteiraScreen() {
+export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParcelamentos: () => void; onOpenTransaction: (id: string) => void }) {
   const palette = usePalette();
   const { overview, sync, synchronize } = useLedger();
   const [ativo, setAtivo] = useState(0);
@@ -174,6 +174,13 @@ export function CarteiraScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <View style={{ paddingHorizontal: 17, paddingTop: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Texto style={[type.title, { color: palette.ink }]}>Cartões</Texto>
+        <Pressable onPress={onParcelamentos} style={({ pressed }) => ({ minHeight: 40, justifyContent: "center", paddingHorizontal: 8, opacity: pressed ? 0.62 : 1 })}>
+          <Small tone="muted">Parcelamentos</Small>
+        </Pressable>
+      </View>
+      <View style={{ position: "absolute", left: (LARGURA_DA_TELA - 420) / 2, top: -145, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.68 }} />
       <GestureDetector gesture={gesto}>
         <Animated.View style={{ paddingTop: space.xl }}>
           <ScrollView
@@ -262,6 +269,7 @@ export function CarteiraScreen() {
               hoje={hoje}
               aoFechar={fechar}
               aoAtualizar={() => void synchronize()}
+              onOpenTransaction={onOpenTransaction}
             /> : null}
         </ScrollView>
       </Animated.View>
@@ -274,13 +282,16 @@ function Detalhe({
   hoje,
   aoFechar,
   aoAtualizar,
+  onOpenTransaction,
 }: {
   resumo: CardSummary;
   hoje: string;
   aoFechar: () => void;
   aoAtualizar: () => void;
+  onOpenTransaction: (id: string) => void;
 }) {
   const palette = usePalette();
+  const { transactions } = useLedger();
   const { card } = resumo;
 
   if (card.kind !== "credit") {
@@ -300,6 +311,9 @@ function Detalhe({
 
   const usado = card.limit > 0 ? card.limit - (resumo.available ?? 0) : 0;
   const fecha = resumo.daysToClosing;
+  const lancamentosDaFatura = transactions.filter(
+    (item) => item.cardId === card.id && item.competence === resumo.competence,
+  );
 
   return (
     <>
@@ -343,6 +357,21 @@ function Detalhe({
         <Small style={{ marginTop: space.xs }}>
           {money(cents(resumo.available ?? 0))} livres · inclui parcelas futuras
         </Small>
+      </Card>
+
+      <Card>
+        <Label>Lançamentos da fatura</Label>
+        <View style={{ marginTop: space.sm }}>
+          {lancamentosDaFatura.length ? lancamentosDaFatura.map((item) => (
+            <Row key={item.id} onPress={() => onOpenTransaction(item.id)}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Body numberOfLines={1}>{item.description}</Body>
+                <Small>{relativeDate(item.occurredOn as never)}{item.installmentNumber ? ` · ${item.installmentNumber}ª parcela` : ""}</Small>
+              </View>
+              <Body strong>− {money(item.amount)}</Body>
+            </Row>
+          )) : <Empty title="Nenhum lançamento nesta fatura" />}
+        </View>
       </Card>
 
       <Card>

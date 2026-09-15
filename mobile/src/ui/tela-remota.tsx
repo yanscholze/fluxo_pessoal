@@ -76,9 +76,9 @@ export function TelaRemota<T>({
   }));
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
       <ScrollView
-        contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
+        contentContainerStyle={{ padding: 17, paddingBottom: 34, gap: 17 }}
         refreshControl={
           <RefreshControl
             refreshing={remoto.carregando}

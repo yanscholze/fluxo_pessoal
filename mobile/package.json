@@ -1,6 +1,6 @@
 {
   "name": "fluxo-android",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "main": "index.ts",
@@ -12,6 +12,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@fluxo/core": "file:../core",
     "expo": "~57.0.22",
     "expo-constants": "~57.0.6",
@@ -27,11 +28,13 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "phosphor-react-native": "^3.0.6",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

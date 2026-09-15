@@ -37,6 +37,12 @@ const FILTROS: readonly { readonly id: Filtro; readonly rotulo: string }[] = [
   { id: "previsto", rotulo: "Previsto" },
 ];
 
+const COMPETENCIA_CURTA = new Intl.DateTimeFormat("pt-BR", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 /** Forma canônica para comparar texto digitado com descrição salva. */
 function normalizar(valor: string): string {
   return valor
@@ -52,6 +58,19 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
 
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
+  const competenciaAtual = hojeCompetencia();
+  const totaisDoMes = useMemo(
+    () => transactions
+      .filter((item) => item.competence === competenciaAtual && item.state === "confirmed")
+      .reduce(
+        (total, item) => ({
+          entrada: total.entrada + (item.kind === "income" ? item.amount : 0),
+          saida: total.saida + (item.kind === "expense" ? item.amount : 0),
+        }),
+        { entrada: 0, saida: 0 },
+      ),
+    [transactions, competenciaAtual],
+  );
 
   const nomeDaCategoria = useMemo(
     () => new Map(categories.map((categoria) => [categoria.id, categoria.name])),
@@ -110,13 +129,24 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
   }, [transactions, filtro, busca, nomeDaCategoria]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
-      <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, gap: space.md }}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <View style={{ paddingHorizontal: 17, paddingTop: 17, gap: 17 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Texto style={[type.title, { color: palette.ink }]}>Extrato</Texto>
-          <Small>
-            {total} {total === 1 ? "lançamento" : "lançamentos"}
-          </Small>
+          <View style={{ borderWidth: 1, borderColor: palette.accent, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6 }}>
+            <Small style={{ color: palette.accent }}>{rotuloCompetencia(competenciaAtual)}</Small>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 17 }}>
+          <View style={{ flex: 1, paddingLeft: 11, borderLeftWidth: 1, borderLeftColor: palette.line }}>
+            <Small>Entrou</Small>
+            <Texto style={[type.figureSm, { color: palette.ink, marginTop: 3 }]}>{numero(money(cents(totaisDoMes.entrada)))}</Texto>
+          </View>
+          <View style={{ flex: 1, paddingLeft: 11, borderLeftWidth: 1, borderLeftColor: palette.line }}>
+            <Small>Saiu</Small>
+            <Texto style={[type.figureSm, { color: palette.inkMuted, marginTop: 3 }]}>{numero(money(cents(totaisDoMes.saida)))}</Texto>
+          </View>
         </View>
 
         <TextInput
@@ -130,7 +160,7 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
             height: 42,
             paddingHorizontal: space.md,
             borderRadius: radius.md,
-            backgroundColor: palette.surfaceSunken,
+            backgroundColor: "transparent",
             borderWidth: 1,
             borderColor: palette.line,
             color: palette.ink,
@@ -138,7 +168,7 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
           }}
         />
 
-        <View style={{ flexDirection: "row", gap: space.sm }}>
+        <View style={{ flexDirection: "row", gap: 6 }}>
           {FILTROS.map((opcao) => {
             const ativo = filtro === opcao.id;
             return (
@@ -150,22 +180,21 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
                 // O recuo no toque é o que dá peso ao filtro: ele reordena a
                 // tela inteira, e sem resposta tátil o dedo não sabe se pegou.
                 style={({ pressed }) => ({
-                  flex: 1,
-                  height: 34,
+                  minHeight: 38,
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRadius: radius.pill,
-                  backgroundColor: ativo ? palette.accentWash : palette.surfaceSunken,
-                  borderWidth: 1,
-                  borderColor: ativo ? palette.accentEdge : palette.line,
-                  transform: [{ scale: pressed ? 0.96 : 1 }],
+                  paddingHorizontal: 13,
+                  borderRadius: radius.md,
+                  backgroundColor: ativo ? palette.surface : "transparent",
+                  borderWidth: ativo ? 1 : 0,
+                  borderColor: palette.line,
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
                 <Texto
                   style={[
                     type.caption,
-                    { color: ativo ? palette.accent : palette.inkMuted, fontWeight: ativo ? "600" : "400" },
+                    { color: ativo ? palette.ink : palette.inkMuted, fontWeight: ativo ? "500" : "400" },
                   ]}
                 >
                   {opcao.rotulo}
@@ -180,8 +209,8 @@ export function ExtratoScreen({ onOpenTransaction }: { onOpenTransaction: (id: s
         sections={secoes}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
-          paddingHorizontal: space.lg,
-          paddingTop: space.md,
+          paddingHorizontal: 17,
+          paddingTop: 8,
           paddingBottom: space.xxl * 2,
         }}
         stickySectionHeadersEnabled={false}
@@ -290,38 +319,14 @@ function Linha({
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
-        gap: space.md,
-        minHeight: 56,
-        paddingHorizontal: space.md,
-        paddingVertical: space.sm + 2,
-        backgroundColor: pressed ? palette.surfaceInset : palette.surface,
-        borderTopLeftRadius: primeira ? radius.lg : 0,
-        borderTopRightRadius: primeira ? radius.lg : 0,
-        borderBottomLeftRadius: ultima ? radius.lg : 0,
-        borderBottomRightRadius: ultima ? radius.lg : 0,
-        borderTopWidth: primeira ? 0 : 1,
+        gap: 11,
+        minHeight: 48,
+        paddingVertical: 11,
+        backgroundColor: pressed ? palette.surface : "transparent",
+        borderTopWidth: 1,
         borderTopColor: palette.line,
       })}
     >
-      <View
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: radius.pill,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: entrada
-            ? palette.positiveWash
-            : transferencia
-              ? palette.infoWash
-              : palette.surfaceInset,
-        }}
-      >
-        <Texto style={[type.bodyStrong, { color: cor }]}>
-          {transferencia ? "⇄" : entrada ? "↑" : "↓"}
-        </Texto>
-      </View>
-
       <View style={{ flex: 1, minWidth: 0 }}>
         <Texto
           style={[type.body, { color: previsto ? palette.inkMuted : palette.ink }]}
@@ -353,4 +358,21 @@ function Linha({
       </View>
     </Pressable>
   );
+}
+
+function hojeCompetencia(): string {
+  const hoje = todayIn() as string;
+  return hoje.slice(0, 7);
+}
+
+function rotuloCompetencia(valor: string): string {
+  const [ano, mes] = valor.split("-").map(Number);
+  return COMPETENCIA_CURTA
+    .format(new Date(Date.UTC(ano, mes - 1, 1)))
+    .replace(" de ", " ")
+    .replace(".", "");
+}
+
+function numero(valor: string): string {
+  return valor.replace(/^R\$\s*/, "");
 }

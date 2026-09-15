@@ -1,429 +1,236 @@
-/**
- * Painel.
- *
- * A tela responde de cima para baixo, na ordem em que as perguntas aparecem:
- * quanto sobra, quanto existe, para onde está indo, o que vence, o que saiu.
- *
- * O primeiro bloco é o único com destaque — número grande, superfície própria,
- * cor. Todo o resto recua. Foi tentando dar destaque a tudo que a versão
- * anterior virou uma pilha de cartões iguais em que nada saltava: com oito
- * caixas idênticas, a leitura vira busca.
- *
- * Nenhum número é calculado aqui, e nenhum é derivado no aparelho.
- *
- * Antes eram derivados do razão sincronizado, chamando a mesma função de
- * domínio que o site chama. Mesma função, entradas diferentes: o sync carrega
- * lançamento e mais nada, então o aparelho não sabia quais categorias ficam
- * fora da folga nem que o vale é bolso à parte. O site dizia R$ 951,27 e o
- * celular dizia -R$ 2.556,47 para o mesmo dinheiro, no mesmo dia — e o usuário
- * não tinha como saber qual acreditar.
- *
- * Agora o painel é o do servidor, o mesmo que o site desenha. O razão local
- * continua servindo para o extrato sem rede e para enfileirar lançamento
- * offline; a **conta** vem de um lugar só.
- */
-
+import type { ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import {
+  CalendarDots,
+  CaretRight,
+  ChartLine,
+  CreditCard,
+  GearSix,
+  ListNumbers,
+  Robot,
+  Target,
+  Tray,
+  Wallet,
+} from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { competenceOf, formatShort } from "@fluxo/core/time/competence.ts";
+import { cents, type Cents } from "@fluxo/core/kernel/money.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
-import { type Cents, cents } from "@fluxo/core/kernel/money.ts";
-import { fetchDashboard } from "../net/views.ts";
+import type { Tela } from "../shell.tsx";
+import { fetchDashboard, fetchProjetos } from "../net/views.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { useRemoto } from "../state/remote.tsx";
 import { useConnectedSession } from "../state/session.tsx";
-import { FaixaDeIndicadores, GraficoDeCategorias, GraficoMensal, Sparkbars } from "../ui/charts.tsx";
-import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
-import { Pendencias } from "../ui/pendencias.tsx";
+import { money, relativeDate } from "../ui/format.ts";
 import { Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
+const DATA_LONGA = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
 export function InicioScreen({
   onOpenTransaction,
-  onAbrirAjustes,
+  onNavigate,
 }: {
   onOpenTransaction: (id: string) => void;
-  onAbrirAjustes: () => void;
+  onNavigate: (tela: Tela) => void;
 }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
-  const { charts, transactions, sync, synchronize } = useLedger();
+  const { transactions, sync, synchronize } = useLedger();
   const painel = useRemoto(fetchDashboard);
+  const projetos = useRemoto(fetchProjetos);
   const dados = painel.dados;
-
   const hoje = todayIn();
-  const competencia = competenceOf(hoje);
-  const recentes = transactions.filter((item) => item.occurredOn <= hoje).slice(0, 6);
+  const recentes = transactions.filter((item) => item.occurredOn <= hoje).slice(0, 4);
+  const nome = credentials.user.displayName.split(" ")[0];
+  const comprometido = dados
+    ? dados.freeToSpend.openInvoicesCents + dados.freeToSpend.otherCommitmentsCents
+    : 0;
 
-  const aVencer = (dados?.cards ?? [])
-    .filter((cartao) => (cartao.currentInvoice?.outstandingCents ?? 0) > 0)
-    .sort((esquerda, direita) =>
-      (esquerda.currentInvoice?.dueDate ?? "").localeCompare(direita.currentInvoice?.dueDate ?? ""),
-    );
+  const atualizar = () => {
+    void synchronize();
+    painel.recarregar();
+    projetos.recarregar();
+  };
 
-  const negativo = dados !== null && dados.freeToSpend.amountCents < 0;
+  const atalho = (label: string, tela: Tela, icon: ReactNode) => ({ label, tela, icon });
+  const atalhos = [
+    atalho("TARS", "assistente", <Robot size={17} color={palette.accent} />),
+    atalho("Capturas", "capturas", <Tray size={17} color={palette.accent} />),
+    atalho("Cartões", "cartoes", <CreditCard size={17} color={palette.accent} />),
+    atalho("Parcelamentos", "parcelamentos", <ListNumbers size={17} color={palette.accent} />),
+    atalho("Orçamento", "orcamentos", <Target size={17} color={palette.accent} />),
+    atalho("Recorrências", "recorrencias", <CalendarDots size={17} color={palette.accent} />),
+    atalho("Visão geral", "patrimonio", <Wallet size={17} color={palette.accent} />),
+    atalho("Relatórios", "relatorios", <ChartLine size={17} color={palette.accent} />),
+  ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
       <ScrollView
-        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl * 2 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={sync.running || painel.carregando}
-            onRefresh={() => {
-              void synchronize();
-              painel.recarregar();
-            }}
-            tintColor={palette.accent}
-          />
-        }
+        contentContainerStyle={{ paddingHorizontal: 17, paddingTop: 17, gap: 17, paddingBottom: 34 }}
+        refreshControl={<RefreshControl refreshing={sync.running || painel.carregando} onRefresh={atualizar} tintColor={palette.accent} />}
       >
-        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <View style={{ gap: 2 }}>
-            <Texto style={[type.title, { color: palette.ink }]}>
-              Olá, {credentials.user.displayName.split(" ")[0]}
-            </Texto>
-            <Small>{formatCompetence(competencia)}</Small>
-          </View>
+        <View style={{ position: "absolute", left: -180, top: -210, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.62 }} />
 
-          {/* Ajustes saiu da barra de abas: é visitado uma vez por mês, e
-              ocupava um quarto da navegação permanente por isso. */}
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 11 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.65 }]}>
+              {dataLonga(dados?.today ?? hoje).toUpperCase()}
+            </Texto>
+            <Texto style={[type.title, { color: palette.ink, marginTop: 6 }]}>Olá, {nome}</Texto>
+          </View>
           <Pressable
-            onPress={onAbrirAjustes}
-            hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel="Ajustes"
-            style={({ pressed }) => ({
-              width: 36,
-              height: 36,
-              borderRadius: radius.pill,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: palette.surfaceSunken,
-              opacity: pressed ? 0.7 : 1,
-            })}
+            onPress={() => onNavigate("configuracoes")}
+            style={({ pressed }) => ({ width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? palette.surfaceRaised : palette.surface })}
           >
-            <Texto style={[type.body, { color: palette.inkMuted }]}>⚙</Texto>
-            {sync.unresolved > 0 ? (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 6,
-                  right: 6,
-                  width: 7,
-                  height: 7,
-                  borderRadius: radius.pill,
-                  backgroundColor: palette.caution,
-                }}
-              />
-            ) : null}
+            <GearSix size={19} color={palette.inkMuted} />
+            {sync.unresolved > 0 ? <View style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent }} /> : null}
           </Pressable>
         </View>
 
-        {sync.offline || painel.offline ? (
-          <Notice tone="caution">
-            Sem conexão. Os lançamentos ficam salvos aqui e sobem quando a rede voltar — mas os
-            números acima são calculados no servidor, e sem alcançá-lo eles ficam em branco em vez
-            de mostrar uma conta que talvez já não valha.
-          </Notice>
-        ) : null}
-
-        {sync.pending > 0 ? (
-          <Notice tone="info">
-            {sync.pending === 1 ? "1 lançamento aguardando envio." : `${sync.pending} lançamentos aguardando envio.`}
-          </Notice>
-        ) : null}
-
-        {sync.unresolved > 0 ? (
-          <Notice tone="negative">
-            {sync.unresolved === 1
-              ? "1 alteração precisa da sua decisão. Veja em Ajustes."
-              : `${sync.unresolved} alterações precisam da sua decisão. Veja em Ajustes.`}
-          </Notice>
-        ) : null}
-
-        {/*
-          O único bloco com superfície própria e cor.
-          A pergunta principal, sozinha, no tamanho que não deixa dúvida.
-        */}
-        <View
-          style={{
-            backgroundColor: negativo ? palette.negativeWash : palette.accentWash,
-            borderWidth: 1,
-            borderColor: negativo ? palette.negative + "40" : palette.accentEdge,
-            borderRadius: radius.xl,
-            padding: space.lg,
-          }}
-        >
-          <Label>Livre para gastar</Label>
-          <Texto
-            style={[
-              type.display,
-              { color: negativo ? palette.negative : palette.ink, marginTop: space.xs },
-            ]}
-          >
-            {dados ? money(cents(dados.freeToSpend.amountCents)) : "—"}
-          </Texto>
-          <Small style={{ marginTop: space.xs }}>
-            {negativo
-              ? "Os compromissos assumidos passam do que você tem."
-              : "Quanto pode sair hoje sem furar nenhum compromisso."}
+        <View>
+          <Texto style={[type.label, { color: palette.inkSubtle }]}>LIVRE PARA GASTAR</Texto>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 8, paddingBottom: 11, borderBottomWidth: 1, borderBottomColor: palette.accent }}>
+            <Texto style={{ fontSize: 18, lineHeight: 20, fontWeight: "500", color: palette.inkSubtle }}>R$</Texto>
+            <Texto style={[type.display, { color: dados && dados.freeToSpend.amountCents < 0 ? palette.negative : palette.ink }]}>
+              {dados ? numero(money(cents(dados.freeToSpend.amountCents))) : "—"}
+            </Texto>
+          </View>
+          <Small style={{ marginTop: 11, lineHeight: 19 }}>
+            {dados
+              ? `Medido no dia mais apertado até ${relativeDate(dados.freeToSpend.windowEnd as never)}${dados.freeToSpend.pendingIncomeCents > 0 ? ` · ${money(cents(dados.freeToSpend.pendingIncomeCents))} a receber no período.` : "."}`
+              : "Carregando a posição financeira do ciclo."}
           </Small>
-
-          <FaixaDeIndicadores>
-            <View style={{ flex: 1 }}>
-              <Label>Em conta</Label>
-              <Texto style={[type.figureSm, { color: palette.ink, marginTop: 2 }]}>
-                {dados ? money(cents(dados.freeToSpend.liquidBalanceCents)) : "—"}
-              </Texto>
-            </View>
-            <View
-              style={{ width: 1, backgroundColor: palette.line, marginHorizontal: space.md }}
-            />
-            <View style={{ flex: 1 }}>
-              <Label>Faturas em aberto</Label>
-              <Texto style={[type.figureSm, { color: palette.inkMuted, marginTop: 2 }]}>
-                {dados ? money(cents(dados.freeToSpend.openInvoicesCents)) : "—"}
-              </Texto>
-            </View>
-          </FaixaDeIndicadores>
-
-          {/* A conta precisa ser auditável: o mesmo saldo, entradas e
-              compromissos exibidos acima fecham o livre do ciclo. */}
-          {dados ? (
-            <>
-              <Small style={{ marginTop: space.md }}>
-                Sobra do ciclo até {relativeDate(dados.freeToSpend.windowEnd as never)}
-                {dados.freeToSpend.pendingIncomeCents > 0
-                  ? ` · ${money(cents(dados.freeToSpend.pendingIncomeCents))} a receber no período`
-                  : ""}
-              </Small>
-              {/* O vale já integra a conta do ciclo e fica identificado. */}
-              {dados.benefitFreeToSpend ? (
-                <Small style={{ marginTop: 4 }}>
-                  inclui {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação
-                </Small>
-              ) : null}
-            </>
+          <View style={{ flexDirection: "row", gap: 17, marginTop: 17 }}>
+            <MetricaSecundaria label="Em conta" value={dados ? numero(money(cents(dados.freeToSpend.liquidBalanceCents))) : "—"} />
+            <MetricaSecundaria label="Comprometido" value={dados ? numero(money(cents(comprometido))) : "—"} muted />
+          </View>
+          {dados?.benefitFreeToSpend ? (
+            <Small style={{ marginTop: 9 }}>Inclui {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação.</Small>
           ) : null}
         </View>
 
-        {/*
-          O que falta fazer, logo depois de quanto sobra.
+        {sync.offline || painel.offline ? <Notice tone="caution">Sem conexão. Novos lançamentos ficam salvos no aparelho até a rede voltar.</Notice> : null}
+        {sync.pending > 0 ? <Notice tone="info">{sync.pending} lançamento{sync.pending === 1 ? "" : "s"} aguardando envio.</Notice> : null}
+        {sync.unresolved > 0 ? <Notice tone="negative">{sync.unresolved} alteração{sync.unresolved === 1 ? " precisa" : " precisam"} da sua decisão.</Notice> : null}
 
-          É a segunda pergunta de quem abre o aplicativo de manhã, e ela morava
-          no fim da tela de Trabalho — atrás da lista de projetos, que responde
-          outra coisa. O cartão some sozinho quando não há pendência nenhuma.
-        */}
-        <Pendencias
-          tarefas={dados?.openTasks ?? []}
-          today={hoje}
-          onMudou={() => painel.recarregar()}
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 17 }}>
+          {atalhos.map((item) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => onNavigate(item.tela)}
+              style={({ pressed }) => ({ minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 13, borderRadius: radius.md, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, opacity: pressed ? 0.65 : 1 })}
+            >
+              {item.icon}
+              <Texto style={[type.bodySm, { color: palette.ink }]}>{item.label}</Texto>
+            </Pressable>
+          ))}
+        </ScrollView>
 
-        {charts.balanceDays.length > 1 ? (
+        {dados && (dados.upcoming.length > 0 || dados.openTasks.length > 0) ? (
           <Card>
-            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
-              <View>
-                <Label>Saldo nos últimos 30 dias</Label>
-                <Small style={{ marginTop: 2 }}>
-                  {(() => {
-                    const inicio = charts.balanceDays[0];
-                    const fim = charts.balanceDays[charts.balanceDays.length - 1];
-                    const delta = fim - inicio;
-                    return delta === 0
-                      ? "sem variação no período"
-                      : `${delta > 0 ? "+" : "−"} ${money(cents(Math.abs(delta)))} no período`;
-                  })()}
-                </Small>
-              </View>
+            <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
+              <Label>Agenda do ciclo</Label>
+              <Small>{dados.upcoming.length + dados.openTasks.length} itens</Small>
             </View>
-            <View style={{ marginTop: space.md }}>
-              <Sparkbars
-                valores={charts.balanceDays}
-                cor={
-                  charts.balanceDays[charts.balanceDays.length - 1] >= charts.balanceDays[0]
-                    ? palette.positive
-                    : palette.negative
-                }
-              />
+            <View style={{ marginTop: 8 }}>
+              {dados.upcoming.slice(0, 3).map((item) => (
+                <LinhaAgenda key={`${item.date}-${item.description}`} titulo={item.description} meta={`${relativeDate(item.date as never)} · ${money(cents(item.amountCents))}`} icon={<CalendarDots size={18} color={palette.accent} />} />
+              ))}
+              {dados.openTasks.slice(0, Math.max(0, 4 - dados.upcoming.slice(0, 3).length)).map((item) => (
+                <LinhaAgenda key={item.id} titulo={item.title} meta={`${item.projectName} · ${item.dueOn ? relativeDate(item.dueOn as never) : "sem prazo"}`} icon={<Target size={18} color={palette.inkSubtle} />} />
+              ))}
             </View>
           </Card>
         ) : null}
 
-        <Card>
-          <Label>Entrou e saiu</Label>
-          <Small style={{ marginTop: 2, marginBottom: space.md }}>Últimos seis meses</Small>
-
-          <GraficoMensal
-            barras={charts.monthly.map((ponto) => ({
-              rotulo: formatShort(ponto.competence).replace(/\.$/, ""),
-              entrada: ponto.income,
-              saida: ponto.expense,
-              atual: ponto.competence === competencia,
-            }))}
-          />
-
-          <FaixaDeIndicadores>
-            <View style={{ flex: 1 }}>
-              <Small tone="positive">Entrou este mês</Small>
-              <Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 2 }]}>
-                {dados ? money(cents(dados.monthFlow.incomeCents)) : "—"}
-              </Texto>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Small tone="negative">Saiu este mês</Small>
-              <Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 2 }]}>
-                {dados ? money(cents(dados.monthFlow.expenseCents)) : "—"}
-              </Texto>
-            </View>
-          </FaixaDeIndicadores>
-        </Card>
-
-        {charts.byCategory.length ? (
+        {projetos.dados?.projects.length ? (
           <Card>
-            <Label>Para onde foi</Label>
-            <Small style={{ marginTop: 2, marginBottom: space.md }}>Gastos da competência</Small>
-            <GraficoDeCategorias
-              fatias={charts.byCategory.map((item, indice) => ({
-                id: item.categoryId ?? `sem-${indice}`,
-                rotulo: item.name,
-                valor: item.amount,
-                cor: item.color ?? palette.viz[indice % palette.viz.length],
-              }))}
-            />
-          </Card>
-        ) : null}
-
-        {aVencer.length ? (
-          <Card>
-            <Label>Faturas em aberto</Label>
-            <View style={{ gap: space.md, marginTop: space.md }}>
-              {aVencer.map((cartao) => (
-                <View key={cartao.id} style={{ gap: space.sm }}>
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
-                    <Texto style={[type.body, { flex: 1, color: palette.ink }]} numberOfLines={1}>
-                      {cartao.name}
-                    </Texto>
-                    <Texto style={[type.bodyStrong, { color: palette.ink }]}>
-                      {money(cents(cartao.currentInvoice?.outstandingCents ?? 0))}
-                    </Texto>
+            <CabecalhoDeCard titulo="Projetos ativos" acao="Ver todos" onPress={() => onNavigate("trabalho")} />
+            <View style={{ marginTop: 8 }}>
+              {projetos.dados.projects.slice(0, 2).map((projeto) => (
+                <Pressable key={projeto.id} onPress={() => onNavigate("trabalho")} style={({ pressed }) => ({ paddingVertical: 11, borderTopWidth: 1, borderTopColor: palette.line, opacity: pressed ? 0.62 : 1 })}>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+                    <Texto style={[type.body, { color: palette.ink, flex: 1 }]} numberOfLines={1}>{projeto.name}</Texto>
+                    <Texto style={[type.bodySm, { color: palette.accent, fontWeight: "500" }]}>{Math.round(projeto.percentReceived)}%</Texto>
                   </View>
-                  <Small>
-                    vence {relativeDate((cartao.currentInvoice?.dueDate ?? "") as never)} · fecha em{" "}
-                    {cartao.daysUntilClosing} dia{cartao.daysUntilClosing === 1 ? "" : "s"}
-                  </Small>
-                </View>
+                  <View style={{ height: 2, backgroundColor: palette.line, marginTop: 8 }}>
+                    <View style={{ height: 2, width: `${Math.min(100, Math.max(0, projeto.percentReceived))}%`, backgroundColor: palette.accent }} />
+                  </View>
+                  <Small style={{ marginTop: 8 }}>{projeto.openTasks} pendência{projeto.openTasks === 1 ? "" : "s"}{projeto.dueOn ? ` · prazo ${relativeDate(projeto.dueOn as never)}` : ""}</Small>
+                </Pressable>
               ))}
             </View>
           </Card>
         ) : null}
 
         <Card>
-          <Label>Últimos lançamentos</Label>
+          <CabecalhoDeCard titulo="Últimos lançamentos" acao="Ver extrato" onPress={() => onNavigate("lancamentos")} />
           {recentes.length ? (
-            <View style={{ marginTop: space.sm }}>
-              {recentes.map((item, indice) => (
-                <LinhaCompacta
-                  key={item.id}
-                  descricao={item.description}
-                  quando={relativeDate(item.occurredOn)}
-                  valor={item.amount}
-                  entrada={item.kind === "income"}
-                  previsto={item.state === "planned"}
-                  primeira={indice === 0}
-                  onPress={() => onOpenTransaction(item.id)}
-                />
-              ))}
+            <View style={{ marginTop: 8 }}>
+              {recentes.map((item) => <LinhaLancamento key={item.id} descricao={item.description} quando={relativeDate(item.occurredOn)} valor={item.amount} entrada={item.kind === "income"} previsto={item.state === "planned"} onPress={() => onOpenTransaction(item.id)} />)}
             </View>
-          ) : (
-            <View style={{ marginTop: space.sm }}>
-              <Empty
-                title="Nenhum lançamento ainda"
-                hint="Toque no botão de mais para registrar o primeiro."
-              />
-            </View>
-          )}
+          ) : <Empty title="Nenhum lançamento ainda" hint="Use o botão central para registrar o primeiro." />}
         </Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-/**
- * Linha do resumo.
- *
- * Mais enxuta que a do extrato de propósito: aqui a pergunta é "o que aconteceu
- * por último", não "onde caiu e em que categoria". Repetir as seis colunas do
- * extrato dentro de um cartão de resumo é o tipo de excesso que faz um painel
- * parecer uma planilha.
- */
-function LinhaCompacta({
-  descricao,
-  quando,
-  valor,
-  entrada,
-  previsto,
-  primeira,
-  onPress,
-}: {
-  descricao: string;
-  quando: string;
-  valor: Cents;
-  entrada: boolean;
-  previsto: boolean;
-  primeira: boolean;
-  onPress: () => void;
-}) {
+function MetricaSecundaria({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   const palette = usePalette();
-
   return (
-    <Pressable
-      onPress={onPress}
-      // O alvo tem 44 px de altura mínima: é o que um polegar acerta sem mirar.
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.md,
-        minHeight: 44,
-        paddingVertical: space.sm + 2,
-        borderTopWidth: primeira ? 0 : 1,
-        borderTopColor: palette.line,
-        opacity: pressed ? 0.6 : 1,
-      })}
-    >
-      <View
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: radius.pill,
-          backgroundColor: entrada ? palette.positive : previsto ? palette.inkSubtle : palette.negative,
-        }}
-      />
+    <View style={{ flex: 1, paddingLeft: 11, borderLeftWidth: 1, borderLeftColor: palette.line }}>
+      <Small>{label}</Small>
+      <Texto style={[type.figureSm, { color: muted ? palette.inkMuted : palette.ink, marginTop: 3 }]}>{value}</Texto>
+    </View>
+  );
+}
 
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Texto
-          style={[type.body, { color: previsto ? palette.inkMuted : palette.ink }]}
-          numberOfLines={1}
-        >
-          {descricao}
-        </Texto>
-        <Small style={{ marginTop: 1 }}>
-          {quando}
-          {previsto ? " · previsto" : ""}
-        </Small>
-      </View>
+function CabecalhoDeCard({ titulo, acao, onPress }: { titulo: string; acao: string; onPress: () => void }) {
+  const palette = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <Label>{titulo}</Label>
+      <Pressable onPress={onPress} hitSlop={10} style={{ minHeight: 32, flexDirection: "row", alignItems: "center", gap: 3 }}>
+        <Small tone="muted">{acao}</Small><CaretRight size={13} color={palette.inkSubtle} />
+      </Pressable>
+    </View>
+  );
+}
 
-      <Texto
-        style={[
-          type.bodyStrong,
-          { color: entrada ? palette.positive : previsto ? palette.inkMuted : palette.ink },
-        ]}
-      >
-        {entrada ? "+ " : "− "}
-        {money(valor)}
-      </Texto>
+function LinhaAgenda({ titulo, meta, icon }: { titulo: string; meta: string; icon: ReactNode }) {
+  const palette = usePalette();
+  return (
+    <View style={{ minHeight: 50, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.line }}>
+      {icon}<View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: palette.ink }]} numberOfLines={1}>{titulo}</Texto><Small numberOfLines={1}>{meta}</Small></View>
+    </View>
+  );
+}
+
+function LinhaLancamento({ descricao, quando, valor, entrada, previsto, onPress }: { descricao: string; quando: string; valor: Cents; entrada: boolean; previsto: boolean; onPress: () => void }) {
+  const palette = usePalette();
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.line, opacity: pressed ? 0.62 : 1 })}>
+      <View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: previsto ? palette.inkMuted : palette.ink }]} numberOfLines={1}>{descricao}</Texto><Small>{quando}{previsto ? " · previsto" : ""}</Small></View>
+      <Texto style={[type.body, { color: entrada ? palette.accent : palette.inkMuted, fontWeight: "500" }]}>{entrada ? "+ " : "− "}{numero(money(valor))}</Texto>
     </Pressable>
   );
+}
+
+function numero(valor: string): string {
+  return valor.replace(/^R\$\s*/, "");
+}
+
+function dataLonga(data: string): string {
+  return DATA_LONGA.format(new Date(`${data}T12:00:00Z`));
 }
