@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { Plus } from "phosphor-react-native";
+import { Briefcase, CreditCard, House, Plus, Receipt } from "phosphor-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
@@ -107,6 +107,7 @@ export function Shell() {
   };
 
   const ativa = GRUPO_ATIVO[tela] ?? tela;
+  const esconderAbas = tela === "configuracoes" || tela === "parcelamentos";
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
@@ -114,7 +115,7 @@ export function Shell() {
         <Conteudo tela={tela} onAbrirLancamento={abrirLancamento} onIrPara={setTela} />
       </View>
 
-      <View
+      {!esconderAbas ? <View
         style={{
           flexDirection: "row",
           alignItems: "stretch",
@@ -135,26 +136,25 @@ export function Shell() {
             accessibilityLabel="Novo lançamento"
             onPress={() => abrirLancamento(null)}
             style={({ pressed }) => ({
-              width: 50,
-              height: 50,
-              marginTop: -14,
+              width: 56,
+              height: 56,
+              marginTop: -23,
               borderRadius: radius.pill,
-              borderWidth: 1,
-              borderColor: palette.accent,
-              backgroundColor: pressed ? palette.accentWash : palette.canvas,
+              borderWidth: 0,
+              backgroundColor: pressed ? palette.accentEdge : palette.accent,
               alignItems: "center",
               justifyContent: "center",
               ...elevation.float,
             })}
           >
-            <Plus size={20} color={palette.accent} weight="regular" />
+            <Plus size={24} color={palette.accentInk} weight="regular" />
           </Pressable>
         </View>
 
         {ABAS.slice(2).map((item) => (
           <ItemDeAba key={item.id} label={item.label} ativo={ativa === item.id} alerta={false} onPress={() => setTela(item.id)} />
         ))}
-      </View>
+      </View> : null}
 
       <Modal
         visible={folhaAberta}
@@ -185,10 +185,10 @@ function Conteudo({ tela, onAbrirLancamento, onIrPara }: { tela: Tela; onAbrirLa
     case "assistente": return <AssistenteScreen onVoltar={() => onIrPara("painel")} />;
     case "saude": return <SaudeScreen />;
     case "relatorios": return <RelatoriosScreen />;
-    case "lancamentos": return <ExtratoScreen onOpenTransaction={onAbrirLancamento} />;
+    case "lancamentos": return <ExtratoScreen onOpenTransaction={onAbrirLancamento} onAjustes={() => onIrPara("configuracoes")} />;
     case "contas": return <ContasScreen />;
-    case "cartoes": return <CarteiraScreen onParcelamentos={() => onIrPara("parcelamentos")} onOpenTransaction={onAbrirLancamento} />;
-    case "parcelamentos": return <ParcelamentosScreen />;
+    case "cartoes": return <CarteiraScreen onParcelamentos={() => onIrPara("parcelamentos")} onOpenTransaction={onAbrirLancamento} onAjustes={() => onIrPara("configuracoes")} />;
+    case "parcelamentos": return <ParcelamentosScreen onVoltar={() => onIrPara("cartoes")} />;
     case "recorrencias": return <PlanejamentoScreen />;
     case "orcamentos": return <OrcamentosScreen />;
     case "metas": return <MetasScreen />;
@@ -196,28 +196,37 @@ function Conteudo({ tela, onAbrirLancamento, onIrPara }: { tela: Tela; onAbrirLa
     case "investimentos": return <InvestimentosScreen />;
     case "recompensas": return <RecompensasScreen />;
     case "viagens": return <ViagensScreen />;
-    case "trabalho": return <TrabalhoScreen />;
+    case "trabalho": return <TrabalhoScreen onAjustes={() => onIrPara("configuracoes")} />;
     case "automacoes": return <AutomacoesScreen />;
     case "capturas": return <CapturasScreen onVoltar={() => onIrPara("painel")} />;
     case "importar": return <ImportarScreen onVoltar={() => onIrPara("painel")} />;
-    case "configuracoes": return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("painel")} />;
+    case "configuracoes": return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("painel")} onNavigate={onIrPara} />;
   }
 }
 
 function ItemDeAba({ label, ativo, alerta, onPress }: { label: string; ativo: boolean; alerta: boolean; onPress: () => void }) {
   const palette = usePalette();
+  const cor = ativo ? palette.accent : palette.inkSubtle;
   return (
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: ativo }}
       onPress={onPress}
-      style={({ pressed }) => ({ flex: 1, minHeight: 58, alignItems: "center", justifyContent: "center", gap: 7, opacity: pressed ? 0.62 : 1 })}
+      style={({ pressed }) => ({ flex: 1, minHeight: 66, alignItems: "center", justifyContent: "center", gap: 4, opacity: pressed ? 0.62 : 1 })}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <Texto style={[type.bodySm, { color: ativo ? palette.accent : palette.inkSubtle, fontWeight: ativo ? "500" : "400" }]}>{label}</Texto>
+      <View style={{ position: "relative" }}>
+        <IconeAba label={label} color={cor} active={ativo} />
         {alerta ? <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: palette.accent }} /> : null}
       </View>
-      <View style={{ width: 16, height: 2, backgroundColor: ativo ? palette.accent : "transparent" }} />
+      <Texto style={[type.caption, { color: cor, fontWeight: ativo ? "600" : "400" }]}>{label}</Texto>
     </Pressable>
   );
+}
+
+function IconeAba({ label, color, active }: { label: string; color: string; active: boolean }) {
+  const props = { size: 20, color, weight: active ? "fill" as const : "regular" as const };
+  if (label === "Início") return <House {...props} />;
+  if (label === "Extrato") return <Receipt {...props} />;
+  if (label === "Cartões") return <CreditCard {...props} />;
+  return <Briefcase {...props} />;
 }

@@ -1,6 +1,6 @@
 {
   "name": "fluxo-android",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "main": "index.ts",
@@ -12,7 +12,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/dm-sans": "^0.4.2",
     "@fluxo/core": "file:../core",
     "expo": "~57.0.22",
     "expo-constants": "~57.0.6",

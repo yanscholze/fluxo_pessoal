@@ -8,21 +8,25 @@
 
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
+import { CaretLeft, CaretRight, CirclesFour, Robot, Wallet, Wrench } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import type { Tela } from "../shell.tsx";
 import { appVersion, deviceName } from "../device.ts";
 import { isBridgeAvailable, openListenerSettings } from "../notifications/bridge.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Divider, Label, Notice, Row, Small } from "../ui/primitives.tsx";
-import { space, useAppearance, usePalette, type AccentId } from "../ui/theme.ts";
+import { radius, space, type, useAppearance, usePalette, type AccentId } from "../ui/theme.ts";
 
 export function AjustesScreen({
   onAbrirCapturas,
   onVoltar,
+  onNavigate,
 }: {
   onAbrirCapturas: () => void;
   onVoltar: () => void;
+  onNavigate: (tela: Tela) => void;
 }) {
   const palette = usePalette();
   const { accentId, setAccentId, accents } = useAppearance();
@@ -34,24 +38,38 @@ export function AjustesScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={[]}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, gap: space.md, paddingBottom: 40 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-          <Pressable onPress={onVoltar} hitSlop={12} accessibilityRole="button" accessibilityLabel="Voltar">
-            <Body muted>← Voltar</Body>
+          <Pressable onPress={onVoltar} hitSlop={12} accessibilityRole="button" accessibilityLabel="Voltar" style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? palette.surfaceRaised : palette.surface, borderWidth: 1, borderColor: palette.line })}>
+            <CaretLeft size={20} color={palette.ink} />
           </Pressable>
-          <Body strong style={{ fontSize: 20 }}>
-            Ajustes
+          <Body strong style={{ fontSize: 24 }}>
+            Configurações
           </Body>
         </View>
 
-        <Card>
-          <Label>Conta</Label>
-          <View style={{ marginTop: space.sm }}>
-            <Body strong>{conectado?.credentials.user.displayName ?? "—"}</Body>
-            <Small>{conectado?.credentials.user.email ?? ""}</Small>
-            <Small style={{ marginTop: space.sm }}>{conectado?.credentials.baseUrl ?? ""}</Small>
+        <Card style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentWash }}><Body strong>{iniciais(conectado?.credentials.user.displayName)}</Body></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Body strong numberOfLines={1}>{conectado?.credentials.user.displayName ?? "—"}</Body>
+            <Small numberOfLines={1}>{conectado?.credentials.user.email ?? ""}</Small>
           </View>
         </Card>
+
+        <Grupo titulo="Fluxo">
+          <LinhaDeAjuste icon={<Robot size={19} color={palette.accent} />} label="TARS" onPress={() => onNavigate("assistente")} />
+          <LinhaDeAjuste icon={<Wallet size={19} color={palette.accent} />} label="Contas e visão geral" onPress={() => onNavigate("contas")} />
+          <LinhaDeAjuste icon={<CirclesFour size={19} color={palette.accent} />} label="Planejamento financeiro" onPress={() => onNavigate("recorrencias")} />
+          <LinhaDeAjuste icon={<Wrench size={19} color={palette.accent} />} label="Ferramentas e relatórios" onPress={() => onNavigate("relatorios")} ultimo />
+        </Grupo>
+
+        <Grupo titulo="Mais recursos">
+          <LinhaDeAjuste label="Assinaturas" onPress={() => onNavigate("assinaturas")} />
+          <LinhaDeAjuste label="Orçamentos" onPress={() => onNavigate("orcamentos")} />
+          <LinhaDeAjuste label="Patrimônio, metas e investimentos" onPress={() => onNavigate("patrimonio")} />
+          <LinhaDeAjuste label="Viagens" onPress={() => onNavigate("viagens")} />
+          <LinhaDeAjuste label="Automações e importações" onPress={() => onNavigate("automacoes")} ultimo />
+        </Grupo>
 
         <Card>
           <Label>Cor principal</Label>
@@ -244,6 +262,18 @@ export function AjustesScreen({
     </SafeAreaView>
   );
 }
+
+function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  const palette = usePalette();
+  return <View><Label style={{ marginLeft: 4, marginBottom: 7 }}>{titulo}</Label><View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, overflow: "hidden" }}>{children}</View></View>;
+}
+
+function LinhaDeAjuste({ icon, label, onPress, ultimo }: { icon?: React.ReactNode; label: string; onPress: () => void; ultimo?: boolean }) {
+  const palette = usePalette();
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ minHeight: 54, flexDirection: "row", alignItems: "center", gap: 11, marginLeft: 14, paddingRight: 14, borderBottomWidth: ultimo ? 0 : 1, borderBottomColor: palette.line, backgroundColor: pressed ? palette.surfaceRaised : "transparent" })}>{icon ?? <View style={{ width: 19 }} />}<Body style={{ flex: 1 }}>{label}</Body><CaretRight size={16} color={palette.inkSubtle} /></Pressable>;
+}
+
+function iniciais(nome?: string): string { return nome?.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0]?.toUpperCase()).join("") || "F"; }
 
 /** Rótulo legível para a mutação parada na fila. */
 function descricaoDaMutacao(dataJson: string | null): string {

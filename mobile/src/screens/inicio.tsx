@@ -1,244 +1,145 @@
-import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
-import {
-  CalendarDots,
-  CaretRight,
-  ChartLine,
-  CreditCard,
-  GearSix,
-  ListNumbers,
-  Robot,
-  Target,
-  Tray,
-  Wallet,
-} from "phosphor-react-native";
+import { BellSimple, Briefcase, CreditCard, ForkKnife, Lightning, MusicNotes, ShoppingCart } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { cents, type Cents } from "@fluxo/core/kernel/money.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
 import type { Tela } from "../shell.tsx";
-import { fetchDashboard, fetchProjetos } from "../net/views.ts";
+import { fetchDashboard } from "../net/views.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { useRemoto } from "../state/remote.tsx";
 import { useConnectedSession } from "../state/session.tsx";
+import type { LocalTransaction } from "../storage/model.ts";
+import { GraficoDeLinha } from "../ui/charts.tsx";
 import { money, relativeDate } from "../ui/format.ts";
-import { Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
-import { radius, space, type, usePalette } from "../ui/theme.ts";
+import { IconBubble, ProfileButton } from "../ui/mockup.tsx";
+import { Empty, Small, Texto } from "../ui/primitives.tsx";
+import { radius, type, usePalette } from "../ui/theme.ts";
 
-const DATA_LONGA = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: "UTC",
-});
+type AbaInicio = "transacoes" | "pendencias";
 
-export function InicioScreen({
-  onOpenTransaction,
-  onNavigate,
-}: {
-  onOpenTransaction: (id: string) => void;
-  onNavigate: (tela: Tela) => void;
-}) {
+export function InicioScreen({ onOpenTransaction, onNavigate }: { onOpenTransaction: (id: string) => void; onNavigate: (tela: Tela) => void }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
-  const { transactions, sync, synchronize } = useLedger();
+  const { transactions, categories, sync, synchronize } = useLedger();
   const painel = useRemoto(fetchDashboard);
-  const projetos = useRemoto(fetchProjetos);
+  const [aba, setAba] = useState<AbaInicio>("transacoes");
   const dados = painel.dados;
-  const agenda = dados?.upcoming ?? [];
-  const tarefas = dados?.openTasks ?? [];
-  const projetosAtivos = projetos.dados?.projects ?? [];
   const hoje = todayIn();
-  const recentes = transactions.filter((item) => item.occurredOn <= hoje).slice(0, 4);
-  const nome = credentials.user?.displayName?.trim().split(/\s+/)[0] || "Yan";
-  const comprometido = dados
-    ? dados.freeToSpend.openInvoicesCents + dados.freeToSpend.otherCommitmentsCents
-    : 0;
-
-  const atualizar = () => {
-    void synchronize();
-    painel.recarregar();
-    projetos.recarregar();
-  };
-
-  const atalho = (label: string, tela: Tela, icon: ReactNode) => ({ label, tela, icon });
-  const atalhos = [
-    atalho("TARS", "assistente", <Robot size={17} color={palette.accent} />),
-    atalho("Capturas", "capturas", <Tray size={17} color={palette.accent} />),
-    atalho("Cartões", "cartoes", <CreditCard size={17} color={palette.accent} />),
-    atalho("Parcelamentos", "parcelamentos", <ListNumbers size={17} color={palette.accent} />),
-    atalho("Orçamento", "orcamentos", <Target size={17} color={palette.accent} />),
-    atalho("Recorrências", "recorrencias", <CalendarDots size={17} color={palette.accent} />),
-    atalho("Visão geral", "patrimonio", <Wallet size={17} color={palette.accent} />),
-    atalho("Relatórios", "relatorios", <ChartLine size={17} color={palette.accent} />),
-  ];
+  const nomeCompleto = credentials.user?.displayName?.trim() || "Yan";
+  const categorias = useMemo(() => new Map(categories.map((categoria) => [categoria.id, categoria.name])), [categories]);
+  const recentes = useMemo(() => transactions.filter((item) => item.occurredOn <= hoje && item.state === "confirmed").slice(0, 5), [transactions, hoje]);
+  const serieDeGastos = useMemo(() => {
+    const despesas = transactions.filter((item) => item.kind === "expense" && item.state === "confirmed" && item.competence === dados?.competence).slice(0, 14).reverse().map((item) => item.amount);
+    return despesas.length > 1 ? despesas : [0, 0];
+  }, [transactions, dados?.competence]);
+  const pendencias = dados?.upcoming ?? [];
+  // A primeira renderização pode receber uma resposta antiga do cache durante
+  // a migração. Cada bloco tolera campos ausentes e é substituído pelos dados
+  // atuais assim que a consulta termina, sem derrubar o aplicativo.
+  const livre = separarDinheiro(dados?.freeToSpend?.amountCents ?? null);
+  const atualizar = () => { void synchronize(); painel.recarregar(); };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 17, paddingTop: 17, gap: 17, paddingBottom: 34 }}
-        refreshControl={<RefreshControl refreshing={sync.running || painel.carregando} onRefresh={atualizar} tintColor={palette.accent} />}
-      >
-        <View style={{ position: "absolute", left: -180, top: -210, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.62 }} />
-
-        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 11 }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.65 }]}>
-              {dataLonga(dados?.today ?? hoje).toUpperCase()}
-            </Texto>
-            <Texto style={[type.title, { color: palette.ink, marginTop: 6 }]}>Olá, {nome}</Texto>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Ajustes"
-            onPress={() => onNavigate("configuracoes")}
-            style={({ pressed }) => ({ width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? palette.surfaceRaised : palette.surface })}
-          >
-            <GearSix size={19} color={palette.inkMuted} />
-            {sync.unresolved > 0 ? <View style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent }} /> : null}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 16 }} refreshControl={<RefreshControl refreshing={sync.running || painel.carregando} onRefresh={atualizar} tintColor={palette.accent} />}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ flex: 1 }}><Small>Bom dia,</Small><Texto style={[type.heading, { color: palette.ink, marginTop: 1 }]}>{nomeCompleto}</Texto></View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Pendências" onPress={() => onNavigate("avisos")} style={({ pressed }) => ({ width: 48, height: 48, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.65 : 1 })}>
+            <BellSimple size={22} color={palette.inkMuted} />
+            {pendencias.length > 0 ? <View style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: palette.accent }} /> : null}
           </Pressable>
+          <ProfileButton onPress={() => onNavigate("configuracoes")} name={nomeCompleto} />
         </View>
 
-        <View>
-          <Texto style={[type.label, { color: palette.inkSubtle }]}>LIVRE PARA GASTAR</Texto>
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 8, paddingBottom: 11, borderBottomWidth: 1, borderBottomColor: palette.accent }}>
-            <Texto style={{ fontSize: 18, lineHeight: 20, fontWeight: "500", color: palette.inkSubtle }}>R$</Texto>
-            <Texto style={[type.display, { color: dados && dados.freeToSpend.amountCents < 0 ? palette.negative : palette.ink }]}>
-              {dados ? numero(money(cents(dados.freeToSpend.amountCents))) : "—"}
-            </Texto>
+        <View style={{ alignItems: "center", paddingTop: 20, paddingBottom: 4 }}>
+          <Texto style={[type.label, { color: palette.inkSubtle, textTransform: "uppercase", letterSpacing: 1.7 }]}>Livre para gastar</Texto>
+          <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 5 }}>
+            <Texto style={[type.display, { color: livre.negativo ? palette.negative : palette.ink }]}>{livre.inteiro}</Texto>
+            <Texto style={{ color: livre.negativo ? palette.negative : palette.accent, fontSize: 28, lineHeight: 34, fontWeight: "700", letterSpacing: -1 }}>{livre.casas}</Texto>
           </View>
-          <Small style={{ marginTop: 11, lineHeight: 19 }}>
-            {dados
-              ? `Medido no dia mais apertado até ${relativeDate(dados.freeToSpend.windowEnd as never)}${dados.freeToSpend.pendingIncomeCents > 0 ? ` · ${money(cents(dados.freeToSpend.pendingIncomeCents))} a receber no período.` : "."}`
-              : "Carregando a posição financeira do ciclo."}
-          </Small>
-          <View style={{ flexDirection: "row", gap: 17, marginTop: 17 }}>
-            <MetricaSecundaria label="Em conta" value={dados ? numero(money(cents(dados.freeToSpend.liquidBalanceCents))) : "—"} />
-            <MetricaSecundaria label="Comprometido" value={dados ? numero(money(cents(comprometido))) : "—"} muted />
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: 18, marginTop: 10 }}>
+            <LegendaFluxo label="Entradas" value={dados?.monthFlow ? money(cents(dados.monthFlow.incomeCents)) : "—"} color={palette.positive} />
+            <LegendaFluxo label="Saídas" value={dados?.monthFlow ? money(cents(dados.monthFlow.expenseCents)) : "—"} color={palette.negative} />
           </View>
-          {dados?.benefitFreeToSpend ? (
-            <Small style={{ marginTop: 9 }}>Inclui {money(cents(dados.benefitFreeToSpend.amountCents))} em vale-alimentação.</Small>
-          ) : null}
         </View>
 
-        {sync.offline || painel.offline ? <Notice tone="caution">Sem conexão. Novos lançamentos ficam salvos no aparelho até a rede voltar.</Notice> : null}
-        {sync.pending > 0 ? <Notice tone="info">{sync.pending} lançamento{sync.pending === 1 ? "" : "s"} aguardando envio.</Notice> : null}
-        {sync.unresolved > 0 ? <Notice tone="negative">{sync.unresolved} alteração{sync.unresolved === 1 ? " precisa" : " precisam"} da sua decisão.</Notice> : null}
+        <View style={{ backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, padding: 16 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Texto style={[type.bodyStrong, { color: palette.ink }]}>Gastos — {mesAtual(dados?.competence)}</Texto>
+            <View style={{ borderRadius: radius.pill, backgroundColor: palette.accentWash, paddingHorizontal: 9, paddingVertical: 4 }}><Small style={{ color: palette.accent }}>−{dados?.monthFlow ? money(cents(dados.monthFlow.expenseCents)) : "—"}</Small></View>
+          </View>
+          <View style={{ marginTop: 8 }}><GraficoDeLinha valores={serieDeGastos} altura={106} /></View>
+        </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 17 }}>
-          {atalhos.map((item) => (
-            <Pressable
-              key={item.label}
-              accessibilityRole="button"
-              onPress={() => onNavigate(item.tela)}
-              style={({ pressed }) => ({ minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 13, borderRadius: radius.md, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, opacity: pressed ? 0.65 : 1 })}
-            >
-              {item.icon}
-              <Texto style={[type.bodySm, { color: palette.ink }]}>{item.label}</Texto>
-            </Pressable>
-          ))}
-        </ScrollView>
+        <View style={{ flexDirection: "row", borderRadius: radius.md, backgroundColor: palette.surfaceInset, padding: 3 }}>
+          <Segmento label="Transações" active={aba === "transacoes"} onPress={() => setAba("transacoes")} />
+          <Segmento label={`Pendências (${pendencias.length})`} active={aba === "pendencias"} onPress={() => setAba("pendencias")} />
+        </View>
 
-        {agenda.length > 0 || tarefas.length > 0 ? (
-          <Card>
-            <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
-              <Label>Agenda do ciclo</Label>
-              <Small>{agenda.length + tarefas.length} itens</Small>
+        {aba === "transacoes" ? (
+          recentes.length ? <View>{recentes.map((item) => <LinhaTransacao key={item.id} item={item} categoria={item.categoryId ? categorias.get(item.categoryId) ?? "Sem categoria" : "Sem categoria"} onPress={() => onOpenTransaction(item.id)} />)}</View> : <Empty title="Nenhum lançamento" hint="Use o botão de mais para registrar o primeiro." />
+        ) : (
+          pendencias.length ? <View style={{ gap: 8 }}>{pendencias.slice(0, 5).map((item, indice) => (
+            <View key={`${item.date}-${item.description}-${indice}`} style={{ minHeight: 62, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, paddingHorizontal: 12 }}>
+              <IconBubble tone={item.kind === "fatura" ? "accent" : "caution"}>{iconePendencia(item.kind, palette)}</IconBubble>
+              <View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: palette.ink }]} numberOfLines={1}>{item.description}</Texto><Small tone="caution">{relativeDate(item.date as never)}</Small></View>
+              <Texto style={[type.bodyStrong, { color: palette.negative }]}>{money(cents(item.amountCents))}</Texto>
             </View>
-            <View style={{ marginTop: 8 }}>
-              {agenda.slice(0, 3).map((item) => (
-                <LinhaAgenda key={`${item.date}-${item.description}`} titulo={item.description} meta={`${relativeDate(item.date as never)} · ${money(cents(item.amountCents))}`} icon={<CalendarDots size={18} color={palette.accent} />} />
-              ))}
-              {tarefas.slice(0, Math.max(0, 4 - agenda.slice(0, 3).length)).map((item) => (
-                <LinhaAgenda key={item.id} titulo={item.title} meta={`${item.projectName} · ${item.dueOn ? relativeDate(item.dueOn as never) : "sem prazo"}`} icon={<Target size={18} color={palette.inkSubtle} />} />
-              ))}
-            </View>
-          </Card>
-        ) : null}
-
-        {projetosAtivos.length ? (
-          <Card>
-            <CabecalhoDeCard titulo="Projetos ativos" acao="Ver todos" onPress={() => onNavigate("trabalho")} />
-            <View style={{ marginTop: 8 }}>
-              {projetosAtivos.slice(0, 2).map((projeto) => (
-                <Pressable key={projeto.id} onPress={() => onNavigate("trabalho")} style={({ pressed }) => ({ paddingVertical: 11, borderTopWidth: 1, borderTopColor: palette.line, opacity: pressed ? 0.62 : 1 })}>
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-                    <Texto style={[type.body, { color: palette.ink, flex: 1 }]} numberOfLines={1}>{projeto.name}</Texto>
-                    <Texto style={[type.bodySm, { color: palette.accent, fontWeight: "500" }]}>{percentualSeguro(projeto.percentReceived)}%</Texto>
-                  </View>
-                  <View style={{ height: 2, backgroundColor: palette.line, marginTop: 8 }}>
-                    <View style={{ height: 2, width: `${percentualSeguro(projeto.percentReceived)}%`, backgroundColor: palette.accent }} />
-                  </View>
-                  <Small style={{ marginTop: 8 }}>{projeto.openTasks} pendência{projeto.openTasks === 1 ? "" : "s"}{projeto.dueOn ? ` · prazo ${relativeDate(projeto.dueOn as never)}` : ""}</Small>
-                </Pressable>
-              ))}
-            </View>
-          </Card>
-        ) : null}
-
-        <Card>
-          <CabecalhoDeCard titulo="Últimos lançamentos" acao="Ver extrato" onPress={() => onNavigate("lancamentos")} />
-          {recentes.length ? (
-            <View style={{ marginTop: 8 }}>
-              {recentes.map((item) => <LinhaLancamento key={item.id} descricao={item.description} quando={relativeDate(item.occurredOn)} valor={item.amount} entrada={item.kind === "income"} previsto={item.state === "planned"} onPress={() => onOpenTransaction(item.id)} />)}
-            </View>
-          ) : <Empty title="Nenhum lançamento ainda" hint="Use o botão central para registrar o primeiro." />}
-        </Card>
+          ))}</View> : <Empty title="Tudo em dia" hint="Nenhuma pendência prevista para este ciclo." />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function MetricaSecundaria({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
+function Segmento({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const palette = usePalette();
-  return (
-    <View style={{ flex: 1, paddingLeft: 11, borderLeftWidth: 1, borderLeftColor: palette.line }}>
-      <Small>{label}</Small>
-      <Texto style={[type.figureSm, { color: muted ? palette.inkMuted : palette.ink, marginTop: 3 }]}>{value}</Texto>
-    </View>
-  );
+  return <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => ({ flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: 9, backgroundColor: active ? palette.accent : "transparent", opacity: pressed ? 0.78 : 1 })}><Texto style={[type.bodySm, { color: active ? palette.accentInk : palette.inkSubtle, fontWeight: "600" }]}>{label}</Texto></Pressable>;
 }
 
-function CabecalhoDeCard({ titulo, acao, onPress }: { titulo: string; acao: string; onPress: () => void }) {
+function LegendaFluxo({ label, value, color }: { label: string; value: string; color: string }) {
   const palette = usePalette();
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-      <Label>{titulo}</Label>
-      <Pressable onPress={onPress} hitSlop={10} style={{ minHeight: 32, flexDirection: "row", alignItems: "center", gap: 3 }}>
-        <Small tone="muted">{acao}</Small><CaretRight size={13} color={palette.inkSubtle} />
-      </Pressable>
-    </View>
-  );
+  return <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}><View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} /><Small style={{ color: palette.inkSubtle }}>{label} {valorCompacto(value)}</Small></View>;
 }
 
-function LinhaAgenda({ titulo, meta, icon }: { titulo: string; meta: string; icon: ReactNode }) {
+function LinhaTransacao({ item, categoria, onPress }: { item: LocalTransaction; categoria: string; onPress: () => void }) {
   const palette = usePalette();
-  return (
-    <View style={{ minHeight: 50, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.line }}>
-      {icon}<View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: palette.ink }]} numberOfLines={1}>{titulo}</Texto><Small numberOfLines={1}>{meta}</Small></View>
-    </View>
-  );
+  const entrada = item.kind === "income";
+  return <Pressable onPress={onPress} android_ripple={{ color: palette.accentWash }} style={({ pressed }) => ({ minHeight: 58, flexDirection: "row", alignItems: "center", gap: 12, opacity: pressed ? 0.72 : 1 })}>
+    <IconBubble tone={entrada ? "positive" : "muted"}>{iconeTransacao(item, palette)}</IconBubble>
+    <View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: palette.ink }]} numberOfLines={1}>{item.description}</Texto><Small numberOfLines={1}>{relativeDate(item.occurredOn)} · {categoria}</Small></View>
+    <Texto style={[type.bodyStrong, { color: entrada ? palette.positive : palette.ink }]}>{entrada ? "+" : ""}{money(item.amount as Cents)}</Texto>
+  </Pressable>;
 }
 
-function LinhaLancamento({ descricao, quando, valor, entrada, previsto, onPress }: { descricao: string; quando: string; valor: Cents; entrada: boolean; previsto: boolean; onPress: () => void }) {
-  const palette = usePalette();
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.line, opacity: pressed ? 0.62 : 1 })}>
-      <View style={{ flex: 1, minWidth: 0 }}><Texto style={[type.body, { color: previsto ? palette.inkMuted : palette.ink }]} numberOfLines={1}>{descricao}</Texto><Small>{quando}{previsto ? " · previsto" : ""}</Small></View>
-      <Texto style={[type.body, { color: entrada ? palette.accent : palette.inkMuted, fontWeight: "500" }]}>{entrada ? "+ " : "− "}{numero(money(valor))}</Texto>
-    </Pressable>
-  );
+function iconeTransacao(item: LocalTransaction, palette: ReturnType<typeof usePalette>) {
+  const props = { size: 19, color: item.kind === "income" ? palette.positive : palette.inkMuted, weight: "fill" as const };
+  const texto = item.description.toLowerCase();
+  if (texto.includes("mercado")) return <ShoppingCart {...props} />;
+  if (texto.includes("spotify") || texto.includes("música")) return <MusicNotes {...props} />;
+  if (texto.includes("ifood") || texto.includes("comida")) return <ForkKnife {...props} />;
+  return <Briefcase {...props} />;
 }
 
-function numero(valor: string): string {
-  return valor.replace(/^R\$\s*/, "");
+function iconePendencia(kind: string, palette: ReturnType<typeof usePalette>) {
+  if (kind === "fatura") return <CreditCard size={19} color={palette.accent} weight="fill" />;
+  return <Lightning size={19} color={palette.caution} weight="fill" />;
 }
 
-function dataLonga(data: string): string {
-  const valor = /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : todayIn();
-  return DATA_LONGA.format(new Date(`${valor}T12:00:00Z`));
+function separarDinheiro(valor: number | null): { inteiro: string; casas: string; negativo: boolean } {
+  if (valor === null) return { inteiro: "R$ —", casas: "", negativo: false };
+  const formatado = money(cents(valor));
+  const indice = formatado.lastIndexOf(",");
+  return indice >= 0 ? { inteiro: formatado.slice(0, indice), casas: formatado.slice(indice), negativo: valor < 0 } : { inteiro: formatado, casas: "", negativo: valor < 0 };
 }
 
-function percentualSeguro(valor: number): number {
-  return Number.isFinite(valor) ? Math.round(Math.min(100, Math.max(0, valor))) : 0;
+function mesAtual(competencia?: string): string {
+  if (!competencia) return "Mês atual";
+  const [ano, mes] = competencia.split("-").map(Number);
+  const nome = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(ano, mes - 1, 1)));
+  return nome.charAt(0).toUpperCase() + nome.slice(1);
 }
+
+function valorCompacto(valor: string): string { return valor.replace(/,00$/, "").replace(/^R\$\s*/, "R$ "); }

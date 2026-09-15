@@ -42,8 +42,10 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
       style={[
         {
           backgroundColor: palette.surface,
-          borderRadius: radius.md,
-          padding: space.md,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: palette.line,
+          padding: space.lg,
         },
         style,
       ]}
@@ -56,7 +58,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 export function Label({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const palette = usePalette();
   return (
-    <Texto style={[type.label, { color: palette.accent, textTransform: "uppercase" }, style]}>
+    <Texto style={[type.label, { color: palette.inkSubtle, textTransform: "uppercase" }, style]}>
       {children}
     </Texto>
   );
@@ -177,9 +179,9 @@ export function Button({
       style={({ pressed }) => [
         {
           backgroundColor: fundo,
-          minHeight: 40,
+          minHeight: 48,
           borderRadius: radius.md,
-          paddingVertical: 10,
+          paddingVertical: 12,
           paddingHorizontal: space.lg,
           alignItems: "center",
           justifyContent: "center",

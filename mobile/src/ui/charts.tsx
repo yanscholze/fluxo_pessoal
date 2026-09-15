@@ -17,12 +17,56 @@
 
 import { type ReactNode } from "react";
 import { View } from "react-native";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 import { Small, Texto } from "./primitives.tsx";
 import { radius, space, type, usePalette } from "./theme.ts";
 
 /** Altura da área de plotagem das barras. Cabe sem empurrar o cartão. */
 const ALTURA = 92;
+
+export function GraficoDeLinha({ valores, altura = 112 }: { valores: readonly number[]; altura?: number }) {
+  const palette = usePalette();
+  const largura = 320;
+  const base = altura - 10;
+  const serie = valores.length > 1 ? valores : [0, 0];
+  const minimo = Math.min(...serie);
+  const maximo = Math.max(...serie);
+  const amplitude = maximo - minimo || 1;
+  const pontos = serie.map((valor, indice) => ({
+    x: (indice / Math.max(1, serie.length - 1)) * largura,
+    y: 9 + (1 - (valor - minimo) / amplitude) * (altura - 28),
+  }));
+  const linha = caminhoSuave(pontos);
+  const area = `${linha} L ${largura} ${base} L 0 ${base} Z`;
+
+  return (
+    <View style={{ height: altura, width: "100%" }} accessibilityLabel="Evolução dos gastos no período">
+      <Svg width="100%" height="100%" viewBox={`0 0 ${largura} ${altura}`} preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id="fluxoArea" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={palette.accent} stopOpacity={0.28} />
+            <Stop offset="1" stopColor={palette.accent} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Path d={area} fill="url(#fluxoArea)" />
+        <Path d={linha} fill="none" stroke={palette.accent} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    </View>
+  );
+}
+
+function caminhoSuave(pontos: readonly { x: number; y: number }[]): string {
+  if (!pontos.length) return "";
+  let caminho = `M ${pontos[0].x} ${pontos[0].y}`;
+  for (let indice = 1; indice < pontos.length; indice += 1) {
+    const anterior = pontos[indice - 1];
+    const atual = pontos[indice];
+    const meio = (anterior.x + atual.x) / 2;
+    caminho += ` C ${meio} ${anterior.y}, ${meio} ${atual.y}, ${atual.x} ${atual.y}`;
+  }
+  return caminho;
+}
 
 export type BarraMensal = {
   readonly rotulo: string;

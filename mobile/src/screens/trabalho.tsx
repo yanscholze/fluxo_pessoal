@@ -1,239 +1,71 @@
-/**
- * Trabalho.
- *
- * A tela mostrava só tarefas, vindas do quadro. Quem tem projeto sem tarefa
- * cadastrada — que é o caso comum de quem toca um trabalho sozinho — via uma
- * tela vazia e concluía que o aplicativo não conhecia os projetos dele.
- *
- * Agora a tela é dos projetos, e só deles: quanto já entrou do combinado,
- * quantas horas foram, quanto falta para o prazo — o que se pergunta sobre um
- * projeto longe do computador.
- *
- * As pendências saíram daqui para o painel. Elas estavam no fim desta tela,
- * atrás da lista de projetos, e respondem a outra pergunta: não "como vai este
- * projeto", e sim "o que eu faço hoje" — que é a primeira do dia e por isso
- * pertence à primeira tela.
- */
-
-import { useMemo, useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Briefcase, CheckCircle, Clock } from "phosphor-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { fetchProjetos, type ProjetoView } from "../net/views.ts";
 import { useRemoto } from "../state/remote.tsx";
-import { HorasScreen } from "./horas.tsx";
-import { Medidor } from "../ui/charts.tsx";
+import { useConnectedSession } from "../state/session.tsx";
 import { money, relativeDate } from "../ui/format.ts";
-import {
-  Body,
-  Card,
-  Empty,
-  Figure,
-  Label,
-  Row,
-  Small,
-} from "../ui/primitives.tsx";
-import { TelaRemota } from "../ui/tela-remota.tsx";
-import { radius, space, usePalette } from "../ui/theme.ts";
+import { ScreenHeader } from "../ui/mockup.tsx";
+import { Empty, Small, Texto } from "../ui/primitives.tsx";
+import { radius, type, usePalette } from "../ui/theme.ts";
+import { HorasScreen } from "./horas.tsx";
 
-/** Rótulo humano da situação do projeto, na ordem em que ele caminha. */
-const SITUACAO: Record<string, string> = {
-  draft: "Rascunho",
-  development: "Em desenvolvimento",
-  testing: "Em testes",
-  adjustments: "Em ajustes",
-  delivered: "Entregue",
-  archived: "Arquivado",
-};
-
-/** Milésimos de hora viram horas. O domínio guarda em milli para não arredondar. */
-const emHoras = (milli: number) => milli / 1000;
-
-export function TrabalhoScreen({ onVoltar }: { onVoltar?: () => void }) {
-  const remoto = useRemoto(fetchProjetos);
-  /**
-   * O projeto cujo registro de horas está aberto.
-   *
-   * A lista já respondia "quanto falta"; faltava agir sobre a resposta. Tocar
-   * o card é o gesto mais curto entre ver que trabalhei e registrar quanto —
-   * e é no celular, logo depois da sessão, que esse registro ainda é exato.
-   */
-  const [registrando, setRegistrando] = useState<ProjetoView | null>(null);
-
-  function encerrar() {
-    setRegistrando(null);
-    // As horas mudam o total da tela: sem recarregar, o card ficaria mostrando
-    // o número de antes e pareceria que o registro não foi.
-    remoto.recarregar();
-  }
-
-  return (
-    <TelaRemota
-      titulo="Trabalho"
-      descricao="O que está aberto nos projetos."
-      remoto={remoto}
-      onVoltar={onVoltar}
-    >
-      {(dados) => (
-        <>
-          <Card>
-            <Label>A receber</Label>
-            {/*
-              O que falta entrar, e não só o que está agendado.
-
-              `pendingCents` conta parcela criada. Quem combinou R$ 900 e ainda
-              não montou o cronograma via "R$ 0,00 a receber" com o projeto em
-              aberto — o número mais desanimador possível, e errado.
-            */}
-            <Figure
-              tone={dados.totals.overdueCents > 0 ? "negative" : "neutral"}
-            >
-              {money(
-                cents(
-                  dados.totals.pendingCents +
-                    dados.totals.overdueCents +
-                    dados.totals.unscheduledCents,
-                ),
-              )}
-            </Figure>
-            <Small style={{ marginTop: 2 }}>
-              {dados.totals.activeProjects} projeto
-              {dados.totals.activeProjects === 1 ? "" : "s"} ativo
-              {dados.totals.activeProjects === 1 ? "" : "s"} ·{" "}
-              {emHoras(dados.totals.weekMilli).toFixed(1)} h na semana
-              {dados.totals.overdueCents > 0
-                ? ` · ${money(cents(dados.totals.overdueCents))} vencido`
-                : ""}
-              {dados.totals.unscheduledCents > 0
-                ? ` · ${money(cents(dados.totals.unscheduledCents))} sem parcela agendada`
-                : ""}
-            </Small>
-          </Card>
-
-          {dados.projects.length === 0 ? (
-            <Card>
-              <Empty
-                title="Nenhum projeto"
-                hint="Crie no site para acompanhar aqui."
-              />
-            </Card>
-          ) : (
-            dados.projects.map((projeto) => (
-              <CartaoDeProjeto
-                key={projeto.id}
-                projeto={projeto}
-                onRegistrarHoras={() => setRegistrando(projeto)}
-              />
-            ))
-          )}
-
-          <Modal
-            visible={registrando !== null}
-            animationType="slide"
-            presentationStyle="pageSheet"
-            onRequestClose={encerrar}
-          >
-            {registrando ? (
-              <HorasScreen projeto={registrando} onClose={encerrar} />
-            ) : null}
-          </Modal>
-        </>
-      )}
-    </TelaRemota>
-  );
-}
-
-function CartaoDeProjeto({
-  projeto,
-  onRegistrarHoras,
-}: {
-  projeto: ProjetoView;
-  onRegistrarHoras: () => void;
-}) {
+export function TrabalhoScreen({ onAjustes }: { onAjustes: () => void }) {
   const palette = usePalette();
+  const { credentials } = useConnectedSession();
+  const remoto = useRemoto(fetchProjetos);
+  const [registrando, setRegistrando] = useState<ProjetoView | null>(null);
+  const dados = remoto.dados;
+  const pendentes = dados?.projects.reduce((total, projeto) => total + projeto.openTasks, 0) ?? 0;
+  const encerrar = () => { setRegistrando(null); remoto.recarregar(); };
 
   return (
-    <Card>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Registrar horas em ${projeto.name}`}
-        onPress={onRegistrarHoras}
-      >
-        <View
-          style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
-        >
-          <View
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: radius.pill,
-              backgroundColor: projeto.color ?? palette.accent,
-            }}
-          />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Body strong numberOfLines={1}>
-              {projeto.name}
-            </Body>
-            <Small>
-              {projeto.clientName ?? "projeto próprio"} ·{" "}
-              {SITUACAO[projeto.status] ?? projeto.status}
-              {projeto.dueOn
-                ? ` · prazo ${relativeDate(projeto.dueOn as never)}`
-                : ""}
-            </Small>
-          </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 14 }} refreshControl={<RefreshControl refreshing={remoto.carregando} onRefresh={remoto.recarregar} tintColor={palette.accent} />}>
+        <ScreenHeader title="Projetos" subtitle={`${dados?.totals.activeProjects ?? 0} projetos ativos`} onProfile={onAjustes} profileName={credentials.user.displayName} />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Resumo icon={<Briefcase size={15} color={palette.accent} weight="fill" />} label="Total contratado" value={dados ? money(cents(dados.totals.contractedCents)) : "—"} />
+          <Resumo icon={<CheckCircle size={15} color={palette.caution} weight="fill" />} label="Tarefas pendentes" value={`${pendentes}`} />
         </View>
-
-        {projeto.contractedCents > 0 ? (
-          <View style={{ marginTop: space.md, gap: 4 }}>
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <Small>Recebido</Small>
-              <Small tone="muted">
-                {money(cents(projeto.receivedCents))} de{" "}
-                {money(cents(projeto.contractedCents))}
-              </Small>
-            </View>
-            <Medidor
-              valor={projeto.percentReceived}
-              total={100}
-              tom="positive"
-              altura={4}
-            />
-          </View>
-        ) : null}
-
-        {projeto.estimatedMilli > 0 ? (
-          <View style={{ marginTop: space.sm, gap: 4 }}>
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <Small>Horas</Small>
-              <Small tone={projeto.overrun ? "negative" : "muted"}>
-                {emHoras(projeto.workedMilli).toFixed(1)} de{" "}
-                {emHoras(projeto.estimatedMilli).toFixed(1)} h
-              </Small>
-            </View>
-            <Medidor
-              valor={projeto.workedMilli}
-              total={Math.max(1, projeto.estimatedMilli)}
-              tom={projeto.overrun ? "negative" : "accent"}
-              altura={4}
-            />
-          </View>
-        ) : null}
-
-        {projeto.openTasks > 0 ? (
-          <Small style={{ marginTop: space.sm }}>
-            {projeto.openTasks} pendência{projeto.openTasks === 1 ? "" : "s"}
-          </Small>
-        ) : null}
-
-        <Small tone="muted" style={{ marginTop: space.sm }}>
-          Toque para registrar horas
-        </Small>
-      </Pressable>
-    </Card>
+        {remoto.erro ? <Small tone="negative">{remoto.erro}</Small> : null}
+        {dados?.projects.length === 0 ? <Empty title="Nenhum projeto" hint="Seus projetos ativos aparecerão aqui." /> : null}
+        {dados?.projects.map((projeto) => <ProjetoCard key={projeto.id} projeto={projeto} onPress={() => setRegistrando(projeto)} />)}
+      </ScrollView>
+      <Modal visible={registrando !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={encerrar}>
+        {registrando ? <HorasScreen projeto={registrando} onClose={encerrar} /> : null}
+      </Modal>
+    </SafeAreaView>
   );
 }
+
+function Resumo({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  const palette = usePalette();
+  return <View style={{ flex: 1, minHeight: 78, borderRadius: radius.md, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, padding: 12 }}><View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>{icon}<Small>{label}</Small></View><Texto numberOfLines={1} adjustsFontSizeToFit style={[type.figureSm, { color: palette.ink, marginTop: 9 }]}>{value}</Texto></View>;
+}
+
+function ProjetoCard({ projeto, onPress }: { projeto: ProjetoView; onPress: () => void }) {
+  const palette = usePalette();
+  const cor = projeto.color || palette.accent;
+  const financeiro = limite(projeto.percentReceived);
+  const horas = projeto.estimatedMilli > 0 ? limite((projeto.workedMilli / projeto.estimatedMilli) * 100) : 0;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${projeto.name} e registrar horas`} onPress={onPress} style={({ pressed }) => ({ borderRadius: radius.lg, borderWidth: 1, borderColor: palette.line, backgroundColor: pressed ? palette.surfaceRaised : palette.surface, padding: 16 })}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: cor }} /><Texto numberOfLines={1} style={[type.bodyStrong, { color: palette.ink, flex: 1 }]}>{projeto.name}</Texto><View style={{ backgroundColor: `${cor}20`, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4 }}><Small style={{ color: cor }}>{Math.round(financeiro)}% recebido</Small></View></View>
+      <View style={{ flexDirection: "row", marginTop: 10 }}><Small style={{ flex: 1 }}>{projeto.openTasks} tarefas abertas</Small><Small>{projeto.dueOn ? `Prazo ${relativeDate(projeto.dueOn as never)}` : "Sem prazo"}</Small></View>
+      <View style={{ height: 5, borderRadius: 3, backgroundColor: palette.surfaceInset, marginTop: 10, overflow: "hidden" }}><View style={{ width: `${financeiro}%`, height: 5, borderRadius: 3, backgroundColor: cor }} /></View>
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}><MiniGrafico label="Pagamentos" value={money(cents(projeto.receivedCents))} percent={financeiro} color={cor} /><MiniGrafico label="Progresso" value={`${Math.round(horas)}%`} percent={horas} color={palette.positive} /></View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 12 }}><Clock size={13} color={palette.inkSubtle} /><Small>Toque para registrar horas</Small></View>
+    </Pressable>
+  );
+}
+
+function MiniGrafico({ label, value, percent, color }: { label: string; value: string; percent: number; color: string }) {
+  const palette = usePalette();
+  const alturas = [0.35, 0.52, 0.44, 0.7, Math.max(0.18, percent / 100)];
+  return <View style={{ flex: 1, minHeight: 70, borderRadius: radius.md, backgroundColor: palette.surfaceInset, padding: 10 }}><View style={{ flexDirection: "row", justifyContent: "space-between" }}><Small>{label}</Small><Texto style={[type.caption, { color: palette.ink, fontWeight: "600" }]}>{value}</Texto></View><View style={{ flexDirection: "row", alignItems: "flex-end", height: 28, gap: 3, marginTop: 7 }}>{alturas.map((altura, indice) => <View key={indice} style={{ flex: 1, height: Math.max(3, altura * 28), borderRadius: 2, backgroundColor: indice === alturas.length - 1 ? color : `${color}48` }} />)}</View></View>;
+}
+
+function limite(valor: number): number { return Math.max(0, Math.min(100, Number.isFinite(valor) ? valor : 0)); }

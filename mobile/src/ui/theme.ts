@@ -38,38 +38,38 @@ export type Palette = {
 };
 
 const ACCENTS: Record<AccentId, { base: string; wash: string; edge: string; soft: string }> = {
-  blurple: { base: "#9184d9", wash: "#2b2741", edge: "#5d5294", soft: "#d2cefd" },
-  azul: { base: "#72a7df", wash: "#202d42", edge: "#4c6f98", soft: "#c9e1fa" },
-  verde: { base: "#69b69f", wash: "#1d3732", edge: "#477f70", soft: "#c6eadf" },
-  coral: { base: "#d7877f", wash: "#432927", edge: "#965e59", soft: "#f2d0cd" },
+  blurple: { base: "#7c5cfc", wash: "#201942", edge: "#4936a1", soft: "#b9a9ff" },
+  azul: { base: "#3b82f6", wash: "#101f3d", edge: "#2455a5", soft: "#9cc3ff" },
+  verde: { base: "#22c55e", wash: "#102c1c", edge: "#187e40", soft: "#8ce2aa" },
+  coral: { base: "#f43f5e", wash: "#35131c", edge: "#9b2639", soft: "#ffa0b0" },
 };
 
 const makePalette = (accentId: AccentId): Palette => {
   const accent = ACCENTS[accentId];
   return {
-    canvas: "#161826",
-    surface: "#232532",
-    surfaceRaised: "#292b31",
-    surfaceSunken: "#1c1e29",
-    surfaceInset: "#292b31",
-    line: "#3f424d",
-    lineStrong: "#595d6c",
-    ink: "#e9e9ed",
-    inkMuted: "#b2b6ca",
-    inkSubtle: "#9397ab",
+    canvas: "#0a0a0f",
+    surface: "#12121a",
+    surfaceRaised: "#171722",
+    surfaceSunken: "#0d0d14",
+    surfaceInset: "#1a1a28",
+    line: "#1e1e30",
+    lineStrong: "#303047",
+    ink: "#f0f0f8",
+    inkMuted: "#b0b0c8",
+    inkSubtle: "#6b6b88",
     accent: accent.base,
-    accentInk: "#161826",
+    accentInk: "#ffffff",
     accentWash: accent.wash,
     accentEdge: accent.edge,
-    positive: "#9bceb7",
-    positiveWash: "#1d332b",
-    negative: "#e59a9a",
-    negativeWash: "#402528",
-    caution: "#d4b275",
-    cautionWash: "#3b3120",
+    positive: "#22c55e",
+    positiveWash: "#102c1c",
+    negative: "#f43f5e",
+    negativeWash: "#35131c",
+    caution: "#f59e0b",
+    cautionWash: "#35250b",
     info: accent.base,
     infoWash: accent.wash,
-    viz: [accent.base, "#72a7df", "#d4b275", "#d7877f", "#69b69f", "#b991cf", "#9cb568", "#9397ab"],
+    viz: [accent.base, "#22c55e", "#f43f5e", "#f59e0b", "#3b82f6", "#a855f7", "#14b8a6", "#6b6b88"],
   };
 };
 
@@ -120,34 +120,34 @@ export function useIsDark(): boolean {
 }
 
 export const type = {
-  display: { fontSize: 42, lineHeight: 44, fontWeight: "500" as const, letterSpacing: -1.35 },
-  figure: { fontSize: 26, lineHeight: 30, fontWeight: "500" as const, letterSpacing: -0.62 },
-  figureSm: { fontSize: 19, lineHeight: 23, fontWeight: "500" as const, letterSpacing: -0.34 },
-  title: { fontSize: 22, lineHeight: 27, fontWeight: "500" as const, letterSpacing: -0.44 },
-  heading: { fontSize: 17, lineHeight: 21, fontWeight: "500" as const, letterSpacing: -0.25 },
+  display: { fontSize: 48, lineHeight: 52, fontWeight: "700" as const, letterSpacing: -2.1 },
+  figure: { fontSize: 28, lineHeight: 34, fontWeight: "700" as const, letterSpacing: -0.8 },
+  figureSm: { fontSize: 18, lineHeight: 23, fontWeight: "600" as const, letterSpacing: -0.3 },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: "700" as const, letterSpacing: -0.6 },
+  heading: { fontSize: 17, lineHeight: 22, fontWeight: "600" as const, letterSpacing: -0.2 },
   body: { fontSize: 14, lineHeight: 20, fontWeight: "400" as const },
-  bodyStrong: { fontSize: 14, lineHeight: 20, fontWeight: "500" as const },
-  bodySm: { fontSize: 12.5, lineHeight: 18, fontWeight: "400" as const },
-  caption: { fontSize: 11.5, lineHeight: 16, fontWeight: "400" as const },
-  label: { fontSize: 10.5, lineHeight: 13, fontWeight: "500" as const, letterSpacing: 1.25 },
+  bodyStrong: { fontSize: 14, lineHeight: 20, fontWeight: "600" as const },
+  bodySm: { fontSize: 12, lineHeight: 17, fontWeight: "400" as const },
+  caption: { fontSize: 10.5, lineHeight: 14, fontWeight: "400" as const },
+  label: { fontSize: 10, lineHeight: 13, fontWeight: "500" as const, letterSpacing: 0.8 },
 };
 
-export const space = { xs: 3, sm: 6, md: 8, lg: 11, xl: 17, xxl: 22 };
-export const radius = { xs: 4, sm: 4, md: 8, lg: 14, xl: 14, pill: 999 };
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 };
+export const radius = { xs: 6, sm: 8, md: 12, lg: 16, xl: 24, pill: 999 };
 
 export const elevation = {
   panel: {
-    elevation: 1,
+    elevation: 2,
     shadowColor: "#000",
     shadowOpacity: 0.28,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
   float: {
-    elevation: 9,
-    shadowColor: "#000",
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    elevation: 14,
+    shadowColor: ACCENTS.blurple.base,
+    shadowOpacity: 0.42,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 9 },
   },
 };

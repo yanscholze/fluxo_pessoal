@@ -43,11 +43,13 @@ import { cents } from "@fluxo/core/kernel/money.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
 import type { CardSummary } from "../finance/derive.ts";
 import { useLedger } from "../state/ledger.tsx";
+import { useConnectedSession } from "../state/session.tsx";
 import { CardFace, LARGURA_DA_FACE } from "../ui/card-face.tsx";
 import { CardPhoto } from "../ui/card-photo.tsx";
 import { Medidor } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Label, Row, Small, Texto } from "../ui/primitives.tsx";
+import { ScreenHeader } from "../ui/mockup.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 const { width: LARGURA_DA_TELA } = Dimensions.get("window");
@@ -71,8 +73,9 @@ const LIMIAR = 90;
 /** Mola única para toda a tela: dois tempos diferentes leriam como dois eventos. */
 const MOLA = { damping: 18, stiffness: 190, mass: 0.9 } as const;
 
-export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParcelamentos: () => void; onOpenTransaction: (id: string) => void }) {
+export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }: { onParcelamentos: () => void; onOpenTransaction: (id: string) => void; onAjustes: () => void }) {
   const palette = usePalette();
+  const { credentials } = useConnectedSession();
   const { overview, sync, synchronize } = useLedger();
   const [ativo, setAtivo] = useState(0);
   const [aberta, setAberta] = useState(false);
@@ -140,7 +143,7 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParce
       {
         rotateX: `${interpolate(progresso.value, [0, 1], [0, -78], Extrapolation.CLAMP)}deg`,
       },
-      { scale: interpolate(progresso.value, [0, 1], [1, 0.82], Extrapolation.CLAMP) },
+      { scale: interpolate(progresso.value, [0, 1], [1, 1.07], Extrapolation.CLAMP) },
     ],
   }));
 
@@ -174,11 +177,8 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParce
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
-      <View style={{ paddingHorizontal: 17, paddingTop: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Texto style={[type.title, { color: palette.ink }]}>Cartões</Texto>
-        <Pressable onPress={onParcelamentos} style={({ pressed }) => ({ minHeight: 40, justifyContent: "center", paddingHorizontal: 8, opacity: pressed ? 0.62 : 1 })}>
-          <Small tone="muted">Parcelamentos</Small>
-        </Pressable>
+      <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+        <ScreenHeader title="Cartões" subtitle="Deslize para trocar de cartão" onProfile={onAjustes} profileName={credentials.user.displayName} />
       </View>
       <View style={{ position: "absolute", left: (LARGURA_DA_TELA - 420) / 2, top: -145, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.68 }} />
       <GestureDetector gesture={gesto}>
@@ -202,7 +202,7 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParce
                   key={resumo.card.id}
                   style={ehOEscolhido ? estiloDaFace : estiloDosVizinhos}
                 >
-                  <CardFace resumo={resumo} hoje={hoje} atenuada={!ehOEscolhido && cartoes.length > 1} />
+                  <CardFace resumo={resumo} hoje={hoje} titular={credentials.user.displayName} atenuada={!ehOEscolhido && cartoes.length > 1} />
                 </Animated.View>
               );
             })}
@@ -270,6 +270,7 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction }: { onParce
               aoFechar={fechar}
               aoAtualizar={() => void synchronize()}
               onOpenTransaction={onOpenTransaction}
+              onParcelamentos={onParcelamentos}
             /> : null}
         </ScrollView>
       </Animated.View>
@@ -283,12 +284,14 @@ function Detalhe({
   aoFechar,
   aoAtualizar,
   onOpenTransaction,
+  onParcelamentos,
 }: {
   resumo: CardSummary;
   hoje: string;
   aoFechar: () => void;
   aoAtualizar: () => void;
   onOpenTransaction: (id: string) => void;
+  onParcelamentos: () => void;
 }) {
   const palette = usePalette();
   const { transactions } = useLedger();
@@ -296,16 +299,21 @@ function Detalhe({
 
   if (card.kind !== "credit") {
     return (
-      <Card>
-        <Label>{card.name}</Label>
-        <Body muted style={{ marginTop: space.xs }}>
-          Cartão de débito: cada compra sai direto do saldo da conta, sem fatura e sem limite
-          próprio.
-        </Body>
-        <Pressable onPress={aoFechar} style={{ marginTop: space.md }}>
-          <Small tone="muted">Voltar para a carteira</Small>
+      <>
+        <Card>
+          <Label>{card.name}</Label>
+          <Body muted style={{ marginTop: space.xs }}>
+            Cartão de débito: cada compra sai direto do saldo da conta, sem fatura e sem limite próprio.
+          </Body>
+          <Pressable onPress={aoFechar} style={{ marginTop: space.md }}>
+            <Small tone="muted">Voltar para a carteira</Small>
+          </Pressable>
+        </Card>
+        <Pressable accessibilityRole="button" onPress={onParcelamentos} style={({ pressed }) => ({ minHeight: 58, paddingHorizontal: 16, borderRadius: radius.lg, backgroundColor: pressed ? palette.surfaceRaised : palette.surface, borderWidth: 1, borderColor: palette.line, justifyContent: "center" })}>
+          <Body strong>Parcelamentos</Body>
+          <Small style={{ marginTop: 2 }}>Ver compras parceladas dos cartões</Small>
         </Pressable>
-      </Card>
+      </>
     );
   }
 
@@ -373,6 +381,11 @@ function Detalhe({
           )) : <Empty title="Nenhum lançamento nesta fatura" />}
         </View>
       </Card>
+
+      <Pressable accessibilityRole="button" onPress={onParcelamentos} style={({ pressed }) => ({ minHeight: 58, paddingHorizontal: 16, borderRadius: radius.lg, backgroundColor: pressed ? palette.surfaceRaised : palette.surface, borderWidth: 1, borderColor: palette.line, justifyContent: "center" })}>
+        <Body strong>Parcelamentos</Body>
+        <Small style={{ marginTop: 2 }}>Ver compras parceladas deste e dos outros cartões</Small>
+      </Pressable>
 
       <Card>
         <Label style={{ marginBottom: space.sm }}>Face do cartão</Label>
