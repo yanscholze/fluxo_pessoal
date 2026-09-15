@@ -45,9 +45,12 @@ export function InicioScreen({
   const painel = useRemoto(fetchDashboard);
   const projetos = useRemoto(fetchProjetos);
   const dados = painel.dados;
+  const agenda = dados?.upcoming ?? [];
+  const tarefas = dados?.openTasks ?? [];
+  const projetosAtivos = projetos.dados?.projects ?? [];
   const hoje = todayIn();
   const recentes = transactions.filter((item) => item.occurredOn <= hoje).slice(0, 4);
-  const nome = credentials.user.displayName.split(" ")[0];
+  const nome = credentials.user?.displayName?.trim().split(/\s+/)[0] || "Yan";
   const comprometido = dados
     ? dados.freeToSpend.openInvoicesCents + dados.freeToSpend.otherCommitmentsCents
     : 0;
@@ -136,35 +139,35 @@ export function InicioScreen({
           ))}
         </ScrollView>
 
-        {dados && (dados.upcoming.length > 0 || dados.openTasks.length > 0) ? (
+        {agenda.length > 0 || tarefas.length > 0 ? (
           <Card>
             <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
               <Label>Agenda do ciclo</Label>
-              <Small>{dados.upcoming.length + dados.openTasks.length} itens</Small>
+              <Small>{agenda.length + tarefas.length} itens</Small>
             </View>
             <View style={{ marginTop: 8 }}>
-              {dados.upcoming.slice(0, 3).map((item) => (
+              {agenda.slice(0, 3).map((item) => (
                 <LinhaAgenda key={`${item.date}-${item.description}`} titulo={item.description} meta={`${relativeDate(item.date as never)} · ${money(cents(item.amountCents))}`} icon={<CalendarDots size={18} color={palette.accent} />} />
               ))}
-              {dados.openTasks.slice(0, Math.max(0, 4 - dados.upcoming.slice(0, 3).length)).map((item) => (
+              {tarefas.slice(0, Math.max(0, 4 - agenda.slice(0, 3).length)).map((item) => (
                 <LinhaAgenda key={item.id} titulo={item.title} meta={`${item.projectName} · ${item.dueOn ? relativeDate(item.dueOn as never) : "sem prazo"}`} icon={<Target size={18} color={palette.inkSubtle} />} />
               ))}
             </View>
           </Card>
         ) : null}
 
-        {projetos.dados?.projects.length ? (
+        {projetosAtivos.length ? (
           <Card>
             <CabecalhoDeCard titulo="Projetos ativos" acao="Ver todos" onPress={() => onNavigate("trabalho")} />
             <View style={{ marginTop: 8 }}>
-              {projetos.dados.projects.slice(0, 2).map((projeto) => (
+              {projetosAtivos.slice(0, 2).map((projeto) => (
                 <Pressable key={projeto.id} onPress={() => onNavigate("trabalho")} style={({ pressed }) => ({ paddingVertical: 11, borderTopWidth: 1, borderTopColor: palette.line, opacity: pressed ? 0.62 : 1 })}>
                   <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
                     <Texto style={[type.body, { color: palette.ink, flex: 1 }]} numberOfLines={1}>{projeto.name}</Texto>
-                    <Texto style={[type.bodySm, { color: palette.accent, fontWeight: "500" }]}>{Math.round(projeto.percentReceived)}%</Texto>
+                    <Texto style={[type.bodySm, { color: palette.accent, fontWeight: "500" }]}>{percentualSeguro(projeto.percentReceived)}%</Texto>
                   </View>
                   <View style={{ height: 2, backgroundColor: palette.line, marginTop: 8 }}>
-                    <View style={{ height: 2, width: `${Math.min(100, Math.max(0, projeto.percentReceived))}%`, backgroundColor: palette.accent }} />
+                    <View style={{ height: 2, width: `${percentualSeguro(projeto.percentReceived)}%`, backgroundColor: palette.accent }} />
                   </View>
                   <Small style={{ marginTop: 8 }}>{projeto.openTasks} pendência{projeto.openTasks === 1 ? "" : "s"}{projeto.dueOn ? ` · prazo ${relativeDate(projeto.dueOn as never)}` : ""}</Small>
                 </Pressable>
@@ -232,5 +235,10 @@ function numero(valor: string): string {
 }
 
 function dataLonga(data: string): string {
-  return DATA_LONGA.format(new Date(`${data}T12:00:00Z`));
+  const valor = /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : todayIn();
+  return DATA_LONGA.format(new Date(`${valor}T12:00:00Z`));
+}
+
+function percentualSeguro(valor: number): number {
+  return Number.isFinite(valor) ? Math.round(Math.min(100, Math.max(0, valor))) : 0;
 }

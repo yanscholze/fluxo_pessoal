@@ -228,8 +228,8 @@ function NucleoTars({ dados }: { dados: DashboardView | null }) {
   const palette = usePalette();
   const alertas = dados
     ? [
-        ...dados.cards.filter((item) => (item.currentInvoice?.outstandingCents ?? 0) > 0).slice(0, 2).map((item) => `${item.name}: ${money(cents(item.currentInvoice?.outstandingCents ?? 0))}`),
-        ...dados.openTasks.slice(0, 2).map((item) => item.title),
+        ...(dados.cards ?? []).filter((item) => (item.currentInvoice?.outstandingCents ?? 0) > 0).slice(0, 2).map((item) => `${item.name}: ${money(cents(item.currentInvoice?.outstandingCents ?? 0))}`),
+        ...(dados.openTasks ?? []).slice(0, 2).map((item) => item.title),
       ]
     : [];
 
