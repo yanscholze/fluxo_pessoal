@@ -46,13 +46,31 @@ cd mobile && npm start
 bash scripts/apk-local.sh ~/Downloads/fluxo.apk
 ```
 
-O script existe por causa de uma armadilha: **o build local precisa de um JDK
-17**. Do JDK 24 em diante a JVM imprime um aviso ao carregar biblioteca nativa,
-o gerador de prefabs do Android usa JNA e dispara esse aviso, e o plugin do
-Gradle trata qualquer linha em `stderr` daquela ferramenta como erro fatal. O
-build morre em `configureCMakeRelWithDebInfo` com "A restricted method in
-java.lang.System has been called" — uma mensagem que não sugere em nada que o
-problema é a versão do Java. A ferramenta funciona; é só o aviso que derruba.
+Chama o Gradle direto, sem a nuvem nem o cliente da Expo: o script instala as
+dependências se faltarem, roda o `prebuild` para gerar `mobile/android/` e
+compila o release. Passe `--limpo` para regenerar o projeto nativo do zero.
+
+Três armadilhas, todas já responsáveis por um build perdido:
+
+**O JDK tem de ser o 17.** Do 24 em diante a JVM imprime um aviso ao carregar
+biblioteca nativa; o gerador de prefabs do Android usa JNA, dispara esse aviso,
+e o Gradle trata qualquer linha em `stderr` daquela ferramenta como erro fatal.
+O build morre em `configureCMakeRelWithDebInfo` com "A restricted method in
+java.lang.System has been called" — mensagem que não sugere em nada que o
+problema é a versão do Java.
+
+**`mobile` é workspace npm.** As dependências ficam no `node_modules` da raiz;
+instalar dentro de `mobile/` não resolve nada.
+
+**A chave de assinatura fica em `mobile/chaves/`**, fora do git. Ela decide se
+uma versão nova instala por cima da anterior — guarde cópia dos dois arquivos.
+Sem ela, o `prebuild` assina o release com a chave de depuração, que é pública:
+dá para instalar no próprio aparelho e não serve para mais nada. Para criar uma
+chave nova numa máquina nova:
+
+```bash
+bash mobile/chaves/gerar.sh
+```
 
 ## Conectar a uma conta
 

@@ -11,3 +11,7 @@ dist/
 # MainApplication. Versionar o gerado convida a editar ali e perder a edição no
 # próximo prebuild.
 android/
+
+# A chave de assinatura do APK. Nunca vai para o git.
+chaves/*.jks
+chaves/assinatura.properties
