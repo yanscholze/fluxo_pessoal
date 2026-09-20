@@ -1,26 +1,19 @@
-import Link from "next/link";
 import { buildReport } from "../../../server/services/reports.ts";
 import { currentUser } from "../../auth-context.ts";
-import { ChartFrame, DonutChart, LineChart, VIZ, chartColor } from "../../ui/charts.tsx";
-import { Breakdown, MetricStrip } from "../../ui/data-display.tsx";
 import { competenceShort, money, percent } from "../../ui/format.ts";
-import { ArrowDownRight, ArrowUpRight, Download, PiggyBank, Scale, Sparkles } from "../../ui/icons.tsx";
-import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Download, TrendingUp } from "../../ui/icons.tsx";
+import { MetricTile, PanelHeading } from "../../ui/mesa.tsx";
+import { Empty } from "../../ui/primitives.tsx";
 import { PeriodFilter, parsePeriodo } from "./period-filter.tsx";
-import { ReportNav } from "./report-nav.tsx";
-import { Empty, Meter, Panel, PanelHeader } from "../../ui/primitives.tsx";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Relatórios.
  *
- * A leitura em texto vem **antes** dos gráficos. Um gráfico responde "como
- * variou"; a frase responde "e daí" — e é a segunda pergunta que faz alguém
- * mudar de comportamento. Gráfico sem conclusão é decoração cara.
- *
- * O seletor de período é link e não botão: cada recorte é um endereço, então
- * dá para compartilhar e voltar pelo histórico do navegador.
+ * Três números que resumem o período e dois gráficos: a evolução do patrimônio
+ * e para onde o dinheiro foi. A exportação fica no cabeçalho do primeiro
+ * painel, como no desenho — é dali que se leva o mês inteiro para fora.
  */
 export default async function Relatorios({
   searchParams,
@@ -35,221 +28,125 @@ export default async function Relatorios({
 
   const params = await searchParams;
   const periodo = parsePeriodo(params.periodo);
-  const report = await buildReport(user.id, periodo);
+  const relatorio = await buildReport(user.id, periodo);
 
-  const maiorCategoria = report.expensesByCategory[0]?.amountCents ?? 1;
-  const rotulos = report.monthly.map((ponto) => competenceShort(ponto.competence).replace(" de ", "/"));
+  const meses = relatorio.monthly.slice(-7);
+  const teto = Math.max(...meses.map((ponto) => Math.abs(ponto.balanceCents)), 1);
+  const categorias = relatorio.expensesByCategory.slice(0, 6);
 
   return (
-    <Page>
-      <PageHeader
-        eyebrow={`${competenceShort(report.from)} a ${competenceShort(report.to)}`}
-        title="Relatórios"
-        description={`${report.indicators.transactionCount} lançamentos no período.`}
-      >
-        <ReportNav />
-        <div className="mt-3">
-          <PeriodFilter base="/relatorios" atual={periodo} />
-        </div>
-      </PageHeader>
-
-      <Stack gap="lg">
-        <MetricStrip
-          metrics={[
-            {
-              label: "Entradas",
-              value: money(report.indicators.incomeCents),
-              tone: "positive",
-              icon: ArrowUpRight,
-            },
-            {
-              label: "Saídas",
-              value: money(report.indicators.expenseCents),
-              icon: ArrowDownRight,
-              hint: `${money(report.indicators.averageMonthlyExpenseCents)} por mês em média`,
-            },
-            {
-              label: "Resultado",
-              value: money(report.indicators.netCents, { signed: true }),
-              tone: report.indicators.netCents < 0 ? "negative" : "positive",
-              icon: Scale,
-            },
-            {
-              label: "Taxa de poupança",
-              value: percent(report.indicators.savingsRatePercent),
-              tone:
-                report.indicators.savingsRatePercent < 0
-                  ? "negative"
-                  : report.indicators.savingsRatePercent >= 20
-                    ? "positive"
-                    : "caution",
-              icon: PiggyBank,
-              hint: "Do que entrou, quanto sobrou",
-            },
-          ]}
+    <div className="content-area">
+      <div className="grid gap-5 md:grid-cols-3">
+        <MetricTile
+          tom="positive"
+          icone={<TrendingUp className="size-4" aria-hidden />}
+          rotulo="Patrimônio líquido"
+          valor={money(relatorio.indicators.netWorthCents)}
+          apoio={`${competenceShort(relatorio.from)} a ${competenceShort(relatorio.to)}`}
         />
+        <MetricTile
+          tom="accent"
+          icone={<TrendingUp className="size-4" aria-hidden />}
+          rotulo="Taxa de economia"
+          valor={percent(relatorio.indicators.savingsRatePercent, 1)}
+          apoio="Quanto da renda sobrou no período"
+        />
+        <MetricTile
+          tom="caution"
+          icone={<TrendingUp className="size-4" aria-hidden />}
+          rotulo="Custo médio mensal"
+          valor={money(relatorio.indicators.averageMonthlyExpenseCents)}
+          apoio={`${relatorio.indicators.transactionCount} lançamentos no período`}
+        />
+      </div>
 
-        {report.insights.length ? (
-          <Panel>
-            <PanelHeader title="O que os números dizem" icon={Sparkles} />
-            <ul className="space-y-2">
-              {report.insights.map((frase) => (
-                <li key={frase} className="flex gap-2.5 text-body text-ink">
-                  <span className="mt-2 size-1 shrink-0 rounded-full bg-accent" aria-hidden />
-                  {frase}
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        ) : null}
-
-        <Panel>
-          {report.monthly.length ? (
-            <ChartFrame
-              title="Entradas, saídas e saldo"
-              hint="Mês a mês, só o que passou por conta"
-              legend={[
-                { label: "Entradas", color: chartColor("positive") },
-                { label: "Saídas", color: chartColor("negative") },
-                { label: "Saldo acumulado", color: chartColor("accent") },
-              ]}
-            >
-              <LineChart
-                labels={rotulos}
-                height={220}
-                zeroLine
-                format={(valor) => money(valor)}
-                series={[
-                  {
-                    id: "entradas",
-                    label: "Entradas",
-                    color: chartColor("positive"),
-                    values: report.monthly.map((ponto) => ponto.incomeCents),
-                  },
-                  {
-                    id: "saidas",
-                    label: "Saídas",
-                    color: chartColor("negative"),
-                    values: report.monthly.map((ponto) => ponto.expenseCents),
-                  },
-                  {
-                    id: "saldo",
-                    label: "Saldo acumulado",
-                    color: chartColor("accent"),
-                    values: report.monthly.map((ponto) => ponto.balanceCents),
-                    fill: true,
-                  },
-                ]}
-              />
-            </ChartFrame>
-          ) : (
-            <Empty title="Nenhum movimento no período" hint="Escolha um recorte maior ou registre lançamentos." />
-          )}
-        </Panel>
-
-        <div className="grid gap-5 lg:grid-cols-3">
-          <Panel className="lg:col-span-2">
-            <PanelHeader
-              title="Saídas por categoria"
-              action={
-                report.expensesByCategory.length ? (
-                  <Link
-                    href={`/api/v1/reports/export?periodo=${periodo}&fluxo=saidas`}
-                    prefetch={false}
-                    className="inline-flex items-center gap-1.5 text-body-sm font-medium text-accent hover:underline"
-                  >
-                    <Download size={14} strokeWidth={1.5} aria-hidden />
-                    Exportar CSV
-                  </Link>
-                ) : undefined
-              }
-            />
-
-            {report.expensesByCategory.length ? (
-              <div className="flex flex-col items-center gap-6 @md:flex-row @md:items-start">
-                <DonutChart
-                  slices={report.expensesByCategory.slice(0, 8).map((item, i) => ({
-                    label: item.name,
-                    value: item.amountCents,
-                    color: item.color ?? VIZ[i % VIZ.length],
-                  }))}
-                  size={156}
-                  thickness={17}
-                  centerValue={money(report.indicators.expenseCents)}
-                  centerLabel="no período"
-                  format={(valor) => money(valor)}
-                />
-
-                <ul className="min-w-0 flex-1 space-y-3">
-                  {report.expensesByCategory.slice(0, 8).map((item, i) => (
-                    <li key={item.categoryId ?? "sem"}>
-                      <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span
-                            className="size-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: item.color ?? VIZ[i % VIZ.length] }}
-                            aria-hidden
-                          />
-                          <span className="truncate text-body-sm text-ink">{item.name}</span>
-                          <span className="tabular shrink-0 text-caption text-ink-subtle">
-                            {item.transactionCount}×
-                          </span>
-                        </span>
-                        <span className="tabular shrink-0 text-body-sm text-ink">
-                          {money(item.amountCents)}
-                          <span className="ml-1.5 text-caption text-ink-subtle">{percent(item.percent)}</span>
-                        </span>
-                      </div>
-                      <Meter
-                        value={item.amountCents}
-                        total={maiorCategoria}
-                        color={item.color ?? VIZ[i % VIZ.length]}
-                        size="sm"
-                        label={item.name}
-                      />
-                    </li>
-                  ))}
-                </ul>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <section className="glass-panel p-6">
+          <PanelHeading
+            titulo="Evolução patrimonial"
+            apoio={`${competenceShort(relatorio.from)} a ${competenceShort(relatorio.to)}`}
+            acao={
+              <div className="flex shrink-0 items-center gap-2">
+                <PeriodFilter base="/relatorios" atual={periodo} />
+                <a
+                  href={`/api/v1/reports/export?periodo=${periodo}&fluxo=saidas`}
+                  className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-canvas px-3 text-caption font-medium text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+                >
+                  <Download className="size-4" aria-hidden />
+                  Exportar
+                </a>
               </div>
-            ) : (
-              <Empty title="Nenhuma saída no período" compact />
-            )}
-          </Panel>
+            }
+          />
+          {meses.length > 1 ? (
+            <div className="flex h-48 items-end gap-3 pt-4">
+              {meses.map((ponto) => (
+                <div key={ponto.competence} className="group flex h-full flex-1 flex-col justify-end gap-3">
+                  <div
+                    className="relative h-full overflow-hidden rounded-xl bg-surface-inset"
+                    title={`${competenceShort(ponto.competence)}: ${money(ponto.balanceCents)}`}
+                  >
+                    <div
+                      className="absolute inset-x-0 bottom-0 rounded-xl bg-accent/70 transition-all duration-500 group-hover:bg-accent"
+                      style={{
+                        height: `${Math.max((Math.abs(ponto.balanceCents) / teto) * 100, 2)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-center text-[10px] text-ink-subtle">
+                    {competenceShort(ponto.competence).replace(/\s*de\s*\d+$/, "")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty title="Sem histórico suficiente" hint="A evolução precisa de ao menos dois meses." />
+          )}
+        </section>
 
-          <div className="space-y-5">
-            <Panel>
-              <PanelHeader title="Patrimônio hoje" icon={PiggyBank} />
-              <Breakdown
-                parts={[
-                  { label: "Investimentos", cents: report.indicators.investmentsCents, sign: "+" },
-                  { label: "Dívida de cartão", cents: report.indicators.cardDebtCents, sign: "−" },
-                ]}
-                result={{
-                  label: "Patrimônio líquido",
-                  cents: report.indicators.netWorthCents,
-                  tone: report.indicators.netWorthCents < 0 ? "negative" : "neutral",
-                }}
-              />
-            </Panel>
+        <section className="glass-panel p-6">
+          <PanelHeading titulo="Para onde o dinheiro foi" apoio="Saídas por categoria no período" />
+          {categorias.length ? (
+            <div className="space-y-5">
+              {categorias.map((categoria) => (
+                <div key={categoria.categoryId ?? categoria.name}>
+                  <div className="mb-2 flex justify-between text-caption">
+                    <span className="min-w-0 truncate text-ink">{categoria.name}</span>
+                    <span className="tabular shrink-0 text-ink-subtle">
+                      {money(categoria.amountCents)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-inset">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(categoria.percent, 2)}%`,
+                        background: categoria.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty title="Nenhuma saída no período" hint="Sem despesas para distribuir." />
+          )}
+        </section>
+      </div>
 
-            {report.incomeByCategory.length ? (
-              <Panel>
-                <PanelHeader title="Entradas por origem" icon={ArrowUpRight} />
-                <ul className="space-y-2">
-                  {report.incomeByCategory.slice(0, 6).map((item) => (
-                    <li key={item.categoryId ?? "sem"} className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-body-sm text-ink-muted">{item.name}</span>
-                      <span className="tabular shrink-0 text-body-sm font-medium text-positive">
-                        {money(item.amountCents)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            ) : null}
-          </div>
-        </div>
-      </Stack>
-    </Page>
+      {relatorio.insights.length ? (
+        <section className="glass-panel mt-5 p-6">
+          <PanelHeading titulo="O que os números dizem" apoio="Leitura automática do período" />
+          <ul className="space-y-3">
+            {relatorio.insights.map((frase) => (
+              <li key={frase} className="flex gap-3 text-body-sm text-ink-muted">
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+                <span>{frase}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
   );
 }
