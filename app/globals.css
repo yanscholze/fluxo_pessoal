@@ -180,8 +180,6 @@
   unicode-range: U+0030-0039, U+002B, U+002C, U+002D, U+002E, U+0024, U+0025, U+00A0, U+2212, U+2013;
 }
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 @theme {
   /* ---------------------------------------------------------------------- */
   /* Superfícies — valores do tema claro; o escuro sobrescreve mais abaixo.  */
@@ -373,8 +371,10 @@
    * `panel` é a superfície de conteúdo; `nested` é o que vive dentro dela com
    * um respiro de 4 px (14 − 4 = 10); `inner` é o que encosta com 2 px.
    */
-  --radius-panel: 0.75rem;
-  --radius-nested: 0.625rem;
+  /* O raio do Mesa. A caixa aninhada fica um respiro menor que a de fora,
+     para as curvas ficarem concêntricas em vez de paralelas. */
+  --radius-panel: 1.5rem;
+  --radius-nested: 1rem;
   --radius-inner: 0.75rem;
 
   /**
@@ -482,8 +482,7 @@
 /* aparece — e o fio tem de ser 5%, não os 70% que um tema claro usaria.      */
 /* -------------------------------------------------------------------------- */
 
-:root,
-[data-theme="dark"] {
+:root {
   --edge-light: rgb(255 255 255 / 0.05);
   --shade-soft: rgb(0 0 0 / 0.5);
   --shade-deep: rgb(0 0 0 / 0.5);
@@ -497,6 +496,10 @@
 /* entreletras: uma geométrica larga como Montserrat precisa de mais aperto    */
 /* que uma humanista, e Comfortaa não aceita nenhum sem fechar as contraformas.*/
 /* -------------------------------------------------------------------------- */
+
+[data-font="figtree"] {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+}
 
 [data-font="montserrat"] {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
@@ -530,60 +533,9 @@
   font-family: "Numerais", var(--font-sans);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Paletas de acento.                                                         */
-/*                                                                            */
-/* Só o cromo muda. Positivo e negativo continuam sendo verde e vermelho em    */
-/* qualquer paleta, porque eles não são estilo — são o sinal do dinheiro.      */
-/* -------------------------------------------------------------------------- */
-
-[data-accent="verde"] {
-  --color-accent: #087c57;
-  --color-accent-ink: #ffffff;
-  --color-accent-hover: #086b4c;
-}
-[data-theme="dark"][data-accent="verde"] {
-  --color-accent: #51d5af;
-  --color-accent-ink: #10261f;
-  --color-accent-hover: #76e4c4;
-}
-
-[data-accent="azul"] {
-  --color-accent: #2563eb;
-  --color-accent-ink: #ffffff;
-  --color-accent-hover: #1d4ed8;
-}
-[data-theme="dark"][data-accent="azul"] {
-  --color-accent: #5b9bff;
-  --color-accent-ink: #041226;
-  --color-accent-hover: #7bb0ff;
-}
-
-[data-accent="violeta"] {
-  --color-accent: #7056b8;
-  --color-accent-ink: #ffffff;
-  --color-accent-hover: #6047a4;
-}
-[data-theme="dark"][data-accent="violeta"] {
-  --color-accent: #a394e8;
-  --color-accent-ink: #191329;
-  --color-accent-hover: #b6a8f4;
-}
-
-[data-accent="ambar"] {
-  --color-accent: #b45309;
-  --color-accent-ink: #ffffff;
-  --color-accent-hover: #9a4708;
-}
-[data-theme="dark"][data-accent="ambar"] {
-  --color-accent: #f5a524;
-  --color-accent-ink: #2a1705;
-  --color-accent-hover: #ffb84d;
-}
-
 @layer base {
   html {
-    color-scheme: light dark;
+    color-scheme: dark;
     /* A âncora de rolagem impede o salto quando um painel acima muda de
        altura ao carregar — comum num painel que revela dados por seção. */
     overflow-anchor: auto;
@@ -668,9 +620,17 @@
     color: inherit;
   }
 
-  /* O relógio e o calendário nativos vêm claros no tema escuro. */
-  [data-theme="dark"] input::-webkit-calendar-picker-indicator {
-    filter: invert(1) opacity(0.55);
+  /*
+   * O ícone do calendário nativo.
+   *
+   * O `color-scheme: dark` acima já faz o navegador desenhar os controles
+   * nativos na versão escura, e o ícone já vem claro — inverter aqui, como se
+   * fazia quando o esquema era `light dark`, o pintaria de preto sobre o
+   * campo escuro. O que resta é tirar o brilho dele, que chega forte demais
+   * para um elemento secundário.
+   */
+  input::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -748,7 +708,7 @@
 .app-sidebar { background-image: linear-gradient(180deg, var(--color-accent-wash), transparent 12rem); }
 .page-content { scroll-margin-top: 5rem; }
 .page-content:focus { outline: none; }
-.page-heading h1 { text-wrap: balance; }
+.page-heading h2 { text-wrap: balance; }
 .skip-link { position: fixed; top: .75rem; left: 1rem; z-index: 100; transform: translateY(-200%); padding: .75rem 1rem; background: var(--color-accent); color: var(--color-accent-ink); border-radius: .5rem; }
 .skip-link:focus { transform: translateY(0); }
 @media (pointer: coarse) {

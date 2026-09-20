@@ -20,9 +20,12 @@ export default function Carregando() {
         <Skeleton className="mt-2 h-5 w-56" />
       </header>
 
-      <div className="grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((indice) => (
-          <div key={indice} className="bg-surface p-4 sm:p-5">
+          <div key={indice} className="glass-panel p-5">
+            {/* A bolha do ícone: o cartão de indicador do Mesa começa por ela,
+                e um esqueleto sem ela salta 40px quando o conteúdo chega. */}
+            <Skeleton className="mb-5 size-10 rounded-xl" />
             <Skeleton className="h-2.5 w-20" />
             <Skeleton className="mt-3 h-7 w-32" />
             <Skeleton className="mt-2.5 h-2.5 w-full max-w-[13rem]" />

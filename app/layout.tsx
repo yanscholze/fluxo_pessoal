@@ -27,33 +27,27 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f0eff5" },
-    { media: "(prefers-color-scheme: dark)", color: "#161826" },
-  ],
-};
+/** Um tema só: a barra do navegador acompanha o fundo do Mesa. */
+export const viewport: Viewport = { themeColor: "#060209" };
 
 /**
- * O tema é resolvido antes da primeira pintura.
+ * A letra escolhida é resolvida antes da primeira pintura.
  *
- * Aplicar o tema só depois da hidratação faz a tela piscar branco antes de
- * ficar escura. Este script roda de forma síncrona no `<head>`, então o
+ * Aplicá-la só depois da hidratação faria a página trocar de fonte na frente
+ * de quem está lendo. Este script roda de forma síncrona no `<head>`, então o
  * atributo já está no `<html>` quando o CSS é avaliado.
+ *
+ * Tema e cor de destaque saíram daqui junto com os controles que os
+ * escolhiam: a interface do Mesa tem um tema só e uma cor só. Quem tinha
+ * `fluxo:tema` ou `fluxo:acento` guardado simplesmente deixa de ser lido —
+ * nenhuma regra de estilo responde mais a esses atributos.
  */
-const TEMA_INICIAL = `
+const LETRA_INICIAL = `
 (function () {
   try {
-    var salvo = localStorage.getItem("fluxo:tema");
-    var escuro = salvo ? salvo === "escuro" : true;
-    document.documentElement.dataset.theme = escuro ? "dark" : "light";
-    var acento = localStorage.getItem("fluxo:acento");
-    if (acento) document.documentElement.dataset.accent = acento;
     var fonte = localStorage.getItem("fluxo:fonte");
-    if (fonte) document.documentElement.dataset.font = fonte;
-  } catch (e) {
-    document.documentElement.dataset.theme = "dark";
-  }
+    if (fonte && fonte !== "grotesk") document.documentElement.dataset.font = fonte;
+  } catch (e) {}
 })();
 `;
 
@@ -61,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: TEMA_INICIAL }} />
+        <script dangerouslySetInnerHTML={{ __html: LETRA_INICIAL }} />
       </head>
       <body className="min-h-dvh antialiased">
         <ServiceWorker />

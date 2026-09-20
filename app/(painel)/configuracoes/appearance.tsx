@@ -1,32 +1,30 @@
 "use client";
 
 /**
- * Tema e cor de acento.
+ * Aparência: a família de letra, e só.
  *
- * Guardado no `localStorage` e aplicado no `<html>` antes da primeira pintura
- * (ver o script no layout raiz), para a tela não piscar branco antes de ficar
- * escura.
+ * Aqui havia também um seletor de tema e um de cor de destaque. Os dois saíram
+ * quando a interface passou a ser a do Mesa, e por motivos diferentes.
  *
- * O acento veste apenas o cromo interativo — navegação ativa, ação primária,
- * foco. Positivo e negativo continuam verde e vermelho em qualquer paleta,
- * porque eles não são estilo: são o sinal do dinheiro, e trocá-los junto com o
- * tema faria uma receita ficar azul.
+ * **O tema** porque o desenho tem um só — escuro. O botão "Claro" continuava
+ * na tela trocando um atributo que nenhuma regra de estilo lia mais: clicava,
+ * marcava, e a tela ficava idêntica. Um controle que não muda nada é pior do
+ * que a ausência dele, porque ensina que os controles do produto mentem.
+ *
+ * **A cor de destaque** porque o roxo do Mesa não é mais uma preferência: ele
+ * está no gradiente do cartão de crédito, no brilho do orbe do TARS, no halo
+ * do fundo. As outras três opções eram valores do tema claro, e escolher
+ * "Verde" pintava um verde escuro de tema claro sobre um fundo quase preto.
+ *
+ * A letra fica, e continua valendo só neste navegador: é escolha de conforto
+ * de leitura, não identidade do produto. A preferência é aplicada no `<html>`
+ * antes da primeira pintura (ver o script no layout raiz), para a página não
+ * trocar de fonte na frente de quem está lendo.
  */
 
 import { gravarPreferencia, usePreferencia } from "../../ui/browser-preference.ts";
-import { SegmentedControl } from "../../ui/controls.tsx";
-import { Check, Moon, Sun } from "../../ui/icons.tsx";
+import { Check } from "../../ui/icons.tsx";
 import { Label } from "../../ui/primitives.tsx";
-
-/** O roxo é a identidade oficial; escolhas anteriores continuam disponíveis. */
-const PADRAO = "violeta";
-
-const ACENTOS = [
-  [PADRAO, "#9184d9", "Roxo · oficial"],
-  ["verde", "#087c57", "Verde"],
-  ["azul", "#2563eb", "Azul"],
-  ["ambar", "#b45309", "Âmbar"],
-] as const;
 
 /**
  * Famílias oferecidas.
@@ -37,47 +35,20 @@ const ACENTOS = [
  * continua na fonte escolhida; a coluna de valores continua alinhada.
  */
 const FONTES = [
-  { valor: "figtree", nome: "Figtree", nota: "Padrão · humanista", tabular: true },
+  { valor: "grotesk", nome: "Space Grotesk", nota: "Padrão · a do desenho", tabular: true },
+  { valor: "figtree", nome: "Figtree", nota: "Humanista · mais neutra", tabular: true },
   { valor: "montserrat", nome: "Montserrat", nota: "Geométrica · sóbria", tabular: true },
   { valor: "poppins", nome: "Poppins", nota: "Geométrica · arredondada", tabular: false },
   { valor: "comfortaa", nome: "Comfortaa", nota: "Muito arredondada", tabular: false },
 ] as const;
 
-const FONTE_PADRAO = "figtree";
-
-type Tema = "claro" | "escuro";
+/** A do desenho. É a que vale quando não há atributo nenhum no `<html>`. */
+const FONTE_PADRAO = "grotesk";
 
 export function Appearance() {
-  // O `<html>` já carrega a escolha aplicada antes da primeira pintura; estes
-  // são leitores dela, não uma segunda cópia do estado.
-  const tema = usePreferencia<Tema>(
-    (raiz) => (raiz.dataset.theme === "dark" ? "escuro" : "claro"),
-    "escuro",
-  );
-  const acento = usePreferencia((raiz) => raiz.dataset.accent ?? PADRAO, PADRAO);
+  // O `<html>` já carrega a escolha aplicada antes da primeira pintura; este é
+  // um leitor dela, não uma segunda cópia do estado.
   const fonte = usePreferencia((raiz) => raiz.dataset.font ?? FONTE_PADRAO, FONTE_PADRAO);
-
-  function aplicarTema(valor: Tema) {
-    gravarPreferencia(
-      (raiz) => {
-        raiz.dataset.theme = valor === "escuro" ? "dark" : "light";
-      },
-      "fluxo:tema",
-      valor,
-    );
-  }
-
-  function aplicarAcento(valor: string) {
-    gravarPreferencia(
-      (raiz) => {
-        // O roxo é a identidade oficial; escolhas anteriores continuam disponíveis.
-        if (valor === PADRAO) raiz.removeAttribute("data-accent");
-        else raiz.dataset.accent = valor;
-      },
-      "fluxo:acento",
-      valor,
-    );
-  }
 
   function aplicarFonte(valor: string) {
     gravarPreferencia(
@@ -91,88 +62,36 @@ export function Appearance() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <Label>Tema</Label>
-        <div className="mt-2">
-          <SegmentedControl
-            name="Tema"
-            value={tema}
-            onChange={aplicarTema}
-            options={[
-              { value: "claro", label: "Claro", icon: Sun },
-              { value: "escuro", label: "Escuro", icon: Moon },
-            ]}
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label>Tipografia</Label>
-        <p className="mt-1 text-caption text-ink-subtle">
-          A amostra usa a própria fonte, com um valor para você conferir os algarismos.
-        </p>
-        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-          {FONTES.map((opcao) => {
-            const ativa = fonte === opcao.valor;
-            return (
-              <button
-                key={opcao.valor}
-                type="button"
-                onClick={() => aplicarFonte(opcao.valor)}
-                aria-pressed={ativa}
-                data-font={opcao.valor === FONTE_PADRAO ? undefined : opcao.valor}
-                className={`rounded-md border p-3 text-left transition-colors ${
-                  ativa
-                    ? "border-accent-edge bg-accent-wash"
-                    : "border-line-strong bg-surface hover:bg-surface-inset"
-                }`}
-              >
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="text-body font-medium text-ink">{opcao.nome}</span>
-                  {ativa ? <Check size={14} strokeWidth={1.5} className="text-accent" aria-hidden /> : null}
-                </span>
-                <span className="tabular mt-1 block text-figure-sm text-ink">R$ 1.234,56</span>
-                <span className="mt-0.5 block text-caption text-ink-subtle">{opcao.nota}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <Label>Cor de destaque</Label>
-        <p className="mt-1 text-caption text-ink-subtle">
-          Personalize botões, navegação e o TARS. Receitas e despesas mantêm suas cores de identificação.
-        </p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {ACENTOS.map(([valor, cor, rotulo]) => {
-            const ativo = acento === valor;
-            return (
-              <button
-                key={valor}
-                type="button"
-                onClick={() => aplicarAcento(valor)}
-                aria-pressed={ativo}
-                title={rotulo}
-                className={`inline-flex h-11 items-center gap-2 rounded-md border px-3 text-body-sm transition-colors ${
-                  ativo
-                    ? "border-accent-edge bg-accent-wash font-medium text-ink"
-                    : "border-line-strong bg-surface text-ink-muted hover:bg-surface-inset"
-                }`}
-              >
-                <span
-                  className="flex size-4 items-center justify-center rounded-full"
-                  style={{ backgroundColor: cor }}
-                  aria-hidden
-                >
-                  {ativo ? <Check size={10} strokeWidth={2.5} className="text-white" /> : null}
-                </span>
-                {rotulo}
-              </button>
-            );
-          })}
-        </div>
+    <div>
+      <Label>Tipografia</Label>
+      <p className="mt-1 text-caption text-ink-subtle">
+        A amostra usa a própria fonte, com um valor para você conferir os algarismos.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {FONTES.map((opcao) => {
+          const ativa = fonte === opcao.valor;
+          return (
+            <button
+              key={opcao.valor}
+              type="button"
+              onClick={() => aplicarFonte(opcao.valor)}
+              aria-pressed={ativa}
+              data-font={opcao.valor === FONTE_PADRAO ? undefined : opcao.valor}
+              className={`rounded-nested border p-3 text-left transition-colors ${
+                ativa
+                  ? "border-accent-edge bg-accent-wash"
+                  : "border-line-strong bg-surface-sunken hover:bg-surface-inset"
+              }`}
+            >
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-body font-medium text-ink">{opcao.nome}</span>
+                {ativa ? <Check size={14} strokeWidth={1.5} className="text-accent" aria-hidden /> : null}
+              </span>
+              <span className="tabular mt-1 block text-figure-sm text-ink">R$ 1.234,56</span>
+              <span className="mt-0.5 block text-caption text-ink-subtle">{opcao.nota}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

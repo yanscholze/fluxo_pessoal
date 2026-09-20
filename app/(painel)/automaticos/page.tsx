@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { join } from "../../ui/primitives.tsx";
+import { SectionTabs } from "../../ui/section-tabs.tsx";
 import ImportacoesContent from "../importar/content.tsx";
 import AutomaticosContent from "./content.tsx";
 
@@ -20,7 +18,8 @@ const ABAS = [
  *
  * O seletor é o do desenho: uma cápsula com as duas opções, e não abas com
  * sublinhado. Ele guarda a escolha na URL, para recarregar não voltar sempre à
- * primeira.
+ * primeira — e é o mesmo componente que Configurações e Patrimônio usam, para
+ * a cápsula não nascer diferente em cada tela.
  */
 export default async function Automaticos({
   searchParams,
@@ -32,22 +31,13 @@ export default async function Automaticos({
 
   return (
     <div className="content-area">
-      <div className="mb-6 inline-flex rounded-xl border border-line bg-surface p-1">
-        {ABAS.map((aba) => (
-          <Link
-            key={aba.value}
-            href={`/automaticos?aba=${aba.value}`}
-            aria-current={ativa === aba.value ? "page" : undefined}
-            className={join(
-              "inline-flex h-8 items-center rounded-lg px-4 text-caption font-medium transition-colors",
-              ativa === aba.value
-                ? "bg-accent text-accent-ink"
-                : "text-ink-subtle hover:text-ink",
-            )}
-          >
-            {aba.label}
-          </Link>
-        ))}
+      <div className="mb-6">
+        <SectionTabs
+          basePath="/automaticos"
+          tabs={ABAS}
+          active={ativa}
+          label="Origens de lançamento automático"
+        />
       </div>
 
       <section aria-label={ABAS.find((aba) => aba.value === ativa)?.label}>

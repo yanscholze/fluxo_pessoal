@@ -64,12 +64,21 @@ export function MetricTile({
   rotulo,
   valor,
   apoio,
+  variacao,
 }: {
   tom: TomDaMetrica;
   icone: ReactNode;
   rotulo: string;
   valor: string;
-  apoio?: string;
+  /**
+   * A nota que diz o que o número é. **Quebra em duas linhas quando precisa**,
+   * em vez de cortar com reticência: o desenho só tem notas curtas, e cortar
+   * "de R$ 4.000,00 somados entre as metas" no meio esconde justamente a
+   * parte que explica o número.
+   */
+  apoio?: ReactNode;
+  /** A variação, quando a tela tem com o que comparar. Fica ao lado do valor. */
+  variacao?: ReactNode;
 }) {
   return (
     <section className="glass-panel p-5">
@@ -77,8 +86,11 @@ export function MetricTile({
         {icone}
       </div>
       <p className="metric-label">{rotulo}</p>
-      <p className="tabular mt-2 text-2xl font-medium text-ink">{valor}</p>
-      {apoio ? <p className="mt-2 truncate text-caption text-ink-subtle">{apoio}</p> : null}
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <p className="tabular text-2xl font-medium text-ink">{valor}</p>
+        {variacao}
+      </div>
+      {apoio ? <p className="mt-2 text-caption leading-snug text-ink-subtle">{apoio}</p> : null}
     </section>
   );
 }

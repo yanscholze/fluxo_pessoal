@@ -1,10 +1,15 @@
 /**
  * Moldura de página.
  *
- * Toda tela do Fluxo começa igual: largura máxima, respiro, um cabeçalho com
- * título à esquerda e ação primária à direita, e — quando houver — uma barra
- * de filtros logo abaixo. Não é economia de código: é o que faz dezoito telas
- * parecerem a mesma aplicação em vez de dezoito páginas.
+ * Toda tela do Fluxo começa igual: o respiro do Mesa, um cabeçalho com o
+ * contexto à esquerda e a ação primária à direita, e — quando houver — uma
+ * barra de filtros logo abaixo. Não é economia de código: é o que faz dezoito
+ * telas parecerem a mesma aplicação em vez de dezoito páginas.
+ *
+ * Depois do Mesa a moldura deixou de ser uma página inteira e passou a ser o
+ * **miolo** de uma: o `<main>` e a âncora de "pular para o conteúdo" moram na
+ * casca, e o título grande mora na barra de cima. O que sobra aqui é o
+ * contêiner com o respiro certo e um cabeçalho de seção.
  */
 
 import type { ReactNode } from "react";
@@ -28,11 +33,9 @@ export function Page({
   className?: string;
 }) {
   const limite = { narrow: "max-w-page-narrow", default: "max-w-page", wide: "max-w-page-wide" }[width];
-  return (
-    <main id="conteudo" tabIndex={-1} className={join("page-content mx-auto w-full px-4 pb-16 pt-6 sm:px-6 sm:pb-20 lg:px-8 lg:pt-8", limite, className)}>
-      {children}
-    </main>
-  );
+  // `div`, e não `main`: a casca já abre um, e dois `<main>` na mesma página
+  // deixam o leitor de tela sem saber qual é o conteúdo principal.
+  return <div className={join("content-area mx-auto w-full", limite, className)}>{children}</div>;
 }
 
 /**
@@ -62,13 +65,21 @@ export function PageHeader({
   /** Barra de filtros ou abas. Aparece abaixo do título, separada. */
   children?: ReactNode;
 }) {
+  /*
+   * O título é `h2`.
+   *
+   * A barra de cima já traz o `h1` com o nome da área — "Projetos", "Contas" —
+   * e ele é o mesmo em toda tela filha. Repetir a hierarquia aqui daria dois
+   * `h1` por página; abaixo dela, "Zonas Teste" é o que de fato é: uma seção
+   * dentro de Projetos.
+   */
   return (
-    <header className="page-heading mb-7">
+    <header className="page-heading mb-6">
       {back ? <div className="-ml-2 mb-2">{back}</div> : null}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          {eyebrow ? <p className="mb-1 text-label uppercase text-ink-subtle">{eyebrow}</p> : null}
-          <h1 className="text-title text-ink">{title}</h1>
+          {eyebrow ? <p className="metric-label mb-1.5">{eyebrow}</p> : null}
+          <h2 className="text-title text-ink">{title}</h2>
           {description ? (
             <p className="mt-1 max-w-measure-lg text-body-sm text-ink-muted">{description}</p>
           ) : null}
@@ -123,7 +134,7 @@ export function SectionTitle({
   return (
     <div className={join("mb-3 flex items-end justify-between gap-4", className)}>
       <div className="min-w-0">
-        <h2 className="text-heading text-ink">{title}</h2>
+        <h3 className="text-heading text-ink">{title}</h3>
         {hint ? <p className="mt-0.5 text-caption text-ink-muted">{hint}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

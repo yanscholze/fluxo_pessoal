@@ -32,8 +32,9 @@ import { Dialog } from "./dialog.tsx";
 import { Input } from "./controls.tsx";
 import {
   ArrowRight, Bell, Bot, BriefcaseBusiness, CalendarClock, ChartColumn, CreditCard,
-  FileChartColumnIncreasing, Import, LayoutDashboard, type LucideIcon, Menu, Plane,
-  Plus, ReceiptText, Target, WalletCards, X, Zap,
+  FileChartColumnIncreasing, Gauge, Gift, Import, Landmark, LayoutDashboard,
+  type LucideIcon, Menu, Plane, Plus, ReceiptText, Settings, Smartphone, Target,
+  TrendingUp, WalletCards, X, Zap,
 } from "./icons.tsx";
 import { join } from "./primitives.tsx";
 
@@ -62,21 +63,30 @@ export const NAV: readonly NavItem[] = [
 ];
 
 /**
+ * As telas que o desenho não coloca na lateral.
+ *
+ * Elas existem, têm endereço próprio e precisam de nome na barra de cima —
+ * sem isto, quem abre Metas lê "Fluxo" no título e fica sem saber onde está.
+ * O que elas não têm é assento na navegação, que o Mesa fecha em treze itens.
+ */
+const FORA_DA_NAVEGACAO: readonly NavItem[] = [
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
+  { href: "/patrimonio", label: "Patrimônio", icon: Landmark },
+  { href: "/investimentos", label: "Investimentos", icon: TrendingUp },
+  { href: "/metas", label: "Metas", icon: Target },
+  { href: "/recompensas", label: "Recompensas", icon: Gift },
+  { href: "/saude", label: "Saúde financeira", icon: Gauge },
+  { href: "/importar", label: "Importar extrato", icon: Import },
+  { href: "/planejamento", label: "Compromissos", icon: CalendarClock },
+  { href: "/conectar", label: "Aparelhos", icon: Smartphone },
+];
+
+/**
  * O que a busca alcança.
  *
  * Inclui as telas fora da navegação — é a razão de o atalho continuar vivo.
  */
-const ATALHOS: readonly NavItem[] = [
-  ...NAV,
-  { href: "/configuracoes", label: "Configurações", icon: Target },
-  { href: "/patrimonio", label: "Patrimônio", icon: ChartColumn },
-  { href: "/investimentos", label: "Investimentos", icon: ChartColumn },
-  { href: "/metas", label: "Metas", icon: Target },
-  { href: "/recompensas", label: "Recompensas", icon: Zap },
-  { href: "/saude", label: "Saúde financeira", icon: ChartColumn },
-  { href: "/importar", label: "Importar extrato", icon: Import },
-  { href: "/configuracoes?aba=aparelhos", label: "Aparelhos", icon: Target },
-];
+const ATALHOS: readonly NavItem[] = [...NAV, ...FORA_DA_NAVEGACAO];
 
 export function Shell({ userName, children }: { userName: string; children: ReactNode }) {
   const pathname = usePathname();
@@ -93,7 +103,12 @@ export function Shell({ userName, children }: { userName: string; children: Reac
     setBuscaAberta(false);
   }
 
-  const atual = NAV.find((item) => rotaAtiva(item.href, pathname));
+  // A lateral acende só pelos treze; o título da barra de cima também nomeia as
+  // telas de fora dela. São perguntas diferentes: "onde estou na navegação" e
+  // "que tela é esta".
+  const atual =
+    NAV.find((item) => rotaAtiva(item.href, pathname)) ??
+    FORA_DA_NAVEGACAO.find((item) => rotaAtiva(item.href, pathname));
   const resultados = ATALHOS.filter((item) => normalizar(item.label).includes(normalizar(consulta)));
 
   useEffect(() => {
@@ -249,7 +264,17 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           </div>
         </header>
 
-        <div className="min-w-0 pb-24 lg:pb-0">{children}</div>
+        {/*
+         * O `<main>` mora aqui, e não em cada tela.
+         *
+         * O link de pular para o conteúdo aponta para `#conteudo`. Enquanto a
+         * âncora vivia na moldura de página, toda tela que não usasse a
+         * moldura — as doze do Mesa — deixava o link apontando para o vazio.
+         * Na casca ele existe uma vez e vale para todas.
+         */}
+        <main id="conteudo" tabIndex={-1} className="page-content min-w-0 pb-24 lg:pb-0">
+          {children}
+        </main>
       </div>
 
       <BottomNav onMenuOpen={() => setMenuAberto(true)} menuOpen={menuAberto} />

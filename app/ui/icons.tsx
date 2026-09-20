@@ -33,6 +33,7 @@ export {
   CalendarClock,
   Camera,
   Check,
+  Circle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,

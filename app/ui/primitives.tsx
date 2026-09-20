@@ -94,13 +94,18 @@ export function Panel({
    * template — as curvas ficam paralelas em vez de aninhadas.
    */
   const superficie = {
-    plain: "rounded-panel bg-surface border border-line shadow-panel",
+    // A superfície do Mesa, literalmente a mesma que as telas do desenho usam:
+    // duas definições do mesmo painel divergiriam na primeira mudança de borda.
+    plain: "glass-panel",
     inset: "rounded-nested bg-surface-sunken border border-line",
     raised: "rounded-panel bg-surface-raised border border-line-strong shadow-float",
     bare: "",
   }[variant];
 
-  const espaco = { none: "", sm: "p-3", md: "p-4 sm:p-5", lg: "p-5 sm:p-6" }[padding];
+  // O respiro do Mesa é 1,5rem, e é o que `md` vale a partir de `sm`. No
+  // celular ele cede para 1,25rem: 24px de folga em cada lado de uma tela de
+  // 375 tiram um sexto da largura útil do painel.
+  const espaco = { none: "", sm: "p-3 sm:p-4", md: "p-5 sm:p-6", lg: "p-6 sm:p-7" }[padding];
 
   /*
    * `min-w-0` porque item de grid e de flex tem largura mínima automática: ela

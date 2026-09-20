@@ -11,8 +11,9 @@
 import type { ReactNode } from "react";
 
 import { money, percent } from "./format.ts";
-import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "./icons.tsx";
-import { Label, type Tone, join, toneFill, toneText } from "./primitives.tsx";
+import { ArrowDownRight, ArrowUpRight, Circle, type LucideIcon } from "./icons.tsx";
+import { MetricTile, type TomDaMetrica } from "./mesa.tsx";
+import { type Tone, join, toneFill, toneText } from "./primitives.tsx";
 
 // ---------------------------------------------------------------------------
 // Dinheiro
@@ -100,48 +101,60 @@ export type MetricProps = {
   readonly icon?: LucideIcon;
 };
 
-/** Um indicador: rótulo, valor, variação e a nota que explica o que ele é. */
-export function Metric({ label, value, tone = "neutral", hint, delta, icon: Icon }: MetricProps) {
-  return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-1.5">
-        {Icon ? <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
-        <Label>{label}</Label>
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <p className={join("tabular text-figure", toneText(tone))}>{value}</p>
-        {delta ? <Delta {...delta} /> : null}
-      </div>
-      {hint ? <p className="mt-1 text-caption leading-snug text-ink-subtle">{hint}</p> : null}
-    </div>
-  );
-}
-
 /**
  * A faixa de indicadores do topo de uma tela.
  *
- * Uma superfície só, dividida por linhas verticais — e não N painéis soltos.
- * Quatro caixas idênticas lado a lado dizem ao olho que são quatro coisas
- * separadas de mesma importância; uma faixa dividida diz que são quatro
- * ângulos da **mesma** posição financeira, que é o que de fato são.
+ * Eram cartões grudados numa superfície só, divididos por fios — a ideia era
+ * dizer que os quatro números são ângulos da **mesma** posição financeira, e
+ * não quatro coisas separadas. O Mesa resolve isto de outro jeito: cartões
+ * soltos, cada um com a sua bolha de ícone colorida pelo tom. A leitura de
+ * "ângulos do mesmo assunto" passa a vir da linha que eles formam juntos e da
+ * repetição da forma, não de estarem colados.
+ *
+ * Esta faixa existe para as telas que o desenho não cobre não precisarem
+ * montar a grade de novo. O cartão é o mesmo `MetricTile` das doze telas do
+ * Mesa: duas implementações do mesmo cartão divergiriam na primeira mudança.
  */
 export function MetricStrip({ metrics, className }: { metrics: readonly MetricProps[]; className?: string }) {
   return (
     <div
       className={join(
-        "grid gap-px overflow-hidden rounded-panel border border-line bg-line shadow-panel",
+        "grid gap-5",
         metrics.length >= 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3",
         className,
       )}
     >
       {metrics.map((metrica) => (
-        <div key={metrica.label} className="bg-surface p-4 sm:p-5">
-          <Metric {...metrica} />
-        </div>
+        <MetricTile
+          key={metrica.label}
+          tom={TOM_DA_METRICA[metrica.tone ?? "neutral"]}
+          icone={metrica.icon ? <metrica.icon className="size-4" aria-hidden /> : <Circle className="size-4" aria-hidden />}
+          rotulo={metrica.label}
+          valor={metrica.value}
+          apoio={metrica.hint}
+          variacao={metrica.delta ? <Delta {...metrica.delta} /> : undefined}
+        />
       ))}
     </div>
   );
 }
+
+/**
+ * Do tom semântico completo para os quatro do desenho.
+ *
+ * `neutral` e `info` viram acento porque a bolha do Mesa é cromo, não sinal:
+ * ela colore o ícone, e o número ao lado já carrega a cor do valor quando ele
+ * tem sinal. Uma bolha cinza no meio de três coloridas leria como "este aqui
+ * está desligado".
+ */
+const TOM_DA_METRICA: Record<Tone, TomDaMetrica> = {
+  neutral: "accent",
+  info: "accent",
+  accent: "accent",
+  positive: "positive",
+  negative: "negative",
+  caution: "caution",
+};
 
 /**
  * Decomposição de um número.
