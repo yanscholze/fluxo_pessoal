@@ -13,11 +13,13 @@
  * que ajudava a achar mas empurrava o último item para fora da dobra.
  *
  * **O que o desenho não mostra continua existindo, sem virar elemento novo.**
- * A busca por `Ctrl/⌘ K` ficou, invisível: é por ela — e pela tela de
- * Configurações — que se chega às telas que o Mesa não desenhou (metas,
- * patrimônio, investimentos, recompensas, saúde, importações). Acrescentar um
- * campo de busca visível seria inventar; tirar o atalho seria esconder seis
- * telas atrás de nada.
+ * As seis telas que o Mesa não desenhou continuam alcançáveis pelo caminho
+ * normal, e não por um item extra na lateral: patrimônio, investimentos,
+ * metas e saúde são as quatro vistas de Visão geral, aonde o TARS leva pelo
+ * painel "Construindo o futuro"; recompensas é uma aba de Cartões;
+ * importações, uma aba de Automações. A busca por `Ctrl/⌘ K` ficou por cima
+ * disso, invisível, como atalho de quem já sabe o nome do que procura — no
+ * celular, onde ela não existe, nenhuma das seis depende dela.
  *
  * Sair da conta também mora em Configurações. É ação rara, e o cartão de
  * usuário do rodapé leva até lá num clique.
