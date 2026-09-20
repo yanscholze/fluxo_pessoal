@@ -35,13 +35,14 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { Dimensions, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Dimensions, Pressable, RefreshControl, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
   interpolate,
   runOnJS,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -119,6 +120,18 @@ export function CarteiraScreen({
   /** 0 = carteira fechada, 1 = cartão recolhido e conteúdo à mostra. */
   const progresso = useSharedValue(0);
 
+  /**
+   * Quanto o painel de detalhes já rolou.
+   *
+   * Mora numa `sharedValue` porque quem consulta é o gesto, que roda na
+   * thread de interface. Passar por estado do React faria a decisão de fechar
+   * a carteira depender de um quadro que talvez ainda não tenha chegado.
+   */
+  const rolagem = useSharedValue(0);
+  const acompanharRolagem = useAnimatedScrollHandler((evento) => {
+    rolagem.value = evento.contentOffset.y;
+  });
+
   /** Quanto o cartão sobe ao abrir. A conta está em `carteira-geometria.ts`. */
   const deslocamento = useMemo(
     () => deslocamentoDoCartao(GEOMETRIA, topoDoPalco, LARGURA_DA_FACE),
@@ -154,49 +167,77 @@ export function CarteiraScreen({
    * horizontal troca de cartão — e só com a carteira fechada, porque com ela
    * aberta há um cartão só em cena.
    */
-  const montarGesto = useCallback(() => {
-    const arrastar = Gesture.Pan().onEnd((evento) => {
-      const dx = evento.translationX;
-      const dy = evento.translationY;
+  /*
+   * Um gesto **manual**, que observa e nunca toma a frente.
+   *
+   * É o que o protótipo faz: ele ouve `touchstart` e `touchend` na raiz da
+   * tela e compara os dois pontos — nada acontece no meio do caminho. Um
+   * `Gesture.Pan()` na raiz reproduziria a leitura, mas não o comportamento:
+   * ao ativar, ele **vence** o `ScrollView` que está por baixo, e o painel de
+   * detalhes pararia de rolar. `Gesture.Manual()` só ativa quando alguém manda,
+   * e aqui ninguém manda: ele recebe os toques, guarda de onde saíram e deixa
+   * a rolagem seguir intacta.
+   */
+  const inicioX = useSharedValue(0);
+  const inicioY = useSharedValue(0);
 
-      if (Math.abs(dy) > Math.abs(dx)) {
-        if (dy < -LIMIAR_VERTICAL) runOnJS(abrir)();
-        else if (dy > LIMIAR_VERTICAL) runOnJS(fechar)();
-        return;
-      }
+  const arrastar = useMemo(
+    () =>
+      Gesture.Manual()
+        .onTouchesDown((evento) => {
+          const toque = evento.allTouches[0];
+          if (!toque) return;
+          inicioX.value = toque.absoluteX;
+          inicioY.value = toque.absoluteY;
+        })
+        .onTouchesUp((evento) => {
+          const toque = evento.changedTouches[0];
+          if (!toque) return;
+          const dx = toque.absoluteX - inicioX.value;
+          const dy = toque.absoluteY - inicioY.value;
 
-      if (!aberta && Math.abs(dx) > LIMIAR_HORIZONTAL) runOnJS(trocar)(dx < 0 ? 1 : -1);
-    });
+          if (Math.abs(dy) > Math.abs(dx)) {
+            if (dy < -LIMIAR_VERTICAL) {
+              runOnJS(abrir)();
+              return;
+            }
+            /*
+             * Fechar só com o painel no topo.
+             *
+             * Arrastar para baixo dentro do painel é **rolar**, e não fechar a
+             * carteira. O protótipo não faz essa distinção porque lá o mesmo
+             * gesto serve para os dois — e o resultado é que rolar os
+             * lançamentos fecharia o cartão. Aqui a carteira só cede depois
+             * que o conteúdo chegou ao topo, que é como toda gaveta do sistema
+             * se comporta.
+             */
+            if (dy > LIMIAR_VERTICAL && rolagem.value <= 0) runOnJS(fechar)();
+            return;
+          }
 
-    /*
-     * O toque não está no protótipo — lá o cartão não responde a clique.
-     * Continua aqui porque é o caminho de quem navega por toque assistido: um
-     * arrasto de 30px é um gesto que nem todo mundo consegue fazer, e tirar a
-     * única alternativa a ele fecharia a tela para essas pessoas.
-     */
-    const tocar = Gesture.Tap()
-      .maxDuration(250)
-      .onEnd((_evento, sucesso) => {
-        if (sucesso) runOnJS(aberta ? fechar : abrir)();
-      });
-
-    return Gesture.Simultaneous(arrastar, tocar);
-  }, [aberta, abrir, fechar, trocar]);
+          if (!aberta && Math.abs(dx) > LIMIAR_HORIZONTAL) runOnJS(trocar)(dx < 0 ? 1 : -1);
+        }),
+    [aberta, abrir, fechar, trocar, inicioX, inicioY, rolagem],
+  );
 
   /*
-   * Dois detectores, e não um.
+   * O toque não está no protótipo — lá o cartão não responde a clique.
+   * Continua aqui porque é o caminho de quem navega por toque assistido: um
+   * arrasto de 30px é um gesto que nem todo mundo consegue fazer, e tirar a
+   * única alternativa a ele fecharia a tela para essas pessoas.
    *
-   * No protótipo o ouvinte está na tela inteira: arrastar em qualquer lugar
-   * troca ou abre. Aqui a tela inteira não serve — embaixo do palco mora o
-   * painel de detalhes, que precisa rolar. Então o gesto cobre o cartão e a
-   * área vazia em volta dele, que é onde o dedo de fato vai.
-   *
-   * Cada detector recebe uma instância própria: um objeto de gesto guarda a
-   * identidade do manipulador nativo, e compartilhá-lo entre dois faria o
-   * segundo roubar o registro do primeiro.
+   * Fica **só no cartão**. Na tela inteira, tocar num lançamento do painel
+   * fecharia a carteira junto.
    */
-  const gestoDoCartao = useMemo(() => montarGesto(), [montarGesto]);
-  const gestoDoPalco = useMemo(() => montarGesto(), [montarGesto]);
+  const tocarNoCartao = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDuration(250)
+        .onEnd((_evento, sucesso) => {
+          if (sucesso) runOnJS(aberta ? fechar : abrir)();
+        }),
+    [aberta, abrir, fechar],
+  );
 
   /** A face escolhida: sobe, tomba de lado e cresce, tudo no mesmo tempo. */
   const estiloDaFace = useAnimatedStyle(() => ({
@@ -263,162 +304,174 @@ export function CarteiraScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <ScreenHeader
-          title="Cartões"
-          subtitle={
-            aberta ? "Arraste ↓ para fechar" : "Arraste ← → para trocar ou ↑ para ver detalhes"
-          }
-          onProfile={onAjustes}
-          profileName={credentials.user.displayName}
-        />
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: (LARGURA_DA_TELA - 420) / 2,
-          top: -145,
-          width: 420,
-          height: 420,
-          borderRadius: 210,
-          backgroundColor: palette.accentWash,
-          opacity: 0.68,
-        }}
-      />
-
-      {/* O palco só reserva espaço; quem desenha o cartão é a camada de cima. */}
-      <GestureDetector gesture={gestoDoPalco}>
-        <Animated.View
-          style={estiloDoPalco}
-          onLayout={(evento) => {
-            // A altura do palco é animada, e `onLayout` dispara a cada mudança
-            // dela. O que interessa é só o topo, que não muda — sem a guarda,
-            // seria um `setState` por quadro durante toda a animação.
-            const { y } = evento.nativeEvent.layout;
-            setTopoDoPalco((atual) => (Math.abs(atual - y) < 0.5 ? atual : y));
-          }}
-        />
-      </GestureDetector>
-
       {/*
-        Fechada, o conteúdo não pode interceptar toque: ele está invisível, mas
-        continuaria capturando o arrasto que deveria ser do cartão.
-        `pointerEvents` é propriedade da view, não de estilo animado — o
-        Reanimated ignoraria em silêncio se fosse pelo `useAnimatedStyle`.
+        Um detector só, na tela inteira.
+
+        No protótipo o ouvinte está na raiz: arrastar em qualquer lugar troca
+        de cartão ou abre a carteira, e não só em cima da face. Eram dois
+        detectores menores aqui — o cartão e a área vazia em volta —, o que
+        deixava metade da tela surda ao gesto.
       */}
-      <Animated.View
-        pointerEvents={aberta ? "auto" : "none"}
-        style={[{ flex: 1 }, estiloDoConteudo]}
-      >
-        <ScrollView
-          contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
-          refreshControl={
-            <RefreshControl
-              refreshing={sync.running}
-              onRefresh={() => void synchronize()}
-              tintColor={palette.accent}
+      <GestureDetector gesture={arrastar}>
+        <View style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+            <ScreenHeader
+              title="Cartões"
+              subtitle={
+                aberta ? "Arraste ↓ para fechar" : "Arraste ← → para trocar ou ↑ para ver detalhes"
+              }
+              onProfile={onAjustes}
+              profileName={credentials.user.displayName}
             />
-          }
-        >
-          {selecionado ? (
-            <Detalhe
-              resumo={selecionado}
-              hoje={hoje}
-              aoFechar={fechar}
-              aoAtualizar={() => void synchronize()}
-              onOpenTransaction={onOpenTransaction}
-              onParcelamentos={onParcelamentos}
-            />
-          ) : null}
-        </ScrollView>
-      </Animated.View>
+          </View>
 
-      {/*
-        A camada dos cartões, por cima de tudo e sem borda que recorte.
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: (LARGURA_DA_TELA - 420) / 2,
+              top: -145,
+              width: 420,
+              height: 420,
+              borderRadius: 210,
+              backgroundColor: palette.accentWash,
+              opacity: 0.68,
+            }}
+          />
 
-        `box-none` deixa o toque passar para o conteúdo onde não há cartão —
-        sem isso a camada cobriria a tela inteira e o painel de detalhes
-        deixaria de responder.
-      */}
-      <View
-        pointerEvents="box-none"
-        style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
-      >
-        {cartoes.map((resumo, indice) => {
-          const distancia = indice - ativo;
-          // Só o escolhido e os vizinhos imediatos entram em cena; e, com a
-          // carteira aberta, apenas o escolhido. É o recorte do protótipo.
-          if (Math.abs(distancia) > 1) return null;
-          if (aberta && distancia !== 0) return null;
+          {/* O palco só reserva espaço; quem desenha o cartão é a camada de cima. */}
+          <Animated.View
+            style={estiloDoPalco}
+            onLayout={(evento) => {
+              // A altura do palco é animada, e `onLayout` dispara a cada mudança
+              // dela. O que interessa é só o topo, que não muda — sem a guarda,
+              // seria um `setState` por quadro durante toda a animação.
+              const { y } = evento.nativeEvent.layout;
+              setTopoDoPalco((atual) => (Math.abs(atual - y) < 0.5 ? atual : y));
+            }}
+          />
 
-          const ehOEscolhido = distancia === 0;
+          {/*
+            Fechada, o conteúdo não pode interceptar toque: ele está invisível, mas
+            continuaria capturando o arrasto que deveria ser do cartão.
+            `pointerEvents` é propriedade da view, não de estilo animado — o
+            Reanimated ignoraria em silêncio se fosse pelo `useAnimatedStyle`.
+          */}
+          <Animated.View
+            pointerEvents={aberta ? "auto" : "none"}
+            style={[{ flex: 1 }, estiloDoConteudo]}
+          >
+            <Animated.ScrollView
+              onScroll={acompanharRolagem}
+              scrollEventThrottle={16}
+              contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={sync.running}
+                  onRefresh={() => void synchronize()}
+                  tintColor={palette.accent}
+                />
+              }
+            >
+              {selecionado ? (
+                <Detalhe
+                  resumo={selecionado}
+                  hoje={hoje}
+                  aoFechar={fechar}
+                  aoAtualizar={() => void synchronize()}
+                  onOpenTransaction={onOpenTransaction}
+                  onParcelamentos={onParcelamentos}
+                />
+              ) : null}
+            </Animated.ScrollView>
+          </Animated.View>
 
-          return (
-            <GestureDetector key={resumo.card.id} gesture={gestoDoCartao}>
+          {/*
+            A camada dos cartões, por cima de tudo e sem borda que recorte.
+
+            `box-none` deixa o toque passar para o conteúdo onde não há cartão —
+            sem isso a camada cobriria a tela inteira e o painel de detalhes
+            deixaria de responder.
+          */}
+          <View
+            pointerEvents="box-none"
+            style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+          >
+            {cartoes.map((resumo, indice) => {
+              const distancia = indice - ativo;
+              // Só o escolhido e os vizinhos imediatos entram em cena; e, com a
+              // carteira aberta, apenas o escolhido. É o recorte do protótipo.
+              if (Math.abs(distancia) > 1) return null;
+              if (aberta && distancia !== 0) return null;
+
+              const ehOEscolhido = distancia === 0;
+
+              return (
+                <GestureDetector key={resumo.card.id} gesture={tocarNoCartao}>
+                  <Animated.View
+                    pointerEvents={ehOEscolhido ? "auto" : "none"}
+                    style={[
+                      {
+                        position: "absolute",
+                        left: esquerdaDaFace,
+                        top: topoDaFace,
+                        zIndex: ehOEscolhido ? 10 : 1,
+                      },
+                      ehOEscolhido
+                        ? estiloDaFace
+                        : {
+                            opacity: OPACIDADE_VIZINHA,
+                            transform: [
+                              { translateY: DEGRAU_VIZINHO * Math.abs(distancia) },
+                              { scale: ESCALA_VIZINHA },
+                            ],
+                          },
+                    ]}
+                  >
+                    <CardFace
+                      resumo={resumo}
+                      hoje={hoje}
+                      titular={credentials.user.displayName}
+                      atenuada={!ehOEscolhido && cartoes.length > 1}
+                    />
+                  </Animated.View>
+                </GestureDetector>
+              );
+            })}
+
+            {/* Os pontos, abaixo do cartão, na posição que o protótipo usa. */}
+            {cartoes.length > 1 ? (
               <Animated.View
-                pointerEvents={ehOEscolhido ? "auto" : "none"}
+                pointerEvents="none"
                 style={[
                   {
                     position: "absolute",
-                    left: esquerdaDaFace,
-                    top: topoDaFace,
-                    zIndex: ehOEscolhido ? 10 : 1,
+                    left: 0,
+                    right: 0,
+                    top: topoDoPalco + PALCO_FECHADO / 2 + PONTOS_ABAIXO,
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    gap: 6,
                   },
-                  ehOEscolhido
-                    ? estiloDaFace
-                    : {
-                        opacity: OPACIDADE_VIZINHA,
-                        transform: [
-                          { translateY: DEGRAU_VIZINHO * Math.abs(distancia) },
-                          { scale: ESCALA_VIZINHA },
-                        ],
-                      },
+                  estiloDosPontos,
                 ]}
               >
-                <CardFace
-                  resumo={resumo}
-                  hoje={hoje}
-                  titular={credentials.user.displayName}
-                  atenuada={!ehOEscolhido && cartoes.length > 1}
-                />
+                {cartoes.map((resumo, indice) => (
+                  <View
+                    key={resumo.card.id}
+                    style={{
+                      height: 6,
+                      width: indice === ativo ? 20 : 6,
+                      borderRadius: radius.pill,
+                      backgroundColor: indice === ativo ? palette.accent : palette.lineStrong,
+                    }}
+                  />
+                ))}
               </Animated.View>
-            </GestureDetector>
-          );
-        })}
-
-        {/* Os pontos, abaixo do cartão, na posição que o protótipo usa. */}
-        {cartoes.length > 1 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              {
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: topoDoPalco + PALCO_FECHADO / 2 + PONTOS_ABAIXO,
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: 6,
-              },
-              estiloDosPontos,
-            ]}
-          >
-            {cartoes.map((resumo, indice) => (
-              <View
-                key={resumo.card.id}
-                style={{
-                  height: 6,
-                  width: indice === ativo ? 20 : 6,
-                  borderRadius: radius.pill,
-                  backgroundColor: indice === ativo ? palette.accent : palette.lineStrong,
-                }}
-              />
-            ))}
-          </Animated.View>
-        ) : null}
-      </View>
+            ) : null}
+          </View>
+        </View>
+      </GestureDetector>
     </SafeAreaView>
   );
 }
