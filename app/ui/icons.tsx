@@ -10,6 +10,12 @@
  */
 
 export {
+  WalletCards,
+  ReceiptText,
+  Import,
+  FileChartColumnIncreasing,
+  ChartColumn,
+  BriefcaseBusiness,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowLeft,

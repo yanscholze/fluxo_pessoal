@@ -5,6 +5,7 @@ import { LinkButton } from "../../ui/controls.tsx";
 import { Download } from "../../ui/icons.tsx";
 import { Page, PageHeader } from "../../ui/page-frame.tsx";
 import { Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
+import { SignOut } from "./sign-out.tsx";
 import { Appearance } from "./appearance.tsx";
 import { CategoryManager } from "./category-manager.tsx";
 import { PasswordForm } from "./password-form.tsx";
@@ -80,10 +81,19 @@ export default async function Configuracoes({
             value: "seguranca",
             label: "Segurança",
             content: (
-              <Panel>
-                <PanelHeader title="Senha" hint="Trocar a senha desconecta todos os aparelhos" />
-                <PasswordForm />
-              </Panel>
+              <div className="space-y-5">
+                <Panel>
+                  <PanelHeader title="Senha" hint="Trocar a senha desconecta todos os aparelhos" />
+                  <PasswordForm />
+                </Panel>
+                <Panel>
+                  <PanelHeader
+                    title="Sessão"
+                    hint="Encerra só neste navegador; os aparelhos conectados continuam"
+                  />
+                  <SignOut />
+                </Panel>
+              </div>
             ),
           },
           {
