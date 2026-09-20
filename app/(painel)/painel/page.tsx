@@ -2,6 +2,7 @@ import { buildDashboard } from "../../../server/services/dashboard.ts";
 import { currentUser } from "../../auth-context.ts";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarClock } from "../../ui/icons.tsx";
 import { money } from "../../ui/format.ts";
+import { MetricTile, PanelHeading, StatusDot } from "../../ui/mesa.tsx";
 import Link from "next/link";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
@@ -99,7 +100,7 @@ export default async function Painel() {
         {/* Atividade: trilho é o que entrou, preenchimento é o que saiu.   */}
         {/* -------------------------------------------------------------- */}
         <section className="glass-panel p-6 xl:col-span-8">
-          <CabecalhoDePainel
+          <PanelHeading
             titulo="Atividade financeira"
             apoio={`Entradas e saídas dos últimos ${meses.length} meses`}
           />
@@ -131,7 +132,7 @@ export default async function Painel() {
         {/* Distribuição por categoria.                                      */}
         {/* -------------------------------------------------------------- */}
         <section className="glass-panel p-6 xl:col-span-4">
-          <CabecalhoDePainel titulo="Distribuição" apoio="Despesas por categoria" />
+          <PanelHeading titulo="Distribuição" apoio="Despesas por categoria" />
           {categorias.length ? (
             <div className="space-y-5">
               {categorias.map((categoria, indice) => (
@@ -163,21 +164,21 @@ export default async function Painel() {
         {/* Três indicadores.                                               */}
         {/* -------------------------------------------------------------- */}
         <div className="grid gap-5 md:grid-cols-3 xl:col-span-12">
-          <Indicador
+          <MetricTile
             tom="positive"
             icone={<ArrowUpRight className="size-4" aria-hidden />}
             rotulo="Receita no mês"
             valor={money(dashboard.monthFlow.incomeCents)}
             apoio="Entradas confirmadas na competência"
           />
-          <Indicador
+          <MetricTile
             tom="negative"
             icone={<ArrowDownRight className="size-4" aria-hidden />}
             rotulo="Saídas no mês"
             valor={money(dashboard.monthFlow.expenseCents)}
             apoio={proporcaoDaRenda(dashboard.monthFlow.expenseCents, dashboard.monthFlow.incomeCents)}
           />
-          <Indicador
+          <MetricTile
             tom="caution"
             icone={<CalendarClock className="size-4" aria-hidden />}
             rotulo="Renda comprometida"
@@ -190,7 +191,7 @@ export default async function Painel() {
         {/* Lançamentos recentes.                                           */}
         {/* -------------------------------------------------------------- */}
         <section className="glass-panel p-6 xl:col-span-12">
-          <CabecalhoDePainel
+          <PanelHeading
             titulo="Lançamentos recentes"
             apoio="Últimas movimentações confirmadas"
             acao={
@@ -212,11 +213,7 @@ export default async function Painel() {
                     key={lancamento.id}
                     className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3.5"
                   >
-                    <span
-                      className={entrada ? "size-2.5 rounded-full bg-positive" : "size-2.5 rounded-full bg-negative"}
-                      style={{ boxShadow: "0 0 10px currentColor" }}
-                      aria-hidden
-                    />
+                    <StatusDot tom={entrada ? "positive" : "negative"} />
                     <div className="min-w-0">
                       <p className="truncate text-body-sm font-medium text-ink">
                         {lancamento.description}
@@ -241,63 +238,6 @@ export default async function Painel() {
         </section>
       </div>
     </div>
-  );
-}
-
-/**
- * O cabeçalho que todo painel do Mesa repete.
- *
- * Grade de duas colunas — título à esquerda, ação à direita — para o título
- * poder truncar sem empurrar a ação para fora.
- */
-function CabecalhoDePainel({
-  titulo,
-  apoio,
-  acao,
-}: {
-  titulo: string;
-  apoio: string;
-  acao?: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
-      <div className="min-w-0">
-        <h2 className="truncate text-body-sm font-semibold text-ink">{titulo}</h2>
-        <p className="mt-1 text-caption text-ink-subtle">{apoio}</p>
-      </div>
-      {acao}
-    </div>
-  );
-}
-
-const TONS = {
-  positive: "bg-positive-wash text-positive ring-positive/20",
-  negative: "bg-negative-wash text-negative ring-negative/20",
-  caution: "bg-caution-wash text-caution ring-caution/20",
-} as const;
-
-function Indicador({
-  tom,
-  icone,
-  rotulo,
-  valor,
-  apoio,
-}: {
-  tom: keyof typeof TONS;
-  icone: React.ReactNode;
-  rotulo: string;
-  valor: string;
-  apoio: string;
-}) {
-  return (
-    <section className="glass-panel p-5">
-      <div className={`mb-5 grid size-10 place-items-center rounded-xl ring-1 ${TONS[tom]}`}>
-        {icone}
-      </div>
-      <p className="metric-label">{rotulo}</p>
-      <p className="tabular mt-2 text-2xl font-medium text-ink">{valor}</p>
-      <p className="mt-2 text-caption text-ink-subtle">{apoio}</p>
-    </section>
   );
 }
 

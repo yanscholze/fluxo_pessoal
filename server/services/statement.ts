@@ -47,11 +47,24 @@ export type StatementFilters = {
   readonly limit?: number;
 };
 
+/** Uma categoria e o quanto ela pesou nas saídas da competência. */
+export type StatementCategory = {
+  readonly name: string;
+  readonly color: string | null;
+  readonly amountCents: number;
+  readonly percent: number;
+};
+
 export type Statement = {
   readonly competence: Competence;
   readonly rows: readonly StatementRow[];
   readonly incomeCents: number;
   readonly expenseCents: number;
+  /** Saídas agrupadas por categoria, da maior para a menor. */
+  readonly categorySpend: readonly StatementCategory[];
+  /** A maior saída isolada da competência — a linha que explica o mês. */
+  readonly largestExpense: { readonly description: string; readonly amountCents: number; readonly categoryName: string | null } | null;
+  readonly incomeCount: number;
   readonly options: {
     readonly accounts: readonly { id: string; name: string; currency: string }[];
     readonly cards: readonly { id: string; name: string; kind: "credit" | "debit" }[];
@@ -132,11 +145,48 @@ export async function buildStatement(
   // mesmo dinheiro.
   const consumo = rows.filter((row) => row.kind === "expense" || row.kind === "income");
 
+  const entradas = consumo.filter((row) => row.kind === "income");
+  const saidas = consumo.filter((row) => row.kind === "expense");
+  const totalDeSaidas = saidas.reduce((soma, row) => soma + row.amountCents, 0);
+
+  /*
+   * O agrupamento por categoria mora aqui, e não na tela.
+   *
+   * Somar centavos é conta, e conta é do serviço — a tela que soma é a tela
+   * que um dia soma diferente do resto do produto. Sem categoria vira "Sem
+   * categoria" em vez de sumir: gasto sem etiqueta é justamente o que precisa
+   * aparecer para ser etiquetado.
+   */
+  const porCategoria = new Map<string, { name: string; color: string | null; amountCents: number }>();
+  for (const saida of saidas) {
+    const nome = saida.categoryName ?? "Sem categoria";
+    const atual = porCategoria.get(nome);
+    if (atual) atual.amountCents += saida.amountCents;
+    else porCategoria.set(nome, { name: nome, color: saida.categoryColor, amountCents: saida.amountCents });
+  }
+
+  const categorySpend = [...porCategoria.values()]
+    .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents)
+    .map((categoria) => ({
+      ...categoria,
+      percent: totalDeSaidas > 0 ? (categoria.amountCents / totalDeSaidas) * 100 : 0,
+    }));
+
+  const maior = saidas.reduce<(typeof saidas)[number] | null>(
+    (recorde, row) => (recorde === null || row.amountCents > recorde.amountCents ? row : recorde),
+    null,
+  );
+
   return {
     competence,
     rows,
-    incomeCents: consumo.filter((row) => row.kind === "income").reduce((soma, row) => soma + row.amountCents, 0),
-    expenseCents: consumo.filter((row) => row.kind === "expense").reduce((soma, row) => soma + row.amountCents, 0),
+    incomeCents: entradas.reduce((soma, row) => soma + row.amountCents, 0),
+    expenseCents: totalDeSaidas,
+    categorySpend,
+    largestExpense: maior
+      ? { description: maior.description, amountCents: maior.amountCents, categoryName: maior.categoryName }
+      : null,
+    incomeCount: entradas.length,
     options: {
       accounts: accounts.map((account) => ({ id: account.id, name: account.name, currency: account.currency })),
       cards: cards.map((card) => ({ id: card.id, name: card.name, kind: card.kind })),

@@ -1,48 +1,36 @@
 /**
- * Contas.
+ * Contas, no desenho do Mesa.
  *
- * A tela responde uma pergunta só: **quanto dinheiro existe agora, e onde**.
+ * Um cartão por conta, em grade de três, e abaixo a evolução do saldo
+ * consolidado. A pergunta continua a mesma — **quanto dinheiro existe agora, e
+ * onde** —, o que mudou foi a forma de responder: antes eram duas tabelas
+ * largas, agora são cartões.
  *
- * Por isso a hierarquia começa pelo disponível de hoje, em tamanho que não
- * deixa dúvida, e tudo o mais recua. As grandezas vizinhas — reservado,
- * patrimônio, previsto — aparecem separadas e nomeadas, nunca somadas ao
- * número principal: reserva não é dinheiro de gasto do dia a dia, e previsto
- * não é dinheiro que já entrou.
+ * A distinção entre **uso corrente** e **reserva** não podia sumir junto com
+ * as tabelas: reserva não é dinheiro de gasto do dia a dia, e tratar as duas
+ * como a mesma coisa é o erro que faz alguém achar que tem mais do que tem.
+ * Ela sobreviveu na linha de apoio de cada cartão e na barra, que mede a fatia
+ * da conta dentro do seu próprio grupo.
  *
- * A lista de contas vem em duas tabelas, e não numa só: "uso corrente" e
- * "reserva" respondem perguntas diferentes, e cada uma ganha as colunas que
- * importam para ela — movimento do mês de um lado, meta e rendimento do outro.
+ * O "⋯" de cada cartão é o que o desenho põe ali: mais ações. No Fluxo elas
+ * são duas — editar a conta e acertar o saldo.
  */
 
-import { lastDay } from "../../../core/time/competence.ts";
 import { type AccountView, buildAccountsView } from "../../../server/services/accounts.ts";
-import { BalanceCheck } from "./balance-check.tsx";
-import { EditAccount } from "./edit-account.tsx";
 import { currentUser } from "../../auth-context.ts";
-import { ChartFrame, LineChart, chartColor } from "../../ui/charts.tsx";
-import {
-  Amount,
-  Breakdown,
-  DataTable,
-  Delta,
-  type MetricProps,
-  MetricStrip,
-  Td,
-  Tr,
-} from "../../ui/data-display.tsx";
-import { competenceShort, dateShort, money, percent } from "../../ui/format.ts";
+import { competenceShort, money } from "../../ui/format.ts";
 import {
   Banknote,
-  Calendar,
   Landmark,
   type LucideIcon,
   PiggyBank,
-  TrendingDown,
   TrendingUp,
   Wallet,
 } from "../../ui/icons.tsx";
-import { Page, PageHeader, SectionTitle, Stack } from "../../ui/page-frame.tsx";
-import { Badge, Caption, Empty, Figure, Label, Meter, Panel } from "../../ui/primitives.tsx";
+import { MetricTile, PanelHeading } from "../../ui/mesa.tsx";
+import { Empty } from "../../ui/primitives.tsx";
+import { BalanceCheck } from "./balance-check.tsx";
+import { EditAccount } from "./edit-account.tsx";
 import { NewAccount } from "./new-account.tsx";
 
 export const dynamic = "force-dynamic";
@@ -66,388 +54,134 @@ export default async function Contas() {
   if (!user) return null;
 
   const view = await buildAccountsView(user.id);
-
-  const cabecalho = (
-    <PageHeader
-      eyebrow={`Saldos de ${dateShort(view.today)}`}
-      title="Contas"
-      description="Quanto existe agora em cada lugar. O que ainda vai entrar aparece como previsto, sempre separado."
-      actions={<NewAccount />}
-    />
-  );
-
-  if (!view.accounts.length) {
-    return (
-      <Page>
-        {cabecalho}
-        <Empty
-          icon={Landmark}
-          title="Nenhuma conta cadastrada"
-          hint="Cadastre suas contas para o Fluxo calcular saldo, patrimônio e livre para gastar."
-        />
-      </Page>
-    );
-  }
-
-  const correntes = view.accounts.filter((conta) => !RESERVA.has(conta.kind));
-  const reservas = view.accounts.filter((conta) => RESERVA.has(conta.kind));
-
-  // O previsto acompanha exatamente o mesmo conjunto que compõe o total: contas
-  // em reais que entram nos totais. Somar as demais faria o previsto contar
-  // dinheiro que o patrimônio ao lado não conta.
-  const noTotal = view.accounts.filter((conta) => conta.currency === "BRL" && conta.includeInTotals);
-  const previstoCents = noTotal.reduce((soma, conta) => soma + conta.projectedCents, 0);
-  const aAcontecerCents = previstoCents - noTotal.reduce((soma, conta) => soma + conta.balanceCents, 0);
-  const entradasCents = noTotal.reduce((soma, conta) => soma + conta.inflowCents, 0);
-  const saidasCents = noTotal.reduce((soma, conta) => soma + conta.outflowCents, 0);
-
-  const fimDoMes = lastDay(view.competence);
-  const negativo = view.totals.spendableCents < 0;
-
-  const indicadores: MetricProps[] = [
-    {
-      label: "Previsto no fim do mês",
-      value: money(previstoCents),
-      icon: Calendar,
-      hint:
-        aAcontecerCents === 0
-          ? `Nada previsto além do que já aconteceu até ${dateShort(fimDoMes)}`
-          : `${money(aAcontecerCents, { signed: true })} ainda por acontecer até ${dateShort(fimDoMes)}`,
-    },
-    {
-      label: "Entradas no mês",
-      value: money(entradasCents),
-      tone: "positive",
-      icon: TrendingUp,
-      hint: "Receitas já confirmadas nas contas",
-    },
-    {
-      label: "Saídas no mês",
-      value: money(saidasCents),
-      icon: TrendingDown,
-      hint: "Despesas confirmadas nas contas. Transferência e pagamento de fatura ficam de fora.",
-    },
-  ];
-
-  const temHistorico = view.history.some((ponto) => ponto.balanceCents !== 0);
+  const meses = view.history.slice(-7);
+  const teto = Math.max(...meses.map((ponto) => Math.abs(ponto.balanceCents)), 1);
 
   return (
-    <Page>
-      {cabecalho}
+    <div className="content-area">
+      <div className="mb-5 grid gap-5 md:grid-cols-3">
+        <MetricTile
+          tom="accent"
+          icone={<Wallet className="size-4" aria-hidden />}
+          rotulo="Disponível para gastar"
+          valor={money(view.totals.spendableCents)}
+          apoio="Contas de uso corrente, em reais"
+        />
+        <MetricTile
+          tom="positive"
+          icone={<PiggyBank className="size-4" aria-hidden />}
+          rotulo="Reservado e investido"
+          valor={money(view.totals.investedCents)}
+          apoio="Patrimônio, fora do livre para gastar"
+        />
+        <MetricTile
+          tom="caution"
+          icone={<TrendingUp className="size-4" aria-hidden />}
+          rotulo="Total nas contas"
+          valor={money(view.totals.totalCents)}
+          apoio={`Posição de ${competenceShort(view.competence)}`}
+        />
+      </div>
 
-      <Stack gap="lg">
-        {/* A resposta da tela, sem moldura: um número grande sobre a tela é mais
-            forte do que o mesmo número dentro da primeira de várias caixas. */}
-        <section className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
-          <div className="min-w-0 flex-1">
-            <Label>Disponível hoje</Label>
-            <Figure
-              value={money(view.totals.spendableCents)}
-              size="xl"
-              tone={negativo ? "negative" : "neutral"}
-              className="mt-2"
+      {view.accounts.length ? (
+        <div className="grid gap-5 md:grid-cols-3">
+          {view.accounts.map((conta) => (
+            <CartaoDeConta
+              key={conta.id}
+              conta={conta}
+              total={
+                RESERVA.has(conta.kind) ? view.totals.investedCents : view.totals.spendableCents
+              }
             />
-            <p className="mt-3 flex max-w-measure items-start gap-2 text-body-sm text-ink-muted">
-              <Landmark size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-subtle" aria-hidden />
-              <span>
-                Conta corrente, dinheiro e benefício, em reais. É o que existe agora — nada aqui é promessa.
-              </span>
-            </p>
-          </div>
-
-          <div className="w-full shrink-0 rounded-panel border border-line bg-surface p-4 shadow-panel lg:w-80">
-            <Label className="mb-3">Patrimônio em contas</Label>
-            <Breakdown
-              parts={[
-                { label: "Disponível para gastar", cents: view.totals.spendableCents, sign: "+" },
-                { label: "Reservado e investido", cents: view.totals.investedCents, sign: "+" },
-              ]}
-              result={{ label: "Total nas contas", cents: view.totals.totalCents }}
-            />
-            {view.totals.byForeignCurrency.length ? (
-              <Caption className="mt-3">
-                Fora do total:{" "}
-                {view.totals.byForeignCurrency
-                  .map((item) => money(item.balanceCents, { currency: item.currency }))
-                  .join(" · ")}{" "}
-                — moeda estrangeira não é convertida.
-              </Caption>
-            ) : null}
+          ))}
+        </div>
+      ) : (
+        <section className="glass-panel p-6">
+          <Empty
+            icon={Landmark}
+            title="Nenhuma conta cadastrada"
+            hint="Cadastre suas contas para o Fluxo saber quanto você tem."
+          />
+          <div className="mt-4">
+            <NewAccount />
           </div>
         </section>
+      )}
 
-        <MetricStrip metrics={indicadores} />
-
-        {temHistorico ? <Evolucao history={view.history} /> : null}
-
-        {correntes.length ? <UsoCorrente accounts={correntes} /> : null}
-
-        {reservas.length ? <Reserva accounts={reservas} /> : null}
-      </Stack>
-    </Page>
-  );
-}
-
-/**
- * Evolução do patrimônio.
- *
- * Linha e não barra: aqui o que importa é a trajetória entre os meses, não a
- * comparação de um mês contra o outro.
- */
-function Evolucao({ history }: { history: Awaited<ReturnType<typeof buildAccountsView>>["history"] }) {
-  const primeiro = history[0]?.balanceCents ?? 0;
-  const ultimo = history.at(-1)?.balanceCents ?? 0;
-  const variacao = primeiro !== 0 ? ((ultimo - primeiro) / Math.abs(primeiro)) * 100 : null;
-
-  return (
-    <Panel>
-      <ChartFrame
-        title="Evolução do patrimônio"
-        hint="Saldo somado das contas em reais ao fim de cada mês"
-        readout={
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="tabular text-figure-sm text-ink">{money(ultimo)}</span>
-            <Delta percent={variacao} suffix="no período" />
-          </div>
-        }
-      >
-        <LineChart
-          labels={history.map((ponto) => competenceShort(ponto.competence))}
-          series={[
-            {
-              id: "patrimonio",
-              label: "Patrimônio em contas",
-              color: chartColor("accent"),
-              values: history.map((ponto) => ponto.balanceCents),
-              fill: true,
-            },
-          ]}
-          format={(valor) => money(valor)}
-          zeroLine
+      <section className="glass-panel mt-5 p-6">
+        <PanelHeading
+          titulo="Evolução do saldo consolidado"
+          apoio={`Últimos ${meses.length} meses`}
+          acao={<NewAccount />}
         />
-      </ChartFrame>
-    </Panel>
-  );
-}
-
-/**
- * Contas de uso corrente.
- *
- * Tabela porque o usuário compara: qual conta tem mais, qual está drenando, o
- * que sobra em cada uma no fim do mês.
- */
-function UsoCorrente({ accounts }: { accounts: readonly AccountView[] }) {
-  return (
-    <section>
-      <SectionTitle
-        title="Uso corrente"
-        hint="Dinheiro para gastar. A coluna de previsto vem em tom recuado — ela ainda não aconteceu."
-      />
-      <DataTable
-        caption="Saldo, movimento do mês e previsão de cada conta de uso corrente"
-        columns={[
-          { key: "conta", header: "Conta", flexible: true },
-          { key: "entradas", header: "Entradas", align: "right", hideBelow: "lg" },
-          { key: "saidas", header: "Saídas", align: "right", hideBelow: "lg" },
-          { key: "previsto", header: "Previsto no fim do mês", align: "right", hideBelow: "sm" },
-          { key: "saldo", header: "Saldo hoje", align: "right" },
-          { key: "acoes", header: "Ações", align: "right", width: "1%" },
-        ]}
-      >
-        {accounts.map((conta) => (
-          <Tr key={conta.id}>
-            <Td truncate>
-              <Identidade conta={conta} />
-            </Td>
-            <Td align="right" hideBelow="lg">
-              {conta.inflowCents > 0 ? (
-                <Amount cents={conta.inflowCents} tone="positive" size="body-sm" />
-              ) : (
-                <span className="text-body-sm text-ink-subtle">—</span>
-              )}
-            </Td>
-            <Td align="right" hideBelow="lg">
-              {conta.outflowCents > 0 ? (
-                <Amount cents={conta.outflowCents} size="body-sm" />
-              ) : (
-                <span className="text-body-sm text-ink-subtle">—</span>
-              )}
-            </Td>
-            <Td align="right" hideBelow="sm">
-              <Previsto conta={conta} />
-            </Td>
-            <Td align="right">
-              <Amount
-                cents={conta.balanceCents}
-                currency={conta.currency}
-                tone={conta.balanceCents < 0 ? "negative" : "neutral"}
-              />
-            </Td>
-            <Td align="right">
-              <Acoes conta={conta} />
-            </Td>
-          </Tr>
-        ))}
-      </DataTable>
-    </section>
-  );
-}
-
-/**
- * Acertar saldo e editar, em coluna própria.
- *
- * Moravam dentro da célula do saldo, encostados no número — que é onde a
- * pergunta "isto bate com o meu banco?" nasce. Só que três coisas numa célula
- * de tabela não cabem: a célula recebe a largura do número e o conteúdo
- * transborda **para a esquerda**, por cima da coluna do previsto. Era o
- * "R$ 3.815,R$ 3.215,23" que aparecia na tela.
- *
- * Em coluna própria, os controles continuam na mesma linha e logo ao lado do
- * saldo — a vizinhança que importava se manteve — e cada coluna volta a ter a
- * largura do que ela mostra. `width: 1%` com `whitespace-nowrap` é o jeito de
- * pedir à tabela exatamente a largura do conteúdo, e nem um pixel a mais.
- */
-function Acoes({ conta }: { conta: AccountView }) {
-  return (
-    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-      <BalanceCheck accountId={conta.id} accountName={conta.name} balanceCents={conta.balanceCents} />
-      <EditAccount accountId={conta.id} name={conta.name} color={conta.color} />
-    </span>
-  );
-}
-
-/**
- * Reservas e investimentos.
- *
- * Colunas diferentes de propósito: aqui ninguém pergunta "quanto entrou este
- * mês", e sim "quanto falta para a meta" e "quanto isto rende".
- */
-function Reserva({ accounts }: { accounts: readonly AccountView[] }) {
-  const total = accounts
-    .filter((conta) => conta.currency === "BRL" && conta.includeInTotals)
-    .reduce((soma, conta) => soma + conta.balanceCents, 0);
-
-  return (
-    <section>
-      <SectionTitle
-        title="Reserva e investimento"
-        hint={`${money(total)} guardados. É patrimônio — não entra no livre para gastar.`}
-      />
-      <DataTable
-        caption="Saldo, rendimento estimado e meta de cada reserva"
-        columns={[
-          { key: "conta", header: "Conta" },
-          { key: "rendimento", header: "Rendimento estimado", align: "right", hideBelow: "md" },
-          { key: "meta", header: "Meta", width: "34%", hideBelow: "sm" },
-          { key: "saldo", header: "Saldo hoje", align: "right" },
-          { key: "acoes", header: "Ações", align: "right", width: "1%" },
-        ]}
-      >
-        {accounts.map((conta) => (
-          <Tr key={conta.id}>
-            <Td>
-              <Identidade conta={conta} />
-            </Td>
-            <Td align="right" hideBelow="md">
-              {conta.expectedYieldCents > 0 ? (
-                <span className="tabular text-body-sm text-ink-muted">
-                  {money(conta.expectedYieldCents)}
-                  <span className="ml-1.5 text-caption text-ink-subtle">/mês</span>
-                </span>
-              ) : (
-                <span className="text-body-sm text-ink-subtle">—</span>
-              )}
-            </Td>
-            <Td hideBelow="sm">
-              {conta.goalCents && conta.goalPercent !== null ? (
-                <span className="block">
-                  <Meter
-                    value={conta.balanceCents}
-                    total={conta.goalCents}
-                    tone="positive"
-                    size="sm"
-                    label={`Meta de ${conta.name}`}
+        {meses.length > 1 ? (
+          <div className="flex h-48 items-end gap-3 pt-4">
+            {meses.map((ponto) => (
+              <div key={ponto.competence} className="group flex h-full flex-1 flex-col justify-end gap-3">
+                <div
+                  className="relative h-full overflow-hidden rounded-xl bg-surface-inset"
+                  title={`${competenceShort(ponto.competence)}: ${money(ponto.balanceCents)}`}
+                >
+                  <div
+                    className="absolute inset-x-0 bottom-0 rounded-xl bg-accent/70 transition-all duration-500 group-hover:bg-accent"
+                    style={{ height: `${Math.max((Math.abs(ponto.balanceCents) / teto) * 100, 2)}%` }}
                   />
-                  <span className="tabular mt-1.5 block text-caption text-ink-subtle">
-                    {percent(conta.goalPercent)} de {money(conta.goalCents)}
-                  </span>
+                </div>
+                <span className="text-center text-[10px] text-ink-subtle">
+                  {competenceShort(ponto.competence).replace(/\s*de\s*\d+$/, "")}
                 </span>
-              ) : (
-                <span className="text-body-sm text-ink-subtle">sem meta</span>
-              )}
-            </Td>
-            <Td align="right">
-              <Amount
-                cents={conta.balanceCents}
-                currency={conta.currency}
-                tone={conta.balanceCents < 0 ? "negative" : "neutral"}
-              />
-            </Td>
-            {/*
-              Reserva também se corrige.
-              O acerto e a edição existiam só no uso corrente, e não havia razão
-              para isso: o saldo de uma reserva também sai do lugar, e o nome
-              também se digita errado. Quem guardava dinheiro ficava sem conserto.
-            */}
-            <Td align="right">
-              <Acoes conta={conta} />
-            </Td>
-          </Tr>
-        ))}
-      </DataTable>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-body-sm text-ink-subtle">
+            Ainda não há meses suficientes para desenhar a evolução.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CartaoDeConta({ conta, total }: { conta: AccountView; total: number }) {
+  const tipo = TIPO[conta.kind] ?? { label: conta.kind, icon: Landmark };
+  const Icone = tipo.icon;
+  const fatia = total > 0 ? Math.min(100, (Math.abs(conta.balanceCents) / Math.abs(total)) * 100) : 0;
+
+  return (
+    <section className="glass-panel p-6">
+      <div className="mb-8 flex justify-between">
+        <div
+          className="grid size-11 place-items-center rounded-xl"
+          style={{
+            background: `color-mix(in oklab, ${conta.color} 12%, transparent)`,
+            color: conta.color,
+          }}
+        >
+          <Icone className="size-5" aria-hidden />
+        </div>
+        <div className="flex items-start gap-1">
+          <EditAccount accountId={conta.id} name={conta.name} color={conta.color} />
+          <BalanceCheck
+            accountId={conta.id}
+            accountName={conta.name}
+            balanceCents={conta.balanceCents}
+          />
+        </div>
+      </div>
+
+      <p className="truncate text-body-sm font-medium text-ink">{conta.name}</p>
+      <p className="truncate text-caption text-ink-subtle">
+        {conta.institution} · {tipo.label}
+      </p>
+      <p className="tabular mt-5 text-2xl font-medium text-ink">{money(conta.balanceCents)}</p>
+
+      <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-surface-inset">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${Math.max(fatia, 2)}%`, background: conta.color }}
+        />
+      </div>
     </section>
-  );
-}
-
-/** Nome, natureza e instituição de uma conta, do jeito que a tabela precisa. */
-function Identidade({ conta }: { conta: AccountView }) {
-  const tipo = TIPO[conta.kind];
-
-  return (
-    <span className="flex min-w-0 items-center gap-2.5">
-      {/*
-        O anel é o que deixa a cor livre ser livre.
-
-        A bolinha nua some quando a cor escolhida é parecida com a superfície —
-        um cinza claro no tema claro, um azul quase preto no escuro. O contorno
-        de 10% de tinta desenha a borda em qualquer um dos dois casos, e é o que
-        permite oferecer o seletor do sistema sem que a conta possa desaparecer
-        da lista.
-      */}
-      <span
-        className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink/15"
-        style={{ backgroundColor: conta.color }}
-        aria-hidden
-      />
-      <span className="min-w-0">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-body text-ink">{conta.name}</span>
-          {conta.includeInTotals ? null : <Badge tone="neutral">fora dos totais</Badge>}
-          {conta.currency === "BRL" ? null : <Badge tone="info">{conta.currency}</Badge>}
-        </span>
-        <span className="mt-0.5 block truncate text-caption text-ink-subtle">
-          {tipo?.label ?? conta.kind}
-          {conta.institution && conta.institution !== "manual" ? ` · ${conta.institution}` : ""}
-        </span>
-      </span>
-    </span>
-  );
-}
-
-/**
- * Saldo previsto.
- *
- * Em tom recuado e nunca com o mesmo peso do saldo de hoje: previsto que se
- * parece com confirmado é o erro que faz alguém gastar o que ainda não tem.
- */
-function Previsto({ conta }: { conta: AccountView }) {
-  if (conta.projectedCents === conta.balanceCents) {
-    return <span className="text-body-sm text-ink-subtle">—</span>;
-  }
-
-  return (
-    <span className="tabular text-body-sm text-ink-muted">
-      {money(conta.projectedCents, { currency: conta.currency })}
-    </span>
   );
 }
