@@ -807,6 +807,23 @@
     transform 0.3s;
 }
 
+/*
+ * Abaixo de `lg` a lateral é gaveta, e gaveta sai do fluxo.
+ *
+ * `sticky` continua ocupando as 16rem mesmo deslocada para fora da tela: numa
+ * tela de 375px sobravam 87px para o conteúdo, e todo cartão do quadro nascia
+ * com 22px de largura. Fixa, ela passa a flutuar sobre a página — que é o que
+ * a cortina e o `translate-x` já pressupunham.
+ */
+@media (max-width: 1023px) {
+  .finance-sidebar {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    height: calc(100vh - 1rem);
+  }
+}
+
 .topbar {
   position: sticky;
   top: 0;

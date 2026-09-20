@@ -204,11 +204,20 @@ export function Badge({
   children,
   tone = "neutral",
   variant = "soft",
+  size = "md",
   icon: Icon,
 }: {
   children: ReactNode;
   tone?: Tone;
   variant?: "soft" | "outline" | "solid";
+  /**
+   * `sm` é a pílula de recipiente estreito — o cartão do quadro, que tem
+   * 130 px de miolo. Além de menor, ela **cede**: a pílula normal tem
+   * `shrink-0`, que é o certo numa linha onde o rótulo não pode encolher, e é
+   * exatamente o que faz "FUNCIONALIDADE" atravessar a borda do cartão. A
+   * pequena aceita o limite do pai e quebra entre as palavras.
+   */
+  size?: "md" | "sm";
   icon?: LucideIcon;
 }) {
   const aparencia =
@@ -227,7 +236,10 @@ export function Badge({
         // de altura, um raio de 6 px não lê como forma escolhida — lê como
         // adesivo colado na tela. A pílula é a forma que a altura já sugere, e
         // o respiro horizontal maior tira o texto de junto da borda.
-        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-label uppercase",
+        "inline-flex items-center gap-1 rounded-full py-0.5 uppercase",
+        size === "sm"
+          ? "max-w-full px-1.5 text-[0.625rem] font-semibold leading-[1.3] tracking-[0.03em]"
+          : "shrink-0 px-2 text-label",
         aparencia,
       )}
     >

@@ -57,7 +57,10 @@
 .coreName { display: block; color: var(--color-accent); font-size: clamp(1.7rem, 3vw, 2.8rem); letter-spacing: .22em; padding-left: .22em; font-weight: 450; margin: .3rem 0; text-shadow: 0 0 28px var(--color-accent-edge); }
 .coreStatus { display: block; font-size: .65rem; color: var(--color-ink-muted); }
 .waveform { margin: .9rem auto 0; display: flex; height: 30px; justify-content: center; align-items: center; gap: 3px; }
-.waveform span { width: 2px; background: var(--color-accent); opacity: .65; }
+.waveform span { width: 2px; background: var(--color-accent); opacity: .65; transform-origin: center; }
+.waveformCompact { margin: 0; height: 16px; gap: 2px; }
+.waveformCompact span { scale: 1 .53; }
+.spin { transform-box: view-box; transform-origin: 180px 180px; }
 .freeSpend { text-align: center; width: 100%; margin-top: -.1rem; }.freeSpend > strong { display: block; color: var(--color-ink); font-size: clamp(1.6rem, 2.8vw, 2.6rem); font-weight: 450; font-variant-numeric: tabular-nums; letter-spacing: -.045em; margin: .35rem 0; }.freeSpend > .negative { color: var(--color-negative); }.freeSpend p { color: var(--color-ink-subtle); font-size: .68rem; line-height: 1.7; }.coreLink { display: inline-flex; align-items: center; gap: .4rem; min-height: 40px; color: var(--color-accent); font-size: .72rem; margin-top: .5rem; }.coreLink:hover { text-decoration: underline; text-underline-offset: 4px; }
 .coreFooter { display: flex; justify-content: center; align-items: center; gap: .5rem; border: 1px solid var(--hud-line); border-radius: 2rem; padding: .5rem .9rem; color: var(--color-ink-subtle); font-size: .6rem; margin-top: 1.1rem; }
 .signalList { display: grid; gap: .9rem; }.signalItem { display: flex; gap: .55rem; align-items: flex-start; min-height: 44px; }.signalDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent); flex-shrink: 0; margin-top: .4rem; }.signalUrgent { background: var(--color-negative); }.signalItem > span:nth-child(2) { min-width: 0; flex: 1; }.signalItem strong { color: var(--color-ink); font-size: .75rem; font-weight: 550; }.signalItem p { color: var(--color-ink-subtle); font-size: .65rem; line-height: 1.6; margin-top: .2rem; }.signalItem > svg { flex-shrink: 0; margin-top: .25rem; color: var(--color-ink-subtle); }.signalItem:hover strong { color: var(--color-accent); }
@@ -71,7 +74,26 @@
 @media (max-width: 1200px) { .hudGrid { grid-template-columns: minmax(0,1fr) minmax(240px,1.1fr) minmax(0,1fr); padding: 1rem; gap: .75rem; }.hudPanel { padding: .85rem; }.consoleMeta { display: none; }.pageHeader { align-items: start; flex-direction: column; }.quickActions { grid-template-columns: repeat(2,minmax(0,1fr)); }.financialRows > div { flex-wrap: wrap; gap: .2rem; } }
 @media (max-width: 900px) { .hudGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }.corePanel { grid-column: 1 / -1; grid-row: 1; padding-top: 1.5rem; }.orbit { max-width: 300px; }.coreName { font-size: 2.4rem; }.freeSpend > strong { font-size: 2.2rem; }.coreFooter { margin-bottom: .5rem; }.financialRows > div { flex-wrap: nowrap; }.projectsGrid { grid-template-columns: 1fr; }.toolsGrid { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .pageHeader { gap: 1rem; }.headerActions { width: 100%; }.headerActions > a { flex: 1; }.consoleHeader { padding: 1rem; gap: .5rem; }.brandGlyph { display: none; }.consoleAction { font-size: .65rem; padding: .45rem .6rem; }.hudGrid { grid-template-columns: minmax(0,1fr); gap: .85rem; }.corePanel { grid-column: 1; }.hudPanel { padding: 1rem; }.coreCoordinates { font-size: .5rem; }.quickActions { gap: .5rem; }.quickAction { align-items: start; flex-direction: column; padding: .85rem; gap: .55rem; }.quickAction > svg:last-child { display: none; }.quickAction strong { font-size: .75rem; }.quickAction small { font-size: .7rem; }.consoleFooter { padding: .8rem 1rem; }.futureAssistant { align-items: start; flex-wrap: wrap; padding: 1rem; }.futureAssistant > div:nth-child(2) { flex: 1; min-width: 180px; }.futureTag { margin-left: 4.2rem; }.primaryMetric { font-size: 1.8rem; }.metricLabel, .metricHint, .smallNote, .agendaCopy > span, .signalItem p, .goalLink small { font-size: .75rem; }.financialRows, .panelLink, .agendaCopy strong, .agendaCopy b, .signalItem strong, .goalLink > span { font-size: .8rem; }.coreLink { min-height: 44px; } }
-@media (prefers-reduced-motion: no-preference) { .accentArc { animation: orbit-glow 6s ease-in-out 2; } @keyframes orbit-glow { 0%,100% { opacity: .55; } 50% { opacity: 1; } } }
+@media (prefers-reduced-motion: no-preference) {
+  .accentArc { animation: orbit-glow 6s ease-in-out 2; } @keyframes orbit-glow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* Cada peça no seu ritmo e no seu sentido. Nenhuma volta menos de 58s: o
+     giro tem de ser percebido ao olhar duas vezes, nunca na primeira. */
+  .spinOuter { animation: orbit-turn 120s linear infinite; }
+  .spinArcWide { animation: orbit-turn 80s linear infinite reverse; }
+  .spinArcThin { animation: orbit-turn 58s linear infinite; }
+  .spinPoints { animation: orbit-turn 150s linear infinite; }
+  .spinCrosshair { animation: orbit-turn 200s linear infinite reverse; }
+  @keyframes orbit-turn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  /* Procurando a resposta: onda baixa e lenta. */
+  .waveThinking span { animation: wave-think 1.9s ease-in-out infinite; }
+  @keyframes wave-think { 0%,100% { transform: scaleY(.3); opacity: .4; } 50% { transform: scaleY(.62); opacity: .75; } }
+
+  /* Falando: amplitude cheia e ciclo curto, que é o que distingue voz de espera. */
+  .waveSpeaking span { animation: wave-speak .62s ease-in-out infinite; }
+  @keyframes wave-speak { 0%,100% { transform: scaleY(.32); opacity: .6; } 32% { transform: scaleY(1.22); opacity: 1; } 66% { transform: scaleY(.58); opacity: .8; } }
+}
 
 /* Text carrying financial meaning remains readable at desktop densities too. */
 .metricLabel, .metricHint, .smallNote, .agendaCopy > span, .signalItem p, .goalLink small, .quietState p, .goalEmpty, .freeSpend p { font-size: .75rem; }

@@ -7,9 +7,11 @@
  * ensina o que dá para perguntar — e uma pergunta ruim gasta cota à toa.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "../../ui/primitives.tsx";
+import { tarsCala, tarsFala, tarsPensa, useVozDoTars } from "../../ui/tars/voice.ts";
+import { Waveform } from "../../ui/tars/waveform.tsx";
 
 type Acao = { label: string; reason: string; priority: "alta" | "media" | "baixa" };
 
@@ -36,12 +38,18 @@ export function AssistantChat({ remaining }: { remaining: number }) {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [restantes, setRestantes] = useState(remaining);
+  const voz = useVozDoTars();
+
+  // Sair da página com o TARS falando deixaria o gráfico de som se mexendo
+  // sozinho: a loja é de módulo e sobrevive à desmontagem do componente.
+  useEffect(() => tarsCala, []);
 
   async function perguntar(texto: string) {
     if (!texto.trim() || enviando) return;
 
     setEnviando(true);
     setErro(null);
+    tarsPensa();
     try {
       const http = await fetch("/api/v1/assistant", {
         method: "POST",
@@ -52,14 +60,17 @@ export function AssistantChat({ remaining }: { remaining: number }) {
       if (!http.ok) {
         const corpo = (await http.json().catch(() => ({}))) as { error?: { message?: string } };
         setErro(corpo.error?.message ?? "Não foi possível consultar o assistente.");
+        tarsCala();
         return;
       }
 
       const corpo = (await http.json()) as { data: Resposta };
       setResposta(corpo.data);
       setRestantes(corpo.data.remaining);
+      tarsFala(corpo.data.answer);
     } catch {
       setErro("Não foi possível consultar o assistente. Confira sua conexão e tente novamente.");
+      tarsCala();
     } finally {
       setEnviando(false);
     }
@@ -116,6 +127,18 @@ export function AssistantChat({ remaining }: { remaining: number }) {
           ))}
         </ul>
       ) : null}
+
+      {/*
+       * O gráfico de som do orbe fica no alto da página, longe de quem acabou
+       * de perguntar. Esta é a mesma onda, do tamanho de uma linha de texto,
+       * onde ela pode ser vista: some quando o TARS termina.
+       */}
+      {voz === "quieto" ? null : (
+        <p className="mt-3 flex items-center gap-2 text-caption text-ink-subtle">
+          <Waveform compact />
+          {voz === "pensando" ? "Lendo os seus números…" : "TARS está respondendo."}
+        </p>
+      )}
 
       {erro ? (
         <p role="alert" className="mt-3 rounded-md bg-negative-wash px-3 py-2 text-body-sm text-negative">

@@ -296,26 +296,49 @@ export function TaskBoard({
                       </p>
 
                       {showProject ? (
-                        <p className="mt-1 truncate pl-3.5 text-caption text-ink-subtle">
+                        <p className="mt-1 truncate pl-3.5 text-caption text-ink-subtle" title={tarefa.projectName}>
                           {tarefa.projectName}
                           {tarefa.clientName ? ` · ${tarefa.clientName}` : ""}
                         </p>
                       ) : null}
 
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-3.5">
-                        <Badge tone={tipo.tone}>{tipo.label}</Badge>
-                        {tarefa.priority === "urgent" ? <Badge tone="negative">urgente</Badge> : null}
+                      {/*
+                       * Sem o recuo das outras linhas, e com a pílula pequena.
+                       *
+                       * A coluna do quadro tem cerca de 150 px, e o miolo do
+                       * cartão, menos de 130. "FUNCIONALIDADE" na pílula normal
+                       * mede mais que isso sozinha: o recuo de alinhamento e a
+                       * pílula que não encolhe eram o que empurrava o texto para
+                       * fora da borda. Aqui a largura toda do cartão é pouca, e
+                       * alinhar a pílula sob o título custa caro demais.
+                       */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        <Badge tone={tipo.tone} size="sm">{tipo.label}</Badge>
+                        {tarefa.priority === "urgent" ? (
+                          <Badge tone="negative" size="sm">urgente</Badge>
+                        ) : null}
                         {tarefa.isLate && tarefa.dueOn ? (
-                          <Badge tone="negative">venceu {dateShort(tarefa.dueOn as LocalDate)}</Badge>
+                          <Badge tone="negative" size="sm">
+                            venceu {dateShort(tarefa.dueOn as LocalDate)}
+                          </Badge>
                         ) : tarefa.dueOn ? (
                           <span className="text-caption text-ink-subtle">
                             {dateShort(tarefa.dueOn as LocalDate)}
                           </span>
                         ) : null}
-                        {!tarefa.billable ? <Badge tone="neutral">não cobrável</Badge> : null}
+                        {!tarefa.billable ? (
+                          <Badge tone="neutral" size="sm">não cobrável</Badge>
+                        ) : null}
                       </div>
 
-                      <div className="mt-2 flex justify-between gap-1 pl-3.5">
+                      {/*
+                       * `flex-wrap` porque "Fazendo" e "Revisão" juntos não
+                       * cabem na largura de uma coluna de quadro. Sem a quebra,
+                       * o segundo botão sai pela borda; com ela, cada um ocupa
+                       * a sua linha e continua legível. Encolher com reticência
+                       * seria pior: "Revis…" não diz para onde o cartão vai.
+                       */}
+                      <div className="mt-2 flex flex-wrap justify-between gap-1">
                         {anterior ? (
                           <button
                             type="button"

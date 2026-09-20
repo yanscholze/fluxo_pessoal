@@ -16,6 +16,7 @@ import { useState } from "react";
 
 import { Badge } from "../../ui/primitives.tsx";
 import { date, money, percent } from "../../ui/format.ts";
+import { tarsCala, tarsPensa } from "../../ui/tars/voice.ts";
 
 type Item = { description: string; quantity: number; unitCents: number; totalCents: number };
 
@@ -46,6 +47,10 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
     setLendo(true);
     setErro(null);
     setLeitura(null);
+    // Ler um cupom também é o TARS trabalhando: o gráfico de som do orbe
+    // acompanha. Ele não fala no fim — o resultado é um formulário, não uma
+    // resposta — então volta ao silêncio assim que a leitura termina.
+    tarsPensa();
 
     try {
       const dataUrl = await reduzir(arquivo);
@@ -68,6 +73,7 @@ export function ReceiptReader({ remaining }: { remaining: number }) {
       setErro("Não foi possível processar a foto.");
     } finally {
       setLendo(false);
+      tarsCala();
     }
   }
 

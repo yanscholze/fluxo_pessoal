@@ -13,7 +13,9 @@ import {
   Sparkles, Target, Wallet, Zap,
 } from "../icons.tsx";
 import type { LucideIcon } from "../icons.tsx";
+import { TaskBoard } from "../work/task-board.tsx";
 import styles from "./tars.module.css";
+import { Waveform } from "./waveform.tsx";
 
 type Signal = { id: string; label: string; detail: string; href: string; urgent?: boolean };
 type AgendaItem = { id: string; label: string; amount: number; dueOn: LocalDate; kind: string; href: string; income?: boolean };
@@ -141,23 +143,51 @@ export function TarsOverview({
           <div className={styles.corePanel}>
             <div className={styles.coreCoordinates} aria-hidden="true"><span>FLUXO / TARS</span><span>VISÃO INTEGRADA</span></div>
             <div className={styles.orbit}>
+              {/*
+               * Cada peça do desenho gira sozinha, e nenhuma acompanha a outra.
+               *
+               * Os anéis inteiros — o de 139, o de 113 e o de 88 — ficam
+               * parados de propósito: circunferência contínua girando é
+               * indistinguível de circunferência parada, e animá-la seria pagar
+               * repintura por quadro sem ninguém ver nada. Gira o que tem
+               * assimetria: o tracejado, os dois arcos, a cruz e os pontos.
+               *
+               * Os arcos e os pontos moram no mesmo raio de 139. Girando em
+               * sentidos e ritmos diferentes, eles se cruzam — é o que dá a
+               * impressão de mecanismo, e não de imagem com filtro.
+               *
+               * O `<g>` é que gira; o `transform` de cada peça continua sendo o
+               * ângulo em que ela foi desenhada. Pôr os dois no mesmo elemento
+               * faria a animação apagar a posição inicial e os arcos saltariam
+               * ao carregar.
+               */}
               <svg className={styles.orbitDrawing} viewBox="0 0 360 360" fill="none" aria-hidden="true">
-                <circle className={styles.outerRing} cx="180" cy="180" r="160" strokeWidth="1" strokeDasharray="3 9" />
+                <g className={`${styles.spin} ${styles.spinOuter}`}>
+                  <circle className={styles.outerRing} cx="180" cy="180" r="160" strokeWidth="1" strokeDasharray="3 9" />
+                </g>
                 <circle className={styles.trackRing} cx="180" cy="180" r="139" strokeWidth="1" />
-                <circle className={styles.accentArc} cx="180" cy="180" r="139" strokeWidth="3" strokeDasharray="64 810" transform="rotate(-45 180 180)" />
-                <circle className={styles.accentArc} cx="180" cy="180" r="139" strokeWidth="2" strokeDasharray="22 852" transform="rotate(135 180 180)" />
+                <g className={`${styles.spin} ${styles.spinArcWide}`}>
+                  <circle className={styles.accentArc} cx="180" cy="180" r="139" strokeWidth="3" strokeDasharray="64 810" transform="rotate(-45 180 180)" />
+                </g>
+                <g className={`${styles.spin} ${styles.spinArcThin}`}>
+                  <circle className={styles.accentArc} cx="180" cy="180" r="139" strokeWidth="2" strokeDasharray="22 852" transform="rotate(135 180 180)" />
+                </g>
                 <circle className={styles.middleRing} cx="180" cy="180" r="113" strokeWidth="1" />
-                <path className={styles.crosshair} d="M180 8V75M180 285V352M8 180H75M285 180H352M76 76L100 100M260 260L284 284M76 284L100 260M260 100L284 76" strokeWidth="1" />
+                <g className={`${styles.spin} ${styles.spinCrosshair}`}>
+                  <path className={styles.crosshair} d="M180 8V75M180 285V352M8 180H75M285 180H352M76 76L100 100M260 260L284 284M76 284L100 260M260 100L284 76" strokeWidth="1" />
+                </g>
                 <circle className={styles.innerRing} cx="180" cy="180" r="88" strokeWidth="1" />
-                <circle className={styles.orbitPoint} cx="180" cy="41" r="4" />
-                <circle className={styles.orbitPoint} cx="41" cy="180" r="3" />
-                <circle className={styles.orbitPoint} cx="278" cy="278" r="3" />
+                <g className={`${styles.spin} ${styles.spinPoints}`}>
+                  <circle className={styles.orbitPoint} cx="180" cy="41" r="4" />
+                  <circle className={styles.orbitPoint} cx="41" cy="180" r="3" />
+                  <circle className={styles.orbitPoint} cx="278" cy="278" r="3" />
+                </g>
               </svg>
               <div className={styles.coreIdentity}>
                 <span className={styles.coreEyebrow}>CENTRO DE COMANDO</span>
                 <span className={styles.coreName}>TARS</span>
                 <span className={styles.coreStatus}>Tudo começa aqui</span>
-                <div className={styles.waveform} aria-hidden="true">{[7, 13, 9, 23, 17, 30, 20, 12, 25, 16, 9, 18, 7].map((height, index) => <span key={index} style={{ height }} />)}</div>
+                <Waveform />
               </div>
             </div>
             <div className={styles.freeSpend}>
@@ -209,6 +239,37 @@ export function TarsOverview({
         <QuickAction href="/planejamento" icon={Zap} label="Planejar compromissos" detail="Parcelas, recorrências e assinaturas" />
       </nav>
 
+      {/*
+       * As pendências antes dos projetos.
+       *
+       * Quem abre o Fluxo de manhã pergunta "o que eu faço hoje" antes de
+       * perguntar "como estão as coisas" — a mesma ordem da tela de Projetos.
+       * O painel 03 aqui em cima responde pelo dinheiro: fatura vencida,
+       * captura para revisar, meta fora do ritmo. Ele não sabe de tarefa, e
+       * sem este quadro o TARS dizia "sem alertas por aqui" com uma entrega
+       * vencida esperando.
+       *
+       * É o mesmo componente do Quadro, com "Feito" virado área de soltura:
+       * aqui só entra o que falta, e a coluna do concluído estaria sempre
+       * vazia dizendo uma mentira. Some inteiro quando não há nada pendente —
+       * cinco colunas vazias são uma forma cara de dizer "nada".
+       */}
+      {dashboard.openTasks.length ? (
+        <section className={styles.projectsSection} aria-labelledby="tars-tasks-title">
+          <div className={styles.sectionHeading}>
+            <div>
+              <p className={styles.eyebrow}>O QUE PRECISA DE VOCÊ</p>
+              <h2 id="tars-tasks-title">Suas pendências</h2>
+              <p>{resumoDePrazos(dashboard.openTasks, today)}</p>
+            </div>
+            <Link href="/projetos/quadro" className={styles.textLink}>
+              Abrir o quadro <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+          <TaskBoard tasks={dashboard.openTasks} dense doneIsDropZone />
+        </section>
+      ) : null}
+
       <section className={styles.projectsSection} aria-labelledby="tars-projects-title">
         <div className={styles.sectionHeading}>
           <div><p className={styles.eyebrow}>TRABALHO EM MOVIMENTO</p><h2 id="tars-projects-title">Suas próximas entregas</h2><p>Projetos abertos, começando pelos prazos que pedem atenção.</p></div>
@@ -224,6 +285,36 @@ export function TarsOverview({
       </section>
     </>
   );
+}
+
+/** Quantos dias "esta semana" cobre. Sete, contados de hoje. */
+const SEMANA = 7;
+
+/**
+ * O subtítulo do quadro conta o **prazo**, e não a situação.
+ *
+ * "3 a fazer, 1 travada" descreve o quadro, que já está logo abaixo. O que
+ * decide o dia é o que venceu e o que vence: é isso que a linha diz.
+ */
+function resumoDePrazos(tarefas: readonly { dueOn: string | null; isLate: boolean }[], hoje: LocalDate): string {
+  const limite = addDays(hoje, SEMANA);
+  const atrasadas = tarefas.filter((tarefa) => tarefa.isLate).length;
+  const paraHoje = tarefas.filter((tarefa) => tarefa.dueOn === hoje).length;
+  const naSemana = tarefas.filter(
+    (tarefa) => tarefa.dueOn !== null && tarefa.dueOn > hoje && tarefa.dueOn <= limite,
+  ).length;
+
+  const partes: string[] = [];
+  if (atrasadas) partes.push(`${atrasadas} atrasada${atrasadas === 1 ? "" : "s"}`);
+  if (paraHoje) partes.push(`${paraHoje} para hoje`);
+  if (naSemana) partes.push(`${naSemana} nesta semana`);
+
+  // Sem prazo nenhum, o número que ainda diz alguma coisa é o total. Escrever
+  // "0 atrasadas" seria contar uma ausência como se fosse notícia.
+  if (!partes.length) {
+    return `${tarefas.length} em aberto, nenhuma com prazo nos próximos ${SEMANA} dias`;
+  }
+  return partes.join(" · ");
 }
 
 function HudPanel({ number, title, icon: Icon, children }: { number: string; title: string; icon: LucideIcon; children: ReactNode }) {
