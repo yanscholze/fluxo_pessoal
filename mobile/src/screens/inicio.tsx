@@ -21,12 +21,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import {
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
   BellSimple,
   Briefcase,
-  CreditCard,
   ForkKnife,
-  Lightning,
   MusicNotes,
   ShoppingCart,
   Sparkle,
@@ -82,19 +82,23 @@ export function InicioScreen({
     [transactions, hoje],
   );
 
+  /*
+   * A curva de gastos vem pronta do servidor.
+   *
+   * Ela era montada aqui: catorze lançamentos do razão local, na ordem em que
+   * estivessem, e `[0, 0]` quando houvesse menos de dois. Dava um traço sem
+   * significado — e, no mês ainda vazio, uma reta que parecia uma figura
+   * colada na tela. Agora é o acumulado dia a dia da competência, calculado
+   * pela mesma função que produz o total de saídas escrito logo acima: o
+   * último ponto do traço **é** aquele número.
+   *
+   * Um ponto só não desenha linha. Dois zeros dão a linha de base, que é o
+   * desenho honesto de um mês em que ainda não se gastou nada.
+   */
   const serieDeGastos = useMemo(() => {
-    const despesas = transactions
-      .filter(
-        (item) =>
-          item.kind === "expense" &&
-          item.state === "confirmed" &&
-          item.competence === dados?.competence,
-      )
-      .slice(0, 14)
-      .reverse()
-      .map((item) => item.amount);
-    return despesas.length > 1 ? despesas : [0, 0];
-  }, [transactions, dados?.competence]);
+    const curva = (dados?.dailySpend ?? []).map((ponto) => ponto.accumulatedCents);
+    return curva.length > 1 ? curva : [0, 0];
+  }, [dados?.dailySpend]);
 
   const pendencias = dados?.upcoming ?? [];
   const capturas = useCapturas(aba === "capturas");
@@ -313,7 +317,7 @@ export function InicioScreen({
               <View style={{ gap: 12 }}>
                 {pendencias.slice(0, 5).map((item, indice) => (
                   <View
-                    key={`${item.date}-${item.description}-${indice}`}
+                    key={`${item.transactionId}-${item.dueOn}-${indice}`}
                     style={{
                       minHeight: 62,
                       flexDirection: "row",
@@ -326,16 +330,22 @@ export function InicioScreen({
                       padding: 16,
                     }}
                   >
-                    <IconBubble tone={item.kind === "fatura" ? "accent" : "caution"}>
+                    <IconBubble tone={item.kind === "income" ? "positive" : "caution"}>
                       {iconePendencia(item.kind, palette)}
                     </IconBubble>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Texto style={[type.body, { color: palette.ink }]} numberOfLines={1}>
                         {item.description}
                       </Texto>
-                      <Small tone="caution">{relativeDate(item.date as never)}</Small>
+                      <Small tone="caution">{relativeDate(item.dueOn as never)}</Small>
                     </View>
-                    <Texto style={[type.bodyStrong, { color: palette.negative }]}>
+                    <Texto
+                      style={[
+                        type.bodyStrong,
+                        { color: item.kind === "income" ? palette.positive : palette.negative },
+                      ]}
+                    >
+                      {item.kind === "income" ? "+ " : ""}
                       {money(cents(item.amountCents))}
                     </Texto>
                   </View>
@@ -598,9 +608,16 @@ function iconeTransacao(item: LocalTransaction, palette: ReturnType<typeof usePa
   return <Briefcase {...props} />;
 }
 
-function iconePendencia(kind: string, palette: ReturnType<typeof usePalette>) {
-  if (kind === "fatura") return <CreditCard size={19} color={palette.accent} weight="fill" />;
-  return <Lightning size={19} color={palette.caution} weight="fill" />;
+/**
+ * A seta diz para que lado o dinheiro vai, e é a mesma do site: entrada
+ * apontando para dentro, saída para fora. Antes isto comparava com `"fatura"`,
+ * que o servidor nunca manda — `kind` só vale `"expense"` ou `"income"` —, e
+ * por isso toda pendência saía com o mesmo ícone de saída, inclusive o
+ * salário.
+ */
+function iconePendencia(kind: "expense" | "income", palette: ReturnType<typeof usePalette>) {
+  if (kind === "income") return <ArrowDownRight size={19} color={palette.positive} weight="bold" />;
+  return <ArrowUpRight size={19} color={palette.caution} weight="bold" />;
 }
 
 /**

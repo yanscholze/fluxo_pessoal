@@ -377,11 +377,27 @@ export type DashboardView = {
       readonly isSettled: boolean;
     } | null;
   }[];
+  /**
+   * Os compromissos previstos dos próximos dias.
+   *
+   * Os nomes são os do servidor, e isto importa mais do que parece: este tipo
+   * dizia `date` onde a resposta traz `dueOn`, e `kind: string` onde ela traz
+   * `"expense" | "income"`. O TypeScript não pega a diferença — a resposta
+   * chega como JSON e é afirmada, não verificada —, então o campo ausente só
+   * aparecia em tempo de execução, como `undefined.split` dentro do
+   * formatador de data, derrubando o aplicativo ao abrir a aba.
+   */
   readonly upcoming: readonly {
-    readonly date: string;
+    readonly transactionId: string;
     readonly description: string;
+    readonly dueOn: string;
     readonly amountCents: number;
-    readonly kind: string;
+    readonly kind: "expense" | "income";
+  }[];
+  /** A curva de gastos da competência, dia a dia até hoje. */
+  readonly dailySpend: readonly {
+    readonly date: string;
+    readonly accumulatedCents: number;
   }[];
   readonly cashflow: readonly {
     readonly competence: string;
