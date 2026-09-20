@@ -867,15 +867,51 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.875rem;
+  padding: 0.35rem 0.75rem;
   border: 1px solid var(--color-line);
   border-radius: 999px;
   background: var(--color-surface);
   font-size: 0.625rem;
-  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   color: var(--color-ink-subtle);
+}
+
+/**
+ * A legenda sob o valor principal.
+ *
+ * Dois números de apoio separados por um fio de 1px — e os três elementos são
+ * `b`, `small` e `i` sem classe nenhuma no desenho, estilizados pela própria
+ * tag. Mantidos assim: é marcação mínima para o que é, de fato, um número com
+ * uma etiqueta embaixo.
+ */
+.money-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.money-legend b {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.money-legend small {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 400;
+  color: var(--color-ink-subtle);
+}
+
+.money-legend i {
+  display: block;
+  width: 1px;
+  height: 2rem;
+  background: var(--color-line);
 }
 
 .metric-label {

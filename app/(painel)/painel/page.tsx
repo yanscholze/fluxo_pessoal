@@ -1,34 +1,29 @@
 import { buildDashboard } from "../../../server/services/dashboard.ts";
 import { currentUser } from "../../auth-context.ts";
-import { LinkButton } from "../../ui/controls.tsx";
-import { AccountsPanel } from "../../ui/dashboard/accounts-panel.tsx";
-import { CardsPanel } from "../../ui/dashboard/cards-panel.tsx";
-import { CashflowPanel } from "../../ui/dashboard/cashflow-panel.tsx";
-import { CategoryPanel } from "../../ui/dashboard/category-panel.tsx";
-import { FreeToSpend } from "../../ui/dashboard/free-to-spend.tsx";
-import { ProjectsPanel } from "../../ui/dashboard/projects-panel.tsx";
-import { PositionStrip } from "../../ui/dashboard/position-strip.tsx";
-import { RecentPanel } from "../../ui/dashboard/recent-panel.tsx";
-import { UpcomingPanel } from "../../ui/dashboard/upcoming-panel.tsx";
-import { competenceLong } from "../../ui/format.ts";
-import { Plus } from "../../ui/icons.tsx";
-import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarClock } from "../../ui/icons.tsx";
+import { money } from "../../ui/format.ts";
+import Link from "next/link";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
 
-function saudacao(hora: number): string {
-  if (hora < 12) return "Bom dia";
-  if (hora < 18) return "Boa tarde";
-  return "Boa noite";
-}
-
 /**
  * Painel.
  *
- * A ordem das seções é a ordem das perguntas: quanto sobra, qual a posição,
- * para onde o dinheiro vai, o que vence, o que já saiu. Cada faixa responde
- * uma coisa e recua para a próxima — é o que impede a tela de virar mural.
+ * A tela é a do Mesa, elemento por elemento: o palco do valor, a atividade dos
+ * últimos meses, a distribuição por categoria, três indicadores e os
+ * lançamentos recentes.
+ *
+ * **Nenhum número é calculado aqui.** Tudo vem de `buildDashboard`, que é a
+ * mesma conta que o aplicativo do celular consome — a folga medida no dia mais
+ * apertado, as entradas e saídas da competência, o comprometido. A tela só
+ * escolhe onde cada um aparece.
+ *
+ * Uma decisão de leitura que o desenho permite e que vale registrar: no gráfico
+ * de atividade, o **trilho** de cada mês é a entrada e o **preenchimento** é a
+ * saída. Assim uma barra cheia significa "gastei tudo que entrou", e uma barra
+ * pela metade significa folga — que é exatamente o que o título promete
+ * ("entradas e saídas") sem precisar de duas barras por mês.
  */
 export default async function Painel() {
   const user = await currentUser();
@@ -38,59 +33,308 @@ export default async function Painel() {
   if (!user) return null;
 
   const dashboard = await buildDashboard(user.id);
-  const primeiroNome = user.displayName.trim().split(/\s+/)[0];
-  const hora = Number(
-    new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(
-      new Date(),
-    ),
-  );
+
+  const livre = dashboard.freeToSpend.amountCents;
+  const negativo = livre < 0;
+  const [inteiro, centavos] = partirValor(livre);
+
+  /*
+   * A legenda mostra **variação**, não um segundo valor absoluto.
+   *
+   * O desenho põe ali "+12,4% projeção": é a direção para onde o saldo vai,
+   * comparada com o que existe hoje. Repetir um valor em reais ao lado do
+   * número gigante não acrescenta nada — e foi o que a primeira versão desta
+   * tela fez, mostrando a folga duas vezes.
+   */
+  const projetado =
+    dashboard.cashflow.at(-1)?.projectedBalanceCents ?? dashboard.position.currentBalanceCents;
+  const hoje = dashboard.position.currentBalanceCents;
+  const variacao = hoje !== 0 ? ((projetado - hoje) / Math.abs(hoje)) * 100 : null;
+  const reserva = dashboard.position.investmentsCents;
+
+  const meses = dashboard.cashflow.slice(-7);
+  const categorias = dashboard.categorySpend.slice(0, 4);
+  const recentes = dashboard.recentTransactions.slice(0, 4);
 
   return (
-    <Page>
-      <PageHeader
-        eyebrow={competenceLong(dashboard.competence)}
-        title="Painel"
-        description={`${saudacao(hora)}, ${primeiroNome}. Seu dinheiro em perspectiva, do saldo de hoje aos próximos ciclos.`}
-        actions={
-          <LinkButton href="/lancamentos?novo=1" variant="primary" icon={Plus}>
-            Novo lançamento
-          </LinkButton>
-        }
-      />
+    <div className="content-area">
+      {/* ---------------------------------------------------------------- */}
+      {/* O palco: uma pergunta, um número.                                 */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="money-stage">
+        <div className="status-pill">
+          <span
+            className={negativo ? "size-1.5 rounded-full bg-negative" : "size-1.5 rounded-full bg-positive"}
+            style={{ boxShadow: "0 0 10px currentColor" }}
+            aria-hidden
+          />
+          {negativo ? "Comprometido além do saldo" : "Disponível para uso"}
+        </div>
 
-      <Stack gap="lg">
-        {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
-        <FreeToSpend
-          data={dashboard.freeToSpend}
-          benefit={dashboard.benefitFreeToSpend}
-          today={dashboard.today}
-        />
+        <div className="mt-5 flex items-baseline justify-center">
+          <span className="mr-3 text-xl font-light text-ink-subtle">R$</span>
+          <p className="money-value tabular">{inteiro}</p>
+          <span className="ml-1 text-xl font-light text-ink-subtle">,{centavos}</span>
+        </div>
 
-        <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
+        <div className="money-legend">
+          <span>
+            <b className="tabular">
+              {variacao === null
+                ? money(projetado)
+                : `${variacao >= 0 ? "+" : "−"}${Math.abs(variacao).toFixed(1).replace(".", ",")}%`}
+            </b>
+            <small>projeção</small>
+          </span>
+          <i aria-hidden />
+          <span>
+            <b className="tabular">{money(reserva)}</b>
+            <small>reserva</small>
+          </span>
+        </div>
+      </section>
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="min-w-0 lg:col-span-2">
-            <CashflowPanel points={dashboard.cashflow} />
+      <div className="grid gap-5 xl:grid-cols-12">
+        {/* -------------------------------------------------------------- */}
+        {/* Atividade: trilho é o que entrou, preenchimento é o que saiu.   */}
+        {/* -------------------------------------------------------------- */}
+        <section className="glass-panel p-6 xl:col-span-8">
+          <CabecalhoDePainel
+            titulo="Atividade financeira"
+            apoio={`Entradas e saídas dos últimos ${meses.length} meses`}
+          />
+          <div className="flex h-48 items-end gap-3 pt-4">
+            {meses.map((mes) => {
+              const proporcao =
+                mes.inflowCents > 0 ? Math.min(100, (mes.outflowCents / mes.inflowCents) * 100) : 0;
+              return (
+                <div key={mes.competence} className="group flex h-full flex-1 flex-col justify-end gap-3">
+                  <div
+                    className="relative h-full overflow-hidden rounded-xl bg-surface-inset"
+                    title={`${money(mes.outflowCents)} de saída para ${money(mes.inflowCents)} de entrada`}
+                  >
+                    <div
+                      className="absolute inset-x-0 bottom-0 rounded-xl bg-accent/70 transition-all duration-500 group-hover:bg-accent"
+                      style={{ height: `${Math.max(proporcao, 2)}%` }}
+                    />
+                  </div>
+                  <span className="text-center text-[10px] text-ink-subtle">
+                    {nomeDoMes(mes.competence)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <CategoryPanel categories={dashboard.categorySpend} />
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* Distribuição por categoria.                                      */}
+        {/* -------------------------------------------------------------- */}
+        <section className="glass-panel p-6 xl:col-span-4">
+          <CabecalhoDePainel titulo="Distribuição" apoio="Despesas por categoria" />
+          {categorias.length ? (
+            <div className="space-y-5">
+              {categorias.map((categoria, indice) => (
+                <div key={categoria.categoryId ?? categoria.name}>
+                  <div className="mb-2 flex justify-between text-caption">
+                    <span className="text-ink">{categoria.name}</span>
+                    <span className="tabular text-ink-subtle">{money(categoria.amountCents)}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-inset">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(categoria.percent, 2)}%`,
+                        background: `var(--color-viz-${indice + 1})`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-body-sm text-ink-subtle">
+              Nenhum gasto nesta competência ainda.
+            </p>
+          )}
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* Três indicadores.                                               */}
+        {/* -------------------------------------------------------------- */}
+        <div className="grid gap-5 md:grid-cols-3 xl:col-span-12">
+          <Indicador
+            tom="positive"
+            icone={<ArrowUpRight className="size-4" aria-hidden />}
+            rotulo="Receita no mês"
+            valor={money(dashboard.monthFlow.incomeCents)}
+            apoio="Entradas confirmadas na competência"
+          />
+          <Indicador
+            tom="negative"
+            icone={<ArrowDownRight className="size-4" aria-hidden />}
+            rotulo="Saídas no mês"
+            valor={money(dashboard.monthFlow.expenseCents)}
+            apoio={proporcaoDaRenda(dashboard.monthFlow.expenseCents, dashboard.monthFlow.incomeCents)}
+          />
+          <Indicador
+            tom="caution"
+            icone={<CalendarClock className="size-4" aria-hidden />}
+            rotulo="Renda comprometida"
+            valor={money(dashboard.position.committedCents)}
+            apoio="Faturas em aberto e contas previstas"
+          />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-2">
-          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
-          <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
-        </div>
-
-        {/* O trabalho depois do dinheiro: é de onde ele vem, mas a pergunta do
-            painel é sobre a conta, e o projeto responde por que ela vai mudar. */}
-        <ProjectsPanel projects={dashboard.openProjects} />
-
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="min-w-0 lg:col-span-2">
-            <RecentPanel transactions={dashboard.recentTransactions} />
-          </div>
-          <AccountsPanel accounts={dashboard.accounts} />
-        </div>
-      </Stack>
-    </Page>
+        {/* -------------------------------------------------------------- */}
+        {/* Lançamentos recentes.                                           */}
+        {/* -------------------------------------------------------------- */}
+        <section className="glass-panel p-6 xl:col-span-12">
+          <CabecalhoDePainel
+            titulo="Lançamentos recentes"
+            apoio="Últimas movimentações confirmadas"
+            acao={
+              <Link
+                href="/lancamentos"
+                className="inline-flex h-8 items-center gap-2 rounded-md px-3 text-caption text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+              >
+                Ver todos
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            }
+          />
+          {recentes.length ? (
+            <div className="divide-y divide-line">
+              {recentes.map((lancamento) => {
+                const entrada = lancamento.kind === "income";
+                return (
+                  <div
+                    key={lancamento.id}
+                    className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3.5"
+                  >
+                    <span
+                      className={entrada ? "size-2.5 rounded-full bg-positive" : "size-2.5 rounded-full bg-negative"}
+                      style={{ boxShadow: "0 0 10px currentColor" }}
+                      aria-hidden
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-body-sm font-medium text-ink">
+                        {lancamento.description}
+                      </p>
+                      <p className="truncate text-caption text-ink-subtle">
+                        {quando(lancamento.occurredOn, dashboard.today)}
+                      </p>
+                    </div>
+                    <p className="tabular text-body-sm font-medium text-ink">
+                      {entrada ? "+ " : "− "}
+                      {money(Math.abs(lancamento.amountCents))}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-body-sm text-ink-subtle">
+              Nenhum lançamento ainda. Use o botão “Novo” para registrar o primeiro.
+            </p>
+          )}
+        </section>
+      </div>
+    </div>
   );
+}
+
+/**
+ * O cabeçalho que todo painel do Mesa repete.
+ *
+ * Grade de duas colunas — título à esquerda, ação à direita — para o título
+ * poder truncar sem empurrar a ação para fora.
+ */
+function CabecalhoDePainel({
+  titulo,
+  apoio,
+  acao,
+}: {
+  titulo: string;
+  apoio: string;
+  acao?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+      <div className="min-w-0">
+        <h2 className="truncate text-body-sm font-semibold text-ink">{titulo}</h2>
+        <p className="mt-1 text-caption text-ink-subtle">{apoio}</p>
+      </div>
+      {acao}
+    </div>
+  );
+}
+
+const TONS = {
+  positive: "bg-positive-wash text-positive ring-positive/20",
+  negative: "bg-negative-wash text-negative ring-negative/20",
+  caution: "bg-caution-wash text-caution ring-caution/20",
+} as const;
+
+function Indicador({
+  tom,
+  icone,
+  rotulo,
+  valor,
+  apoio,
+}: {
+  tom: keyof typeof TONS;
+  icone: React.ReactNode;
+  rotulo: string;
+  valor: string;
+  apoio: string;
+}) {
+  return (
+    <section className="glass-panel p-5">
+      <div className={`mb-5 grid size-10 place-items-center rounded-xl ring-1 ${TONS[tom]}`}>
+        {icone}
+      </div>
+      <p className="metric-label">{rotulo}</p>
+      <p className="tabular mt-2 text-2xl font-medium text-ink">{valor}</p>
+      <p className="mt-2 text-caption text-ink-subtle">{apoio}</p>
+    </section>
+  );
+}
+
+/**
+ * Parte o valor no separador decimal.
+ *
+ * O desenho põe o "R$" pequeno e claro à esquerda e o número grande ao lado.
+ * Os centavos ficam menores porque não mudam decisão nenhuma — quem olha este
+ * número quer saber se dá para gastar, não o troco.
+ */
+function partirValor(centavos: number): [string, string] {
+  const formatado = money(Math.abs(centavos)).replace(/^R\$\s*/, "");
+  const corte = formatado.lastIndexOf(",");
+  if (corte === -1) return [formatado, "00"];
+  return [formatado.slice(0, corte), formatado.slice(corte + 1)];
+}
+
+function proporcaoDaRenda(saidas: number, entradas: number): string {
+  if (entradas <= 0) return "Sem entrada registrada na competência";
+  return `${Math.round((saidas / entradas) * 100)}% da renda do mês`;
+}
+
+function nomeDoMes(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const nome = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" }).format(
+    new Date(Date.UTC(ano, mes - 1, 1)),
+  );
+  const limpo = nome.replace(".", "");
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+}
+
+function quando(data: string, hoje: string): string {
+  if (data === hoje) return "Hoje";
+  const formatada = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${data}T12:00:00Z`));
+  return formatada.replace(".", "");
 }
