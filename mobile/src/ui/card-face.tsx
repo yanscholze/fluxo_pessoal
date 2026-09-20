@@ -8,7 +8,7 @@ import { Small, Texto } from "./primitives.tsx";
 import { radius, type, usePalette } from "./theme.ts";
 
 export const LARGURA_DA_FACE = Math.min(Dimensions.get("window").width - 40, 360);
-const ALTURA_DA_FACE = Math.round(LARGURA_DA_FACE / 1.69);
+export const ALTURA_DA_FACE = Math.round(LARGURA_DA_FACE / 1.69);
 
 export function CardFace({
   resumo,

@@ -4,38 +4,47 @@
  * Duas telas no mesmo lugar, ligadas por um gesto — é assim que a carteira do
  * telefone funciona, e é assim que a cabeça de quem usa já espera:
  *
- * **Fechada.** Só os cartões. Nada de número, nada de cabeçalho, nada de
- * rodapé. Arrastar de lado troca o cartão da frente. O motivo de não haver mais
- * nada aqui é o mesmo de a carteira física não ter: você abre para escolher o
- * cartão, e escolher é uma tarefa visual — cor, banco, bandeira. Texto ao redor
- * só atrapalha o reconhecimento.
+ * **Fechada.** Uma pilha de cartões no meio da tela, o escolhido na frente e
+ * os vizinhos um degrau atrás. Arrastar de lado troca. O motivo de não haver
+ * mais nada aqui é o mesmo de a carteira física não ter: você abre para
+ * escolher o cartão, e escolher é uma tarefa visual — cor, banco, bandeira.
  *
- * **Aberta.** Tocar no cartão, ou arrastá-lo para cima, gira a face 90° no eixo
- * X: ela tomba para longe e se recolhe no alto da tela, como um cartão que
- * volta para o bolso. O que estava atrás dele aparece — fatura, limite,
- * comprometido, lançamentos, gráfico.
+ * **Aberta.** Arrastar o cartão para cima o gira 90°, faz ele crescer 1,75
+ * vezes e o manda para o alto da tela, onde sobra dele uma faixa larga
+ * atravessada — como um cartão que volta para o bolso deixando a borda de
+ * fora. O que estava atrás aparece: fatura, limite, comprometido, lançamentos.
  *
- * A rotação não é enfeite. Ela responde "para onde foi o cartão": sem o giro,
- * a face sumiria e o conteúdo apareceria, e ninguém saberia como voltar. Com
- * ele, o cartão continua visível, deitado no topo, dizendo onde está e que dá
- * para puxá-lo de volta.
+ * **Os números são do protótipo, não inventados aqui.** O giro de 90°, a
+ * escala de 1,75, a faixa que sobra no alto, os 8px de degrau do vizinho, os
+ * 0,28 de opacidade dele, os 600ms e a curva `cubic-bezier(.23,1,.32,1)` —
+ * tudo medido no Figma Make e convertido pela régua de 440px de largura do
+ * quadro dele. `REGUA` é essa conversão, e é o que faz o mesmo desenho caber
+ * num telefone de qualquer largura.
  *
- * O movimento inteiro roda no driver nativo, via Reanimated. Isso importa mais
- * aqui do que em qualquer outra tela do aplicativo: o gesto e a animação
- * precisam acontecer no mesmo quadro que o dedo, e a thread de JavaScript está
- * justamente ocupada derivando saldo quando a tela abre.
+ * A pilha substituiu um trilho horizontal com `ScrollView`, e não por gosto: o
+ * cartão aberto termina **acima** do lugar onde estava, fora dos limites do
+ * pai, e todo `ScrollView` recorta o que passa da borda. Era isso que fazia a
+ * animação sumir — o cartão subia e era cortado no caminho. Na pilha os
+ * cartões vivem numa camada absoluta sobre a tela inteira, e não há borda
+ * para cortar nada.
+ *
+ * O movimento roda no driver nativo, via Reanimated. Importa mais aqui do que
+ * em qualquer outra tela: o gesto e a animação precisam acontecer no mesmo
+ * quadro que o dedo, e a thread de JavaScript está justamente ocupada
+ * derivando saldo quando a tela abre.
  */
 
 import { useCallback, useMemo, useState } from "react";
 import { Dimensions, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  Easing,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -44,41 +53,64 @@ import { todayIn } from "@fluxo/core/time/local-date.ts";
 import type { CardSummary } from "../finance/derive.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { useConnectedSession } from "../state/session.tsx";
-import { CardFace, LARGURA_DA_FACE } from "../ui/card-face.tsx";
+import { ALTURA_DA_FACE, CardFace, LARGURA_DA_FACE } from "../ui/card-face.tsx";
 import { CardPhoto } from "../ui/card-photo.tsx";
 import { Medidor } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Label, Row, Small, Texto } from "../ui/primitives.tsx";
 import { ScreenHeader } from "../ui/mockup.tsx";
+import {
+  CURVA,
+  DURACAO,
+  ESCALA_ABERTA,
+  ESCALA_VIZINHA,
+  GIRO_ABERTO,
+  LIMIAR_HORIZONTAL,
+  LIMIAR_VERTICAL,
+  OPACIDADE_VIZINHA,
+  deslocamentoDoCartao,
+  geometriaDaCarteira,
+} from "../ui/carteira-geometria.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
-const { width: LARGURA_DA_TELA } = Dimensions.get("window");
-const ESPACO = space.md;
-const PASSO = LARGURA_DA_FACE + ESPACO;
-/** Sobra de cada lado para o cartão da frente ficar centrado no trilho. */
-const MARGEM = (LARGURA_DA_TELA - LARGURA_DA_FACE) / 2;
+const { width: LARGURA_DA_TELA, height: ALTURA_DA_TELA } = Dimensions.get("window");
 
 /**
- * Quanto o cartão sobe ao abrir.
+ * As medidas do protótipo moram em `carteira-geometria.ts`, fora do React.
  *
- * Não é a altura da face: ele gira enquanto sobe, e uma face tombada ocupa
- * quase nada de altura. Subir demais o faria sair da tela; subir de menos
- * deixaria uma faixa morta entre ele e o conteúdo.
+ * São a parte da animação que erra em silêncio — um cartão que para 40px acima
+ * do lugar certo parece apenas "um pouco estranho" — e por isso são aritmética
+ * pura, com teste próprio.
  */
-const ALTURA_RECOLHIDA = 132;
+const GEOMETRIA = geometriaDaCarteira(LARGURA_DA_TELA, ALTURA_DA_TELA);
+const {
+  palcoFechado: PALCO_FECHADO,
+  palcoAberto: PALCO_ABERTO,
+  degrauVizinho: DEGRAU_VIZINHO,
+  pontosAbaixo: PONTOS_ABAIXO,
+  pontosSobem: PONTOS_SOBEM,
+  entradaDoPainel: ENTRADA_DO_PAINEL,
+} = GEOMETRIA;
 
-/** Arrasto vertical que completa a abertura sozinho, mesmo sem velocidade. */
-const LIMIAR = 90;
+/** O tempo e a curva do protótipo: `0.6s cubic-bezier(.23,1,.32,1)`. */
+const TEMPO = { duration: DURACAO, easing: Easing.bezier(...CURVA) } as const;
 
-/** Mola única para toda a tela: dois tempos diferentes leriam como dois eventos. */
-const MOLA = { damping: 18, stiffness: 190, mass: 0.9 } as const;
-
-export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }: { onParcelamentos: () => void; onOpenTransaction: (id: string) => void; onAjustes: () => void }) {
+export function CarteiraScreen({
+  onParcelamentos,
+  onOpenTransaction,
+  onAjustes,
+}: {
+  onParcelamentos: () => void;
+  onOpenTransaction: (id: string) => void;
+  onAjustes: () => void;
+}) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
   const { overview, sync, synchronize } = useLedger();
   const [ativo, setAtivo] = useState(0);
   const [aberta, setAberta] = useState(false);
+  /** Onde o palco começa. Só o layout sabe: depende do cabeçalho e da margem. */
+  const [topoDoPalco, setTopoDoPalco] = useState(0);
 
   const hoje = todayIn();
   const cartoes = useMemo(() => overview?.cards ?? [], [overview]);
@@ -87,76 +119,126 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
   /** 0 = carteira fechada, 1 = cartão recolhido e conteúdo à mostra. */
   const progresso = useSharedValue(0);
 
-  const marcarAberta = useCallback((valor: boolean) => setAberta(valor), []);
+  /** Quanto o cartão sobe ao abrir. A conta está em `carteira-geometria.ts`. */
+  const deslocamento = useMemo(
+    () => deslocamentoDoCartao(GEOMETRIA, topoDoPalco, LARGURA_DA_FACE),
+    [topoDoPalco],
+  );
 
   const abrir = useCallback(() => {
-    progresso.value = withSpring(1, MOLA);
+    progresso.value = withTiming(1, TEMPO);
     setAberta(true);
   }, [progresso]);
 
   const fechar = useCallback(() => {
-    progresso.value = withSpring(0, MOLA);
+    progresso.value = withTiming(0, TEMPO);
     setAberta(false);
   }, [progresso]);
 
+  const trocar = useCallback(
+    (passo: number) => {
+      setAtivo((atual) => Math.max(0, Math.min(atual + passo, cartoes.length - 1)));
+    },
+    [cartoes.length],
+  );
+
   /*
-   * O arrasto vertical dirige a animação em vez de disparar uma.
+   * A decisão é na soltura, como no protótipo.
    *
-   * Enquanto o dedo está na tela, `progresso` acompanha a distância: o cartão
-   * gira junto do movimento e a decisão fica com quem arrasta. Só ao soltar
-   * entra a mola, e a direção vem da velocidade — um empurrão rápido completa
-   * o gesto mesmo sem ter percorrido a distância toda, que é como todo painel
-   * arrastável do sistema se comporta.
+   * Ele lê `touchstart` e `touchend` e compara os dois pontos — não acompanha
+   * o dedo no caminho. Seguir o dedo daria uma sensação melhor, e era o que
+   * esta tela fazia antes; mas aí o movimento deixaria de ser o do desenho, e
+   * a regra desta reforma é que o desenho manda.
+   *
+   * O eixo dominante decide o que o gesto significa: vertical abre ou fecha,
+   * horizontal troca de cartão — e só com a carteira fechada, porque com ela
+   * aberta há um cartão só em cena.
    */
-  const arrastar = Gesture.Pan()
-    .activeOffsetY([-12, 12])
-    .failOffsetX([-18, 18])
-    .onUpdate((evento) => {
-      const base = aberta ? 1 : 0;
-      progresso.value = Math.min(1, Math.max(0, base - evento.translationY / LIMIAR / 2));
-    })
-    .onEnd((evento) => {
-      const rapido = Math.abs(evento.velocityY) > 500;
-      const paraCima = evento.velocityY < 0;
-      const alvo = rapido ? (paraCima ? 1 : 0) : progresso.value > 0.5 ? 1 : 0;
-      progresso.value = withSpring(alvo, MOLA);
-      runOnJS(marcarAberta)(alvo === 1);
+  const montarGesto = useCallback(() => {
+    const arrastar = Gesture.Pan().onEnd((evento) => {
+      const dx = evento.translationX;
+      const dy = evento.translationY;
+
+      if (Math.abs(dy) > Math.abs(dx)) {
+        if (dy < -LIMIAR_VERTICAL) runOnJS(abrir)();
+        else if (dy > LIMIAR_VERTICAL) runOnJS(fechar)();
+        return;
+      }
+
+      if (!aberta && Math.abs(dx) > LIMIAR_HORIZONTAL) runOnJS(trocar)(dx < 0 ? 1 : -1);
     });
 
-  const tocar = Gesture.Tap()
-    .maxDuration(250)
-    .onEnd((_evento, sucesso) => {
-      if (sucesso) runOnJS(aberta ? fechar : abrir)();
-    });
+    /*
+     * O toque não está no protótipo — lá o cartão não responde a clique.
+     * Continua aqui porque é o caminho de quem navega por toque assistido: um
+     * arrasto de 30px é um gesto que nem todo mundo consegue fazer, e tirar a
+     * única alternativa a ele fecharia a tela para essas pessoas.
+     */
+    const tocar = Gesture.Tap()
+      .maxDuration(250)
+      .onEnd((_evento, sucesso) => {
+        if (sucesso) runOnJS(aberta ? fechar : abrir)();
+      });
 
-  const gesto = Gesture.Simultaneous(arrastar, tocar);
+    return Gesture.Simultaneous(arrastar, tocar);
+  }, [aberta, abrir, fechar, trocar]);
 
-  /** A face que se move: sobe, tomba e encolhe, tudo no mesmo tempo. */
+  /*
+   * Dois detectores, e não um.
+   *
+   * No protótipo o ouvinte está na tela inteira: arrastar em qualquer lugar
+   * troca ou abre. Aqui a tela inteira não serve — embaixo do palco mora o
+   * painel de detalhes, que precisa rolar. Então o gesto cobre o cartão e a
+   * área vazia em volta dele, que é onde o dedo de fato vai.
+   *
+   * Cada detector recebe uma instância própria: um objeto de gesto guarda a
+   * identidade do manipulador nativo, e compartilhá-lo entre dois faria o
+   * segundo roubar o registro do primeiro.
+   */
+  const gestoDoCartao = useMemo(() => montarGesto(), [montarGesto]);
+  const gestoDoPalco = useMemo(() => montarGesto(), [montarGesto]);
+
+  /** A face escolhida: sobe, tomba de lado e cresce, tudo no mesmo tempo. */
   const estiloDaFace = useAnimatedStyle(() => ({
     transform: [
-      // A perspectiva precisa vir antes da rotação, senão o giro fica chapado
-      // e lê como o cartão encolhendo em vez de tombar.
-      { perspective: 900 },
+      { translateY: interpolate(progresso.value, [0, 1], [0, deslocamento], Extrapolation.CLAMP) },
       {
-        translateY: interpolate(progresso.value, [0, 1], [0, -ALTURA_RECOLHIDA], Extrapolation.CLAMP),
+        rotate: `${interpolate(progresso.value, [0, 1], [0, GIRO_ABERTO], Extrapolation.CLAMP)}deg`,
       },
-      {
-        rotateX: `${interpolate(progresso.value, [0, 1], [0, -78], Extrapolation.CLAMP)}deg`,
-      },
-      { scale: interpolate(progresso.value, [0, 1], [1, 1.07], Extrapolation.CLAMP) },
+      { scale: interpolate(progresso.value, [0, 1], [1, ESCALA_ABERTA], Extrapolation.CLAMP) },
     ],
   }));
 
-  /** As faces vizinhas somem ao abrir: só o escolhido continua em cena. */
-  const estiloDosVizinhos = useAnimatedStyle(() => ({
-    opacity: interpolate(progresso.value, [0, 0.4], [1, 0], Extrapolation.CLAMP),
+  /** O palco encolhe, e é o que abre espaço para o painel subir. */
+  const estiloDoPalco = useAnimatedStyle(() => ({
+    height: interpolate(
+      progresso.value,
+      [0, 1],
+      [PALCO_FECHADO, PALCO_ABERTO],
+      Extrapolation.CLAMP,
+    ),
+  }));
+
+  /** Os pontos saem de cena subindo, como no protótipo. */
+  const estiloDosPontos = useAnimatedStyle(() => ({
+    opacity: interpolate(progresso.value, [0, 0.45], [1, 0], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(progresso.value, [0, 1], [0, -PONTOS_SOBEM], Extrapolation.CLAMP) },
+    ],
   }));
 
   /** O conteúdo entra por baixo, atrasado em relação ao cartão. */
   const estiloDoConteudo = useAnimatedStyle(() => ({
     opacity: interpolate(progresso.value, [0.35, 1], [0, 1], Extrapolation.CLAMP),
     transform: [
-      { translateY: interpolate(progresso.value, [0, 1], [28, 0], Extrapolation.CLAMP) },
+      {
+        translateY: interpolate(
+          progresso.value,
+          [0, 1],
+          [ENTRADA_DO_PAINEL, 0],
+          Extrapolation.CLAMP,
+        ),
+      },
     ],
   }));
 
@@ -175,73 +257,49 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
     );
   }
 
+  /** A face, centrada no palco, antes de qualquer transformação. */
+  const topoDaFace = topoDoPalco + PALCO_FECHADO / 2 - ALTURA_DA_FACE / 2;
+  const esquerdaDaFace = (LARGURA_DA_TELA - LARGURA_DA_FACE) / 2;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
       <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <ScreenHeader title="Cartões" subtitle="Deslize para trocar de cartão" onProfile={onAjustes} profileName={credentials.user.displayName} />
+        <ScreenHeader
+          title="Cartões"
+          subtitle={
+            aberta ? "Arraste ↓ para fechar" : "Arraste ← → para trocar ou ↑ para ver detalhes"
+          }
+          onProfile={onAjustes}
+          profileName={credentials.user.displayName}
+        />
       </View>
-      <View style={{ position: "absolute", left: (LARGURA_DA_TELA - 420) / 2, top: -145, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.68 }} />
-      <GestureDetector gesture={gesto}>
-        <Animated.View style={{ paddingTop: space.xl }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={PASSO}
-            decelerationRate="fast"
-            scrollEnabled={!aberta}
-            onMomentumScrollEnd={(evento) => {
-              const indice = Math.round(evento.nativeEvent.contentOffset.x / PASSO);
-              setAtivo(Math.max(0, Math.min(indice, cartoes.length - 1)));
-            }}
-            contentContainerStyle={{ paddingHorizontal: MARGEM, gap: ESPACO }}
-          >
-            {cartoes.map((resumo, indice) => {
-              const ehOEscolhido = indice === ativo;
-              return (
-                <Animated.View
-                  key={resumo.card.id}
-                  style={ehOEscolhido ? estiloDaFace : estiloDosVizinhos}
-                >
-                  <CardFace resumo={resumo} hoje={hoje} titular={credentials.user.displayName} atenuada={!ehOEscolhido && cartoes.length > 1} />
-                </Animated.View>
-              );
-            })}
-          </ScrollView>
 
-          {/*
-            O indicador some ao abrir junto com as faces vizinhas: com um cartão
-            só em cena, ele deixa de dizer qualquer coisa.
-          */}
-          {cartoes.length > 1 ? (
-            <Animated.View
-              style={[
-                { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: space.lg },
-                estiloDosVizinhos,
-              ]}
-            >
-              {cartoes.map((resumo, indice) => (
-                <View
-                  key={resumo.card.id}
-                  style={{
-                    height: 6,
-                    width: indice === ativo ? 20 : 6,
-                    borderRadius: radius.pill,
-                    backgroundColor: indice === ativo ? palette.accent : palette.lineStrong,
-                  }}
-                />
-              ))}
-            </Animated.View>
-          ) : null}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: (LARGURA_DA_TELA - 420) / 2,
+          top: -145,
+          width: 420,
+          height: 420,
+          borderRadius: 210,
+          backgroundColor: palette.accentWash,
+          opacity: 0.68,
+        }}
+      />
 
-          {/*
-            A dica aparece só com a carteira fechada, e some assim que o gesto
-            começa: um rótulo que explica o gesto perde a função no instante em
-            que ele é aprendido.
-          */}
-          <Animated.View style={[{ alignItems: "center", marginTop: space.md }, estiloDosVizinhos]}>
-            <Small tone="subtle">Toque ou arraste para cima</Small>
-          </Animated.View>
-        </Animated.View>
+      {/* O palco só reserva espaço; quem desenha o cartão é a camada de cima. */}
+      <GestureDetector gesture={gestoDoPalco}>
+        <Animated.View
+          style={estiloDoPalco}
+          onLayout={(evento) => {
+            // A altura do palco é animada, e `onLayout` dispara a cada mudança
+            // dela. O que interessa é só o topo, que não muda — sem a guarda,
+            // seria um `setState` por quadro durante toda a animação.
+            const { y } = evento.nativeEvent.layout;
+            setTopoDoPalco((atual) => (Math.abs(atual - y) < 0.5 ? atual : y));
+          }}
+        />
       </GestureDetector>
 
       {/*
@@ -252,7 +310,7 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
       */}
       <Animated.View
         pointerEvents={aberta ? "auto" : "none"}
-        style={[{ flex: 1, marginTop: -ALTURA_RECOLHIDA + space.xl }, estiloDoConteudo]}
+        style={[{ flex: 1 }, estiloDoConteudo]}
       >
         <ScrollView
           contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}
@@ -264,16 +322,103 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
             />
           }
         >
-          {selecionado ? <Detalhe
+          {selecionado ? (
+            <Detalhe
               resumo={selecionado}
               hoje={hoje}
               aoFechar={fechar}
               aoAtualizar={() => void synchronize()}
               onOpenTransaction={onOpenTransaction}
               onParcelamentos={onParcelamentos}
-            /> : null}
+            />
+          ) : null}
         </ScrollView>
       </Animated.View>
+
+      {/*
+        A camada dos cartões, por cima de tudo e sem borda que recorte.
+
+        `box-none` deixa o toque passar para o conteúdo onde não há cartão —
+        sem isso a camada cobriria a tela inteira e o painel de detalhes
+        deixaria de responder.
+      */}
+      <View
+        pointerEvents="box-none"
+        style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+      >
+        {cartoes.map((resumo, indice) => {
+          const distancia = indice - ativo;
+          // Só o escolhido e os vizinhos imediatos entram em cena; e, com a
+          // carteira aberta, apenas o escolhido. É o recorte do protótipo.
+          if (Math.abs(distancia) > 1) return null;
+          if (aberta && distancia !== 0) return null;
+
+          const ehOEscolhido = distancia === 0;
+
+          return (
+            <GestureDetector key={resumo.card.id} gesture={gestoDoCartao}>
+              <Animated.View
+                pointerEvents={ehOEscolhido ? "auto" : "none"}
+                style={[
+                  {
+                    position: "absolute",
+                    left: esquerdaDaFace,
+                    top: topoDaFace,
+                    zIndex: ehOEscolhido ? 10 : 1,
+                  },
+                  ehOEscolhido
+                    ? estiloDaFace
+                    : {
+                        opacity: OPACIDADE_VIZINHA,
+                        transform: [
+                          { translateY: DEGRAU_VIZINHO * Math.abs(distancia) },
+                          { scale: ESCALA_VIZINHA },
+                        ],
+                      },
+                ]}
+              >
+                <CardFace
+                  resumo={resumo}
+                  hoje={hoje}
+                  titular={credentials.user.displayName}
+                  atenuada={!ehOEscolhido && cartoes.length > 1}
+                />
+              </Animated.View>
+            </GestureDetector>
+          );
+        })}
+
+        {/* Os pontos, abaixo do cartão, na posição que o protótipo usa. */}
+        {cartoes.length > 1 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: topoDoPalco + PALCO_FECHADO / 2 + PONTOS_ABAIXO,
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 6,
+              },
+              estiloDosPontos,
+            ]}
+          >
+            {cartoes.map((resumo, indice) => (
+              <View
+                key={resumo.card.id}
+                style={{
+                  height: 6,
+                  width: indice === ativo ? 20 : 6,
+                  borderRadius: radius.pill,
+                  backgroundColor: indice === ativo ? palette.accent : palette.lineStrong,
+                }}
+              />
+            ))}
+          </Animated.View>
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }
