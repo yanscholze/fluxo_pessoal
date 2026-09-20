@@ -66,7 +66,7 @@ export default async function Relatorios({
             titulo="Evolução patrimonial"
             apoio={`${competenceShort(relatorio.from)} a ${competenceShort(relatorio.to)}`}
             acao={
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <PeriodFilter base="/relatorios" atual={periodo} />
                 <a
                   href={`/api/v1/reports/export?periodo=${periodo}&fluxo=saidas`}

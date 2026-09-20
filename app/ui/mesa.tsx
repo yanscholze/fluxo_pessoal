@@ -20,6 +20,12 @@ import { join } from "./primitives.tsx";
  *
  * Grade de duas colunas: o título pode truncar sem empurrar a ação para fora,
  * que é o que acontecia quando isto era um `flex` com `justify-between`.
+ *
+ * **No celular as duas colunas viram duas linhas.** Uma ação larga — o
+ * seletor de recorte dos relatórios são cinco botões — cabe na coluna `auto`
+ * pelo seu tamanho natural, e numa tela de 375px isso empurrava o painel
+ * inteiro 187px para fora da janela. Em linha própria ela tem a largura toda
+ * e rola por dentro, se precisar.
  */
 export function PanelHeading({
   titulo,
@@ -31,12 +37,12 @@ export function PanelHeading({
   acao?: ReactNode;
 }) {
   return (
-    <div className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+    <div className="mb-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
       <div className="min-w-0">
         <h2 className="truncate text-body-sm font-semibold text-ink">{titulo}</h2>
         {apoio ? <p className="mt-1 text-caption text-ink-subtle">{apoio}</p> : null}
       </div>
-      {acao}
+      {acao ? <div className="min-w-0">{acao}</div> : null}
     </div>
   );
 }

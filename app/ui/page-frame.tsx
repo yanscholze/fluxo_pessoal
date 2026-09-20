@@ -27,15 +27,20 @@ export function Page({
   children,
   width = "default",
   className,
+  as: Tag = "div",
 }: {
   children: ReactNode;
   width?: "narrow" | "default" | "wide";
   className?: string;
+  /**
+   * `div` por padrão: a casca já abre o `<main>`, e dois numa página só deixam
+   * o leitor de tela sem saber qual é o conteúdo principal. Vira `main` só nas
+   * telas que substituem a casca inteira — a de sessão encerrada.
+   */
+  as?: "div" | "main";
 }) {
   const limite = { narrow: "max-w-page-narrow", default: "max-w-page", wide: "max-w-page-wide" }[width];
-  // `div`, e não `main`: a casca já abre um, e dois `<main>` na mesma página
-  // deixam o leitor de tela sem saber qual é o conteúdo principal.
-  return <div className={join("content-area mx-auto w-full", limite, className)}>{children}</div>;
+  return <Tag className={join("content-area mx-auto w-full", limite, className)}>{children}</Tag>;
 }
 
 /**

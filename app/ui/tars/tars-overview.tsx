@@ -81,7 +81,9 @@ export function TarsOverview({
       <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>INÍCIO / CENTRO DE COMANDO</p>
-          <h1>Olá, {firstName}<span className={styles.greetingDot}>.</span></h1>
+          {/* `h2`: o `h1` da página é o "TARS" da barra de cima, e dois numa
+              página só deixam o leitor de tela sem saber qual é o título. */}
+          <h2>Olá, {firstName}<span className={styles.greetingDot}>.</span></h2>
           <p className={styles.intro}>{intro}</p>
         </div>
         <div className={styles.headerActions}>
