@@ -35,7 +35,12 @@ if [[ -z "${CLOUDFLARE_D1_DATABASE_ID:-}" ]]; then
   CLOUDFLARE_D1_DATABASE_ID="$(
     npx wrangler d1 list --json 2>/dev/null |
       node -e '
-        const bancos = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        // O wrangler imprime a faixa de versão antes do JSON, mesmo com
+        // `--json`. A lista começa no primeiro colchete.
+        const saida = require("fs").readFileSync(0, "utf8");
+        const inicio = saida.indexOf("[");
+        if (inicio < 0) process.exit(0);
+        const bancos = JSON.parse(saida.slice(inicio));
         const alvo = bancos.find((banco) => banco.name === process.argv[1]);
         if (alvo) process.stdout.write(alvo.uuid);
       ' "${BANCO}"
