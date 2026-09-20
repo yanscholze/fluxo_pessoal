@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "mobile/**",
     "next-env.d.ts",
+    // Código de protótipo guardado como referência de desenho, não como fonte
+    // do produto: não compila aqui e não deve ser corrigido para compilar.
+    "docs/**",
   ]),
 ]);
 

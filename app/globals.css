@@ -25,6 +25,39 @@
  * caractere fora dele.
  */
 
+/**
+ * Space Grotesk — a fonte do Mesa.
+ *
+ * Hospedada aqui, e não buscada no Google, pelo mesmo motivo que a Figtree
+ * abaixo: o plugin de fontes do vinext emite caminho de disco do Windows e
+ * falha calado, e uma dependência externa numa fonte de interface é um ponto
+ * de falha que a página não avisa — ela simplesmente renderiza na fonte do
+ * sistema e o desenho inteiro muda de peso.
+ *
+ * Dois recortes, como no resto do arquivo: o latino básico cobre o português,
+ * o estendido só entra se aparecer caractere fora dele.
+ */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
 @font-face {
   font-family: "Figtree";
   font-style: normal;
@@ -164,64 +197,80 @@
    * a superfície branca **subir**, e é de graça: nenhuma sombra precisa
    * trabalhar mais para compensar.
    */
-  --color-canvas: #f0eff5;
-  --color-surface: #ffffff;
-  --color-surface-raised: #ffffff;
-  --color-surface-sunken: #f6f5fa;
-  --color-surface-inset: #ebe9f2;
+  /**
+   * A paleta é a do Mesa, o protótipo que define esta interface.
+   *
+   * Tudo em OKLCH, e um tema só — escuro. Não existe variante clara no
+   * desenho, e inventar uma seria decidir por ele o que ele não decidiu.
+   *
+   * Os nomes continuam sendo os do Fluxo (`canvas`, `surface`, `ink`,
+   * `accent`) porque é o vocabulário que as telas já falam; o que mudou foi o
+   * valor de cada um. A tabela da correspondência está em `docs/mesa/sistema.md`.
+   */
+  --color-canvas: oklch(10.5% 0.025 308);
+  --color-surface: oklch(16% 0.03 306);
+  --color-surface-raised: oklch(25% 0.05 304);
+  --color-surface-sunken: oklch(20% 0.025 306);
+  --color-surface-inset: oklch(21% 0.03 306);
 
-  --color-line: #e1deeb;
-  --color-line-strong: #ccc7db;
+  /**
+   * A linha é branco com alfa, não um cinza sólido.
+   *
+   * É o detalhe que dá o ar de vidro: a borda clareia junto com o que estiver
+   * por baixo, em vez de virar um traço opaco na frente. Trocar por um cinza
+   * fixo achata a barra lateral e os painéis sobrepostos.
+   */
+  --color-line: oklch(100% 0 0 / 0.09);
+  --color-line-strong: oklch(100% 0 0 / 0.16);
 
-  /* Clareamento no alto da página. Ver a regra de `body`. */
-  --color-canvas-glow: rgb(255 255 255 / 0.85);
+  --color-canvas-glow: oklch(100% 0 0 / 0.035);
 
-  /* Texto, em três degraus. Mais que isso vira ruído; menos, vira monotonia. */
-  --color-ink: #222132;
-  /* O terceiro tom precisa passar em 4,5:1 no fundo mais escuro em que ele
-     aparece, e não só no branco. Em #8b95a3 dava 3,03:1 — a dica de campo, o
-     rótulo do menu e o "—" de célula vazia ficavam abaixo do mínimo de leitura
-     em toda tela. Escurecer o terceiro tom obrigou a escurecer o segundo: sem
-     isso os dois encostavam e a hierarquia entre apoio e dica sumia. */
-  --color-ink-muted: #565366;
-  --color-ink-subtle: #6b657b;
+  /* Texto, em três degraus. */
+  --color-ink: oklch(97% 0.004 285);
+  --color-ink-muted: oklch(92% 0.01 300);
+  --color-ink-subtle: oklch(63% 0.018 298);
 
   /* --- Cromo interativo -------------------------------------------------- */
-  --color-accent: #7056b8;
-  --color-accent-ink: #ffffff;
-  --color-accent-hover: #6047a4;
+  --color-accent: oklch(66% 0.24 304);
+  --color-accent-ink: oklch(12% 0.03 306);
+  /* Derivado: o Mesa não define estado de hover, e clarear o próprio acento
+     mantém o matiz em vez de introduzir um roxo que ninguém escolheu. */
+  --color-accent-hover: oklch(72% 0.22 304);
 
   /* --- Semântica de valor ------------------------------------------------ */
-  --color-positive: #168047;
-  --color-negative: #dc2626;
-  --color-caution: #b45309;
-  --color-info: #2563eb;
+  --color-positive: oklch(76% 0.16 160);
+  --color-negative: oklch(72% 0.18 17);
+  --color-caution: oklch(82% 0.16 84);
+  --color-info: oklch(66% 0.24 304);
+  /* Ação destrutiva tem vermelho próprio, mais saturado que o coral de saída:
+     perder dado não é a mesma coisa que gastar dinheiro. */
+  --color-destructive: oklch(57.7% 0.245 27.325);
 
-  /* Superfícies tingidas. Derivadas, para que trocar o acento reconfigure tudo. */
+  /* Superfícies tingidas. O Mesa usa 12% de fundo com anel de 20%. */
   --color-accent-wash: color-mix(in oklab, var(--color-accent) 12%, transparent);
   --color-accent-edge: color-mix(in oklab, var(--color-accent) 32%, transparent);
   --color-positive-wash: color-mix(in oklab, var(--color-positive) 12%, transparent);
   --color-negative-wash: color-mix(in oklab, var(--color-negative) 12%, transparent);
-  --color-caution-wash: color-mix(in oklab, var(--color-caution) 14%, transparent);
+  --color-caution-wash: color-mix(in oklab, var(--color-caution) 12%, transparent);
   --color-info-wash: color-mix(in oklab, var(--color-info) 12%, transparent);
 
-  /* Série de apoio para gráficos com muitas séries e para categorias sem cor
-     própria. Ordenada por distinção percebida, não por matiz. */
-  --color-viz-1: #0d9668;
-  --color-viz-2: #2563eb;
-  --color-viz-3: #b45309;
-  --color-viz-4: #9333ea;
-  --color-viz-5: #0891b2;
-  --color-viz-6: #db2777;
-  --color-viz-7: #65a30d;
-  --color-viz-8: #64748b;
+  /* As quatro primeiras são as que o painel do Mesa usa nas barras de
+     categoria, nesta ordem. O resto completa a série para gráficos densos. */
+  --color-viz-1: oklch(66% 0.24 304);
+  --color-viz-2: oklch(72% 0.18 17);
+  --color-viz-3: oklch(82% 0.16 84);
+  --color-viz-4: oklch(76% 0.16 160);
+  --color-viz-5: oklch(60% 0.118 184.704);
+  --color-viz-6: oklch(64.6% 0.222 41.116);
+  --color-viz-7: oklch(76.9% 0.188 70.08);
+  --color-viz-8: oklch(63% 0.018 298);
 
   /* ---------------------------------------------------------------------- */
   /* Tipografia                                                             */
   /* ---------------------------------------------------------------------- */
 
   /* A pilha de recuo vale enquanto o `.woff2` não chegou, e evita o salto. */
-  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Escala fechada. Toda a interface sai daqui — não existe tamanho avulso. */
 
@@ -424,57 +473,17 @@
 /* indireção devolve o controle ao tema: a geometria fica fixa, a luz troca.   */
 /* -------------------------------------------------------------------------- */
 
-:root {
-  --edge-light: rgb(255 255 255 / 0.7);
-  --shade-soft: rgb(16 21 28 / 0.045);
-  --shade-deep: rgb(16 21 28 / 0.1);
-  --shade-cast: rgb(16 21 28 / 0.14);
-}
-
 /* -------------------------------------------------------------------------- */
-/* Tema escuro — o nativo.                                                    */
+/* Escuro é o único tema.                                                     */
+/*                                                                            */
+/* O Mesa não desenhou variante clara, e as cores dele já estão em `@theme`.  */
+/* O que sobra aqui é o que a profundidade precisa: no escuro a elevação vem  */
+/* do fio de luz na quina de cima, porque sombra preta sobre fundo preto não  */
+/* aparece — e o fio tem de ser 5%, não os 70% que um tema claro usaria.      */
 /* -------------------------------------------------------------------------- */
 
+:root,
 [data-theme="dark"] {
-  --color-canvas: #161826;
-  --color-surface: #222433;
-  --color-surface-raised: #2a2c3e;
-  --color-surface-sunken: #1b1d2b;
-  --color-surface-inset: #2a2c3d;
-
-  --color-line: #333548;
-  --color-line-strong: #484b61;
-
-  --color-canvas-glow: rgb(255 255 255 / 0.035);
-
-  --color-ink: #eeeef5;
-  --color-ink-muted: #b6b5c8;
-  /* 3,93:1 sobre a superfície, e 3,4:1 sobre o painel elevado — abaixo do
-     mínimo nos dois. Clareado até 4,99:1, com a distância para `muted`
-     preservada, que é o que mantém a leitura em três níveis. */
-  --color-ink-subtle: #a09fb6;
-
-  --color-accent: #a394e8;
-  --color-accent-ink: #191329;
-  --color-accent-hover: #b6a8f4;
-
-  --color-positive: #4ade80;
-  --color-negative: #ff6b6b;
-  --color-caution: #fbbf24;
-  --color-info: #60a5fa;
-
-  --color-viz-1: #21c99a;
-  --color-viz-2: #60a5fa;
-  --color-viz-3: #fbbf24;
-  --color-viz-4: #c084fc;
-  --color-viz-5: #22d3ee;
-  --color-viz-6: #fb7185;
-  --color-viz-7: #a3e635;
-  --color-viz-8: #94a3b8;
-
-  /* No escuro o realce interno carrega quase toda a elevação: sombra preta
-     sobre fundo preto não aparece, mas a quina de cima pegando luz sim. E ela
-     precisa ser um fio de 5%, não os 70% que o tema claro usa contra branco. */
   --edge-light: rgb(255 255 255 / 0.05);
   --shade-soft: rgb(0 0 0 / 0.5);
   --shade-deep: rgb(0 0 0 / 0.5);
@@ -745,4 +754,160 @@
 @media (pointer: coarse) {
   .press, input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
   .nav-item { min-height: 44px; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mesa — as classes de componente do protótipo.                              */
+/*                                                                            */
+/* Copiadas do desenho, não interpretadas. Os valores são os que ele define;  */
+/* o que mudou foram os nomes das variáveis, para o vocabulário desta base.   */
+/* Referência completa em `docs/mesa/sistema.md`.                             */
+/* -------------------------------------------------------------------------- */
+
+.app-shell {
+  display: flex;
+  gap: 1rem;
+  min-height: 100vh;
+  padding: 1rem;
+  background: radial-gradient(
+    circle at 12% 5%,
+    color-mix(in oklab, var(--color-accent) 10%, transparent),
+    transparent 30%
+  );
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    padding: 0.5rem;
+  }
+}
+
+/**
+ * A barra lateral é de vidro.
+ *
+ * Fundo a 64% de opacidade mais desfoque de 30px: é o que faz a borda de
+ * branco a 9% acender onde há conteúdo por baixo. Com fundo opaco ela vira um
+ * retângulo chapado e o efeito inteiro do desenho se perde.
+ */
+.finance-sidebar {
+  position: sticky;
+  top: 1rem;
+  z-index: 40;
+  flex-shrink: 0;
+  width: 16rem;
+  height: calc(100vh - 2rem);
+  padding: 1.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: 1.75rem;
+  background: color-mix(in oklab, var(--color-surface) 64%, transparent);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+  transition:
+    width 0.3s,
+    transform 0.3s;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-canvas);
+}
+
+.content-area {
+  width: 100%;
+  padding: 2rem;
+}
+
+@media (max-width: 767px) {
+  .content-area {
+    padding: 1rem;
+  }
+}
+
+.glass-panel {
+  border: 1px solid var(--color-line);
+  border-radius: 1.5rem;
+  background: var(--color-surface);
+}
+
+.money-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 18rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+/**
+ * O valor principal recorta um gradiente.
+ *
+ * De `ink` no topo a `ink-subtle` embaixo — o número desmaia na base em vez de
+ * terminar reto, que é o que tira o peso de bloco de um algarismo de 6rem.
+ */
+.money-value {
+  font-size: clamp(3.1rem, 8vw, 6rem);
+  font-weight: 500;
+  line-height: 1;
+  background: linear-gradient(to bottom, var(--color-ink), var(--color-ink-subtle));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-ink-subtle);
+}
+
+.metric-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-ink-subtle);
+}
+
+.credit-card {
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 1.586;
+  padding: 1.5rem;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 40%, transparent);
+  border-radius: 1.5rem;
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-accent) 45%, var(--color-surface)),
+    var(--color-surface) 68%
+  );
+  box-shadow: 0 30px 70px -28px color-mix(in oklab, var(--color-accent) 40%, transparent);
+}
+
+.tars-core {
+  display: grid;
+  place-items: center;
+  width: 8rem;
+  height: 8rem;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 70px color-mix(in oklab, var(--color-accent) 22%, transparent);
 }
