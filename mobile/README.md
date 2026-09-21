@@ -50,6 +50,33 @@ Chama o Gradle direto, sem a nuvem nem o cliente da Expo: o script instala as
 dependências se faltarem, roda o `prebuild` para gerar `mobile/android/` e
 compila o release. Passe `--limpo` para regenerar o projeto nativo do zero.
 
+O APK sai com o que um telefone usa, e não com tudo o que o build sabe montar.
+São duas podas, feitas em lugares diferentes porque o Gradle não deixa fazer as
+duas no mesmo:
+
+**Arquiteturas.** O script chama o Gradle com
+`-PreactNativeArchitectures=arm64-v8a,armeabi-v7a`, e assim x86 e x86_64 — que
+só existem para emulador — não são compiladas nem empacotadas. São 45 MB: o APK
+universal dava 103 MB, este dá 58 MB. Isso tem de ser na linha de comando, e não
+em `gradle.properties` nem num plugin: a propriedade é lida antes de existir
+variante, então escrevê-la no arquivo cortaria também o build de
+desenvolvimento. Para tirar também `armeabi-v7a`, mais 15 MB, confirme antes que
+o aparelho é 64 bits e rode com `FLUXO_ARQUITETURAS=arm64-v8a`:
+
+```bash
+adb shell getprop ro.product.cpu.abilist
+```
+
+**Cliente de desenvolvimento.** `plugins/with-release-sem-cliente-dev.cjs` tira
+`expo-dev-client` e companhia do autolink quando a tarefa pedida ao Gradle é de
+release. São só 382 KB — o que se ganha não é tamanho, é um APK assinado que não
+carrega dentro dele o carregador capaz de apontar o aplicativo para outro
+servidor, nem o inspetor de rede.
+
+`npm run android` não passa por nenhuma das duas: o build de desenvolvimento
+continua com as quatro arquiteturas, para instalar em emulador, e com o cliente
+de desenvolvimento, sem o qual ele não conversa com o `npm start`.
+
 Três armadilhas, todas já responsáveis por um build perdido:
 
 **O JDK tem de ser o 17.** Do 24 em diante a JVM imprime um aviso ao carregar
