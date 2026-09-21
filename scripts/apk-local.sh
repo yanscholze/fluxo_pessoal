@@ -30,6 +30,9 @@
 # build morre — depois de dez minutos compilando código nativo que estava certo.
 # Por isso a checagem vem antes.
 #
+# FLUXO_ARQUITETURAS — quais processadores o APK carrega. Ver o comentário
+#   sobre `reactNativeArchitectures`, na chamada do Gradle.
+#
 # Uso: bash scripts/apk-local.sh [caminho-de-saída] [--limpo]
 set -euo pipefail
 
@@ -42,6 +45,7 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JDK="${FLUXO_JDK_17:-$HOME/.jdks/jdk-17}"
 SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
 CACHE="${FLUXO_BUILD_CACHE:-$HOME/.cache/fluxo-build}"
+ARQUITETURAS="${FLUXO_ARQUITETURAS:-arm64-v8a,armeabi-v7a}"
 
 if [[ ! -x "$JDK/bin/java" ]]; then
   echo "JDK 17 não encontrado em $JDK. Aponte FLUXO_JDK_17." >&2
@@ -74,9 +78,32 @@ echo "→ gerando o projeto nativo (expo prebuild ${LIMPO:-incremental})"
 cd "$RAIZ/mobile"
 npx expo prebuild --platform android --no-install ${LIMPO:+--clean}
 
-echo "→ compilando (gradlew assembleRelease)"
+# `reactNativeArchitectures` decide quais bibliotecas nativas são compiladas e
+# empacotadas. O `expo prebuild` escreve as quatro em `gradle.properties` —
+# armeabi-v7a, arm64-v8a, x86 e x86_64 — e as duas últimas só existem para
+# emulador. Num APK que vai para um telefone elas são 45 MB de peso morto: o
+# release universal dava 103 MB, e sem elas dá 58 MB. Como as bibliotecas
+# nativas vão descompactadas (`expo.useLegacyPackaging=false`), o que sai da
+# lista sai inteiro do arquivo.
+#
+# O corte é aqui, na linha de comando, e não em `gradle.properties` nem num
+# plugin de configuração, por dois motivos. Primeiro, `-P` é a única forma de
+# valer só para este build: a propriedade é lida na configuração do projeto,
+# antes de existir variante, então escrevê-la no arquivo cortaria também o
+# build de desenvolvimento, que precisa das duas x86 para instalar em
+# emulador. Segundo, é o único lugar que funciona: filtrar por variante com
+# `packaging.jniLibs.excludes` deixa passar `libreactnative.so`,
+# `libhermesvm.so` e as outras quatro que o plugin do React Native marca como
+# `pickFirst` — e `pickFirst` ganha de `exclude`.
+#
+# Para enxugar mais, tire `armeabi-v7a` (mais 15 MB) depois de confirmar que o
+# aparelho é 64 bits:
+#
+#     adb shell getprop ro.product.cpu.abilist
+#
+echo "→ compilando (gradlew assembleRelease, $ARQUITETURAS)"
 cd "$RAIZ/mobile/android"
-./gradlew assembleRelease --no-daemon
+./gradlew assembleRelease --no-daemon -PreactNativeArchitectures="$ARQUITETURAS"
 
 APK="$RAIZ/mobile/android/app/build/outputs/apk/release/app-release.apk"
 [[ -f "$APK" ]] || { echo "o Gradle terminou mas não achei o APK em $APK" >&2; exit 1; }
@@ -85,5 +112,19 @@ mkdir -p "$(dirname "$SAIDA")"
 cp "$APK" "$SAIDA"
 
 echo
-echo "APK: $SAIDA"
-"$SDK"/build-tools/*/aapt dump badging "$SAIDA" 2>/dev/null | head -1 || true
+echo "APK: $SAIDA ($(du -h "$SAIDA" | cut -f1))"
+
+# O glob de `build-tools` casa com todas as versões instaladas, e passar duas
+# para o shell vira `aapt35 aapt36 dump badging`, que falha calado. Fica a
+# última, que é a mais nova.
+FERRAMENTAS=("$SDK"/build-tools/*)
+AAPT="${FERRAMENTAS[-1]}/aapt"
+
+# Lido de uma vez, e não por `| head -1`: o `head` fecha o cano, o `aapt`
+# morre de SIGPIPE, e com `pipefail` isso derruba o script inteiro depois de
+# o APK já estar pronto.
+if [[ -x "$AAPT" ]]; then
+  BADGING="$("$AAPT" dump badging "$SAIDA")"
+  sed -n "1p" <<< "$BADGING"
+  echo "arquiteturas: $(sed -n "s/^native-code: //p" <<< "$BADGING")"
+fi
