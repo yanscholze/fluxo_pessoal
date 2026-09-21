@@ -1,4 +1,5 @@
 import { parseCompetence, shift } from "../../../core/time/competence.ts";
+import { todayIn } from "../../../core/time/local-date.ts";
 import { buildStatement } from "../../../server/services/statement.ts";
 import { currentUser } from "../../auth-context.ts";
 import { Donut, MetricTile, PanelHeading } from "../../ui/mesa.tsx";
@@ -39,6 +40,16 @@ export default async function Lancamentos({
     cardId,
   });
   const selectedCard = cardId ? statement.options.cards.find((card) => card.id === cardId) : undefined;
+
+  /*
+   * O dia de hoje vem do servidor, e não do relógio do navegador.
+   *
+   * O formulário é componente de cliente, mas também é renderizado no
+   * servidor. Se cada lado lesse o próprio relógio, um acesso perto da
+   * meia-noite — ou com o computador em outro fuso — geraria datas diferentes
+   * nas duas renderizações, e o React acusaria a divergência na hidratação.
+   */
+  const hoje = todayIn();
 
   const maiorCategoria = statement.categorySpend[0];
   const fatia = maiorCategoria ? Math.round(maiorCategoria.percent) : 0;
@@ -138,6 +149,7 @@ export default async function Lancamentos({
                 <Composer
                   options={statement.options}
                   competence={statement.competence}
+                  today={hoje}
                   defaultOpen={params.novo === "1"}
                 />
               </div>

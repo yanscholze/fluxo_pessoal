@@ -12,7 +12,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-import type { Competence } from "../../../core/time/competence.ts";
+import { competenceOf, type Competence } from "../../../core/time/competence.ts";
+import type { LocalDate } from "../../../core/time/local-date.ts";
 import type { Statement } from "../../../server/services/statement.ts";
 
 type Tipo = "expense" | "income" | "transfer";
@@ -23,10 +24,13 @@ type Erro = { message?: string; issues?: { path: string; message: string }[] };
 export function Composer({
   options,
   competence,
+  today,
   defaultOpen = false,
 }: {
   options: Statement["options"];
   competence: Competence;
+  /** O dia de hoje, vindo do servidor para as duas renderizações baterem. */
+  today: LocalDate;
   /**
    * Já aberto ao entrar na tela.
    *
@@ -186,7 +190,7 @@ export function Composer({
                 name="occurredOn"
                 type="date"
                 required
-                defaultValue={`${competence}-01`}
+                defaultValue={dataInicial(competence, today)}
                 className={entrada(issues.occurredOn)}
               />
             </Campo>
@@ -308,6 +312,24 @@ export function Composer({
       </div>
     </div>
   );
+}
+
+/**
+ * A data que o formulário já vem preenchendo.
+ *
+ * Era sempre o **dia 1** da competência aberta. Quem abre o Fluxo no dia 21
+ * para registrar o almoço de hoje encontrava "1 de setembro", e o lançamento
+ * ia para o dia errado se ninguém reparasse. Num cartão isso não é só a data
+ * na lista: comprar dia 14 num cartão que fecha dia 13 pertence à fatura
+ * seguinte, e a mesma compra registrada no dia 1 cai na fatura atual — o valor
+ * some de um mês e aparece noutro.
+ *
+ * Hoje quando a competência aberta é a corrente, que é o caso de quase todo
+ * lançamento. Navegando para outro mês, o dia 1 dele continua sendo a âncora
+ * certa: ali não existe "hoje".
+ */
+function dataInicial(competence: Competence, today: LocalDate): string {
+  return competenceOf(today) === competence ? today : `${competence}-01`;
 }
 
 function entrada(erro?: string): string {
