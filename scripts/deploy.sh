@@ -71,4 +71,8 @@ if [[ "${gerado}" != "${CLOUDFLARE_D1_DATABASE_ID}" ]]; then
   exit 70
 fi
 
-npx wrangler deploy --config dist/server/wrangler.json
+# O build usa HOME isolado para manter caches reproduzíveis. A publicação
+# precisa da sessão Cloudflare já autenticada no HOME real do usuário.
+HOME="${SITES_CALLER_HOME:-$HOME}" \
+  XDG_CONFIG_HOME="${SITES_CALLER_XDG_CONFIG_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}}" \
+  npx wrangler deploy --config dist/server/wrangler.json

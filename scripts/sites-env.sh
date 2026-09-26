@@ -3,6 +3,8 @@ set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${SITES_RUNTIME_ROOT:-${project_root}/.sites-runtime}"
+export SITES_CALLER_HOME="${HOME}"
+export SITES_CALLER_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
 
 mkdir -p \
   "${runtime_root}/home" \

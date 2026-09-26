@@ -38,6 +38,9 @@ set -euo pipefail
 
 SAIDA="${1:-$HOME/Downloads/fluxo.apk}"
 [[ "${1:-}" == "--limpo" ]] && SAIDA="$HOME/Downloads/fluxo.apk"
+# O script muda para mobile/android durante a compilação. Fixe a saída no
+# diretório de onde foi chamado antes desse cd, inclusive para caminhos relativos.
+SAIDA="$(realpath -m -- "$SAIDA")"
 LIMPO=""
 for argumento in "$@"; do [[ "$argumento" == "--limpo" ]] && LIMPO="--clean"; done
 
