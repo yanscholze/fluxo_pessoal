@@ -9,7 +9,7 @@ import { Dialog } from "./dialog.tsx";
 import { Input } from "./controls.tsx";
 import { gravarPreferencia, usePreferencia } from "./browser-preference.ts";
 import {
-  ArrowRight, BarChart3, Bot, Briefcase, ChevronRight, CreditCard, Landmark,
+  ArrowRight, BarChart3, Bell, Bot, Briefcase, CircleHelp, CreditCard, Landmark,
   LayoutDashboard, LogOut, type LucideIcon, Menu, Moon, PanelLeft,
   PanelLeftClose, Plane, Receipt, Repeat, Search, Settings, Sun, Wallet, X, Zap,
 } from "./icons.tsx";
@@ -67,7 +67,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
     setMenuAberto(false);
     setBuscaAberta(false);
   }
-  const recolhida = usePreferencia(() => localStorage.getItem(CHAVE_RECOLHIDA) === "1", false);
+  const recolhida = usePreferencia(() => localStorage.getItem(CHAVE_RECOLHIDA) !== "0", true);
   const grupo = NAV.find((g) => g.items.some((item) => rotaAtiva(item.href, pathname)));
   const atual = grupo?.items.find((item) => rotaAtiva(item.href, pathname)) ?? SETTINGS;
   const resultados = ATALHOS.filter((item) => normalizar(item.label).includes(normalizar(consulta)));
@@ -103,33 +103,33 @@ export function Shell({ userName, children }: { userName: string; children: Reac
   }, [menuAberto]);
 
   return (
-    <div className="app-shell flex min-h-dvh bg-canvas">
+    <div className="app-shell fluxo-shell flex min-h-dvh">
       <a href="#conteudo" className="skip-link">Ir para o conteúdo</a>
       {menuAberto ? <button type="button" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} className="fixed inset-0 z-30 bg-canvas/75 backdrop-blur-sm lg:hidden" /> : null}
       <nav ref={navegacao} id="navegacao" aria-label="Navegação principal" className={join(
-        "app-sidebar fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-line bg-surface transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0",
+        "app-sidebar fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-line bg-surface transition-[transform,width] duration-200 lg:translate-x-0",
         menuAberto ? "visible translate-x-0" : "invisible -translate-x-full lg:visible",
         recolhida ? "w-[16.5rem] lg:w-[4.75rem]" : "w-[16.5rem]",
       )}>
-        <div className={join("flex h-16 shrink-0 items-center gap-3 px-5", recolhida && "lg:justify-center lg:px-0")}>
+        <div className="sidebar-brand flex h-16 shrink-0 items-center gap-3 px-3">
           <Link href="/" className="flex items-center gap-3" aria-label="Fluxo — início">
-            <span className="brand-mark" aria-hidden><svg viewBox="0 0 24 24" fill="none"><path d="M4 17c3.3 0 3.5-10 7-10s3.7 10 7 10M14 7h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></span>
-            <span className={join("text-2xl font-semibold tracking-tight text-ink", recolhida && "lg:hidden")}>Fluxo<span className="text-accent">.</span></span>
+            <span className="brand-mark" aria-hidden><span className="brand-mark__dot brand-mark__dot--a" /><span className="brand-mark__dot brand-mark__dot--b" /></span>
+            <span className="sidebar-label text-2xl font-semibold tracking-tight text-ink">Fluxo</span>
           </Link>
           <button type="button" onClick={() => setMenuAberto(false)} aria-label="Fechar menu" className="ml-auto flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-surface-inset lg:hidden"><X size={19} aria-hidden /></button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        <div className="sidebar-links min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {NAV.map((g) => <div key={g.title} className="mb-3 last:mb-0">
-            <p className={join("px-3 pb-2 pt-1 text-label uppercase text-ink-subtle", recolhida && "lg:sr-only")}>{g.title}</p>
+            <p className="sidebar-group-label px-3 pb-2 pt-1 text-label uppercase text-ink-subtle">{g.title}</p>
             <ul className="space-y-1">{g.items.map((item) => <li key={item.href}><ItemDeNavegacao item={item} pathname={pathname} recolhida={recolhida} /></li>)}</ul>
           </div>)}
         </div>
-        <div className="shrink-0 border-t border-line p-3">
+        <div className="sidebar-footer shrink-0 border-t border-line p-3">
           <ItemDeNavegacao item={SETTINGS} pathname={pathname} recolhida={recolhida} />
-          <InstallApp className={join("my-2 w-full", recolhida && "lg:hidden")} />
+          <InstallApp className="sidebar-label my-2 w-full" />
           <Link href="/configuracoes" className={join("mt-1 flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-surface-inset", recolhida && "lg:justify-center")} aria-label={`Conta de ${userName}`}>
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-accent-edge bg-accent-wash text-caption font-semibold uppercase text-accent">{iniciais(userName)}</span>
-            <span className={join("min-w-0 flex-1", recolhida && "lg:hidden")}><span className="block truncate text-body-sm font-medium text-ink">{userName}</span><span className="block text-caption text-ink-subtle">Meu espaço pessoal</span></span>
+            <span className="sidebar-label min-w-0 flex-1"><span className="block truncate text-body-sm font-medium text-ink">{userName}</span><span className="block text-caption text-ink-subtle">Meu espaço pessoal</span></span>
           </Link>
           <div className={join("mt-1 flex gap-1", recolhida && "lg:flex-col")}>
             <BotaoDeTema recolhida={recolhida} /><BotaoDeSaida recolhida={recolhida} />
@@ -137,16 +137,17 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           </div>
         </div>
       </nav>
-      <div className="min-w-0 flex-1" inert={menuAberto || undefined}>
-        <header className="app-topbar sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+      <div className="fluxo-main min-w-0 flex-1" inert={menuAberto || undefined}>
+        <header className="app-topbar relative z-20 flex min-h-20 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button type="button" onClick={() => setMenuAberto(true)} aria-label="Abrir menu" aria-controls="navegacao" aria-expanded={menuAberto} className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-surface-inset lg:hidden"><Menu size={19} aria-hidden /></button>
-            <span className="hidden text-caption text-ink-subtle sm:inline">{grupo?.title ?? "Seu espaço"}</span><ChevronRight size={13} className="hidden text-ink-subtle sm:block" aria-hidden />
-            <span className="truncate text-body-sm font-medium text-ink">{atual.label}</span>
+            <div className="min-w-0"><p className="fluxo-eyebrow truncate">{grupo?.title ?? "Seu espaço"}</p><p className="fluxo-top-title truncate">{atual.label}</p></div>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => { setConsulta(""); setBuscaAberta(true); }} className="flex h-10 items-center gap-2 rounded-md border border-line px-3 text-caption text-ink-muted transition-colors hover:border-accent-edge hover:text-ink" aria-label="Buscar uma área do app"><Search size={15} aria-hidden /><span className="hidden sm:inline">Ir para…</span><kbd className="ml-4 hidden text-label text-ink-subtle lg:inline">Ctrl K</kbd></button>
-            <Link href="/#pendencias" className="flex size-10 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-wash hover:text-accent" aria-label="Ver pendências no TARS"><Bot size={19} aria-hidden /></Link>
+            <button type="button" onClick={() => { setConsulta(""); setBuscaAberta(true); }} className="fluxo-search flex h-11 items-center gap-2 border border-line px-3 text-caption text-ink-muted transition-colors hover:border-accent-edge hover:text-ink" aria-label="Buscar uma área do app"><Search size={17} aria-hidden /><span className="hidden sm:inline">Pesquisar...</span><kbd className="ml-auto hidden text-label text-ink-subtle lg:inline">⌘ K</kbd></button>
+            <Link href="/#pendencias" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent" aria-label="Ver pendências no TARS"><Bell size={18} aria-hidden /></Link>
+            <Link href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Ajuda e configurações"><CircleHelp size={18} aria-hidden /></Link>
+            <Link href="/configuracoes" className="fluxo-profile hidden items-center gap-2 px-2 py-1 sm:flex" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span><span className="max-w-28 truncate text-body-sm font-semibold text-ink">{userName}</span></Link>
           </div>
         </header>
         <div className="min-w-0 pb-24 lg:pb-0">{children}</div>
@@ -170,7 +171,7 @@ function ItemDeNavegacao({ item, pathname, recolhida }: { item: NavItem; pathnam
   const Icone = item.icon;
   return <Link href={item.href} aria-current={ativo ? "page" : undefined} title={recolhida ? item.label : undefined} className={join("nav-item relative flex min-h-9 items-center gap-3 rounded-md px-3 py-1.5 text-body-sm transition-colors", recolhida && "lg:justify-center lg:px-0", ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-inset hover:text-ink")}>
     {ativo ? <span className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent" aria-hidden /> : null}
-    <Icone size={17} strokeWidth={1.6} className="shrink-0" aria-hidden /><span className={join("leading-snug", recolhida && "lg:hidden")}>{item.label}</span>
+    <Icone size={20} strokeWidth={1.9} className="shrink-0" aria-hidden /><span className="sidebar-label leading-snug">{item.label}</span>
     {item.href === "/" ? <span className={join("ml-auto size-1.5 shrink-0 rounded-full bg-accent", recolhida && "lg:hidden")} aria-hidden /> : null}
   </Link>;
 }

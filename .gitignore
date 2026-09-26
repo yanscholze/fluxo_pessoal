@@ -78,3 +78,4 @@ backups/
 
 # Artefatos de build do aplicativo. Um APK tem 74 MB e é regerável.
 builds/
+desktop/.rpmbuild/

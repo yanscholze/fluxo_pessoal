@@ -410,6 +410,9 @@ export type ProjetoView = {
   readonly color: string | null;
   readonly dueOn: string | null;
   readonly openTasks: number;
+  readonly checklistTotal: number;
+  readonly checklistCompleted: number;
+  readonly checklistPercent: number;
   readonly contractedCents: number;
   readonly receivedCents: number;
   readonly pendingCents: number;
@@ -435,6 +438,15 @@ export type ProjetosView = {
 };
 
 export const fetchProjetos = (c: Credenciais) => buscar<ProjetosView>("/api/v1/projects", c);
+
+export type ProjetoDetalheView = {
+  readonly project: { readonly id: string; readonly name: string };
+  readonly groups: readonly { readonly id: string; readonly name: string; readonly sortOrder: number }[];
+  readonly tasks: readonly { readonly id: string; readonly groupId: string | null; readonly title: string; readonly status: string; readonly archivedAt: string | null; readonly sortOrder: number }[];
+  readonly entries: readonly { readonly id: string; readonly taskId: string | null; readonly workedOn: string; readonly durationMilli: number; readonly description: string }[];
+};
+
+export const fetchProjetoDetalhe = (c: Credenciais, id: string) => buscar<ProjetoDetalheView>(`/api/v1/projects/${id}`, c);
 
 // --- assinaturas -------------------------------------------------------------
 

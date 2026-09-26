@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { Briefcase, CreditCard, House, Plus, Receipt } from "phosphor-react-native";
+import { CreditCard, House, Plus, Receipt, SquaresFour } from "phosphor-react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import Animated, { FadeInRight, FadeOutLeft, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AjustesScreen } from "./screens/ajustes.tsx";
@@ -13,6 +15,7 @@ import { ExtratoScreen } from "./screens/extrato.tsx";
 import { ImportarScreen } from "./screens/importar.tsx";
 import { InicioScreen } from "./screens/inicio.tsx";
 import { LancamentoScreen } from "./screens/lancamento.tsx";
+import { MaisScreen } from "./screens/mais.tsx";
 import {
   AutomacoesScreen,
   ContasScreen,
@@ -54,13 +57,14 @@ export type Tela =
   | "automacoes"
   | "capturas"
   | "importar"
-  | "configuracoes";
+  | "configuracoes"
+  | "mais";
 
 const ABAS: readonly { id: Tela; label: string }[] = [
   { id: "painel", label: "Início" },
   { id: "lancamentos", label: "Extrato" },
   { id: "cartoes", label: "Cartões" },
-  { id: "trabalho", label: "Projetos" },
+  { id: "mais", label: "Mais" },
 ];
 
 const GRUPO_ATIVO: Partial<Record<Tela, Tela>> = {
@@ -81,11 +85,12 @@ const GRUPO_ATIVO: Partial<Record<Tela, Tela>> = {
   automacoes: "painel",
   capturas: "painel",
   importar: "painel",
-  configuracoes: "painel",
+  configuracoes: "mais",
   lancamentos: "lancamentos",
   cartoes: "cartoes",
   parcelamentos: "cartoes",
-  trabalho: "trabalho",
+  trabalho: "mais",
+  mais: "mais",
 };
 
 export function Shell() {
@@ -95,6 +100,8 @@ export function Shell() {
   const [tela, setTela] = useState<Tela>("painel");
   const [editando, setEditando] = useState<string | null>(null);
   const [folhaAberta, setFolhaAberta] = useState(false);
+  const escalaFab = useSharedValue(1);
+  const estiloFab = useAnimatedStyle(() => ({ transform: [{ scale: escalaFab.value }] }));
 
   const emEdicao = useMemo(
     () => (editando ? transactions.find((item) => item.id === editando) ?? null : null),
@@ -111,9 +118,9 @@ export function Shell() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
-      <View style={{ flex: 1 }}>
+      <Animated.View key={tela} entering={FadeInRight.duration(250)} exiting={FadeOutLeft.duration(140)} style={{ flex: 1 }}>
         <Conteudo tela={tela} onAbrirLancamento={abrirLancamento} onIrPara={setTela} />
-      </View>
+      </Animated.View>
 
       {!esconderAbas ? <View
         style={{
@@ -131,24 +138,31 @@ export function Shell() {
         ))}
 
         <View style={{ width: 68, alignItems: "center" }}>
+          <Animated.View style={estiloFab}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Novo lançamento"
             onPress={() => abrirLancamento(null)}
+            onPressIn={() => { escalaFab.value = withSpring(0.9, { damping: 15, stiffness: 260 }); }}
+            onPressOut={() => { escalaFab.value = withSpring(1, { damping: 13, stiffness: 220 }); }}
             style={({ pressed }) => ({
               width: 56,
               height: 56,
               marginTop: -23,
               borderRadius: radius.pill,
               borderWidth: 0,
-              backgroundColor: pressed ? palette.accentEdge : palette.accent,
+              backgroundColor: palette.accentEdge,
               alignItems: "center",
               justifyContent: "center",
               ...elevation.float,
             })}
           >
-            <Plus size={24} color={palette.accentInk} weight="regular" />
+            <View pointerEvents="none" style={{ position: "absolute", inset: 0, borderRadius: 28, overflow: "hidden" }}>
+              <Svg width="100%" height="100%"><Defs><LinearGradient id="fabGradient" x1="0" y1="0" x2="1" y2="1"><Stop offset="0" stopColor="#967aff" /><Stop offset="1" stopColor={palette.accent} /></LinearGradient></Defs><Rect width="100%" height="100%" fill="url(#fabGradient)" /></Svg>
+            </View>
+            <Plus size={25} color={palette.accentInk} weight="regular" />
           </Pressable>
+          </Animated.View>
         </View>
 
         {ABAS.slice(2).map((item) => (
@@ -180,6 +194,7 @@ export function Shell() {
 function Conteudo({ tela, onAbrirLancamento, onIrPara }: { tela: Tela; onAbrirLancamento: (id: string | null) => void; onIrPara: (tela: Tela) => void }) {
   switch (tela) {
     case "painel": return <InicioScreen onOpenTransaction={onAbrirLancamento} onNavigate={onIrPara} />;
+    case "mais": return <MaisScreen onNavigate={onIrPara} />;
     case "avisos": return <AvisosScreen onVoltar={() => onIrPara("painel")} />;
     case "assinaturas": return <AssinaturasScreen onVoltar={() => onIrPara("recorrencias")} />;
     case "assistente": return <AssistenteScreen onVoltar={() => onIrPara("painel")} />;
@@ -200,7 +215,7 @@ function Conteudo({ tela, onAbrirLancamento, onIrPara }: { tela: Tela; onAbrirLa
     case "automacoes": return <AutomacoesScreen />;
     case "capturas": return <CapturasScreen onVoltar={() => onIrPara("painel")} />;
     case "importar": return <ImportarScreen onVoltar={() => onIrPara("painel")} />;
-    case "configuracoes": return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("painel")} onNavigate={onIrPara} />;
+    case "configuracoes": return <AjustesScreen onAbrirCapturas={() => onIrPara("capturas")} onVoltar={() => onIrPara("mais")} />;
   }
 }
 
@@ -228,5 +243,5 @@ function IconeAba({ label, color, active }: { label: string; color: string; acti
   if (label === "Início") return <House {...props} />;
   if (label === "Extrato") return <Receipt {...props} />;
   if (label === "Cartões") return <CreditCard {...props} />;
-  return <Briefcase {...props} />;
+  return <SquaresFour {...props} />;
 }

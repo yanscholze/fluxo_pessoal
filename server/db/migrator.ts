@@ -36,6 +36,7 @@ import fotoDoCartao from "./migrations/0020_foto-do-cartao.sql?raw";
 import saldoAnteriorDePontos from "./migrations/0021_saldo-anterior-de-pontos.sql?raw";
 import casadorDeCaptura from "./migrations/0022_casador-de-captura.sql?raw";
 import categoriasDeEmprestimoDoCartao from "./migrations/0023_categorias-emprestimo-cartao.sql?raw";
+import checklistProjetos from "./migrations/0024_project-checklists.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -123,6 +124,7 @@ const TODO_O_SQL: readonly string[] = [
   saldoAnteriorDePontos,
   casadorDeCaptura,
   categoriasDeEmprestimoDoCartao,
+  checklistProjetos,
 ];
 
 /**
@@ -215,6 +217,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 21, name: "saldo-anterior-de-pontos", run: fromSql(saldoAnteriorDePontos) },
   { id: 22, name: "casador-de-captura", run: fromSql(casadorDeCaptura) },
   { id: 23, name: "categorias-de-emprestimo-do-cartao", run: fromSql(categoriasDeEmprestimoDoCartao) },
+  { id: 24, name: "project-checklists", run: fromSql(checklistProjetos) },
 ];
 
 let applied: Promise<void> | null = null;

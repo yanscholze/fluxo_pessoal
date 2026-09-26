@@ -208,10 +208,11 @@ async function main() {
   const setembro = faturas.find((fatura) => fatura.competence === "2026-09");
   conferir("fatura de setembro = 300 + 400 da 2ª parcela", setembro?.chargesCents, 70000);
 
-  // Mercado 1200 + Farmácia 300 + parcelamento 1200 = 2700 em três faturas.
-  conferir("dívida total do cartão", painel.position.cardDebtCents, 270000);
+  // Patrimônio deduz só cobranças já lançadas: mercado 1200, farmácia 300 e
+  // primeira parcela 400. O limite continua reservando as três parcelas.
+  conferir("dívida total do cartão", painel.position.cardDebtCents, 190000);
   conferir("limite disponível desconta parcelas futuras", cartao.availableLimitCents, 500000 - 270000);
-  conferir("patrimônio = ativos − dívida", painel.position.netWorthCents, 800000 - 270000);
+  conferir("patrimônio = ativos − dívida", painel.position.netWorthCents, 800000 - 190000);
 
   // --- Pagamento de fatura -------------------------------------------------
   const pagamento = await api("/api/v1/invoices/pay", {
@@ -226,7 +227,7 @@ async function main() {
   const cartaoDepois = painel.cards.find((item) => item.id === cartaoId);
 
   conferir("pagamento saiu da conta", painel.position.currentBalanceCents, 640000);
-  conferir("dívida caiu para as faturas seguintes", painel.position.cardDebtCents, 270000 - 160000);
+  conferir("dívida caiu para as faturas seguintes", painel.position.cardDebtCents, 190000 - 160000);
   conferir("limite voltou proporcionalmente", cartaoDepois.availableLimitCents, 500000 - 110000);
   conferir("agosto não aparece mais em atraso", cartaoDepois.overdueInvoices.filter((fatura) => fatura.competence === "2026-08").length, 0);
 

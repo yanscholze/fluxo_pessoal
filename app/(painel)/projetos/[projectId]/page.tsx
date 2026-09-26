@@ -19,7 +19,7 @@ import { GithubPanel } from "./github-panel.tsx";
 import { ProjectInfoCard } from "./project-info.tsx";
 import { StatusControl } from "./status-control.tsx";
 import { ProposalsPanel } from "./proposals-panel.tsx";
-import { TasksPanel } from "./tasks-panel.tsx";
+import { Checklist } from "./checklist.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -260,18 +260,18 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
-          <TasksPanel
+          <Checklist
             projectId={project.id}
+            groups={detalhe.groups.map((group) => ({ id: group.id, name: group.name, sortOrder: group.sortOrder }))}
             tasks={tasks.map((tarefa) => ({
               id: tarefa.id,
+              groupId: tarefa.groupId,
               title: tarefa.title,
-              details: tarefa.details,
-              kind: tarefa.kind,
-              priority: tarefa.priority,
               status: tarefa.status,
-              dueOn: tarefa.dueOn,
-              billable: tarefa.billable,
+              archivedAt: tarefa.archivedAt,
+              sortOrder: tarefa.sortOrder,
             }))}
+            entries={entries.map((entry) => ({ id: entry.id, taskId: entry.taskId, workedOn: entry.workedOn, durationMilli: entry.durationMilli, description: entry.description }))}
           />
 
           <SessionsPanel
@@ -321,4 +321,3 @@ export default async function Projeto({ params }: { params: Promise<{ projectId:
     </Page>
   );
 }
-

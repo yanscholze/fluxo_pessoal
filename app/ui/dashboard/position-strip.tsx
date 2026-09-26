@@ -10,7 +10,7 @@
 import type { Dashboard } from "../../../server/services/dashboard.ts";
 import { MetricStrip } from "../data-display.tsx";
 import { money } from "../format.ts";
-import { Coins, Landmark, PiggyBank, TrendingUp } from "../icons.tsx";
+import { Landmark, PiggyBank, TrendingDown, TrendingUp } from "../icons.tsx";
 
 export function PositionStrip({
   position,
@@ -26,32 +26,32 @@ export function PositionStrip({
       className={className}
       metrics={[
         {
-          label: "Saldo hoje",
+          label: "Saldo Total",
           value: money(position.currentBalanceCents),
           tone: position.currentBalanceCents < 0 ? "negative" : "neutral",
-          hint: "Dinheiro que existe agora nas contas de uso corrente",
+          hint: "Dinheiro disponível nas contas",
           icon: Landmark,
         },
         {
-          label: "Comprometido",
-          value: money(position.committedCents),
-          tone: position.committedCents > 0 ? "caution" : "neutral",
-          hint: "Faturas em aberto e contas previstas do ciclo",
-          icon: Coins,
-        },
-        {
-          label: "Patrimônio",
-          value: money(position.netWorthCents),
-          tone: position.netWorthCents < 0 ? "negative" : "neutral",
-          hint: `Ativos ${money(position.totalAssetsCents)} − dívidas ${money(position.cardDebtCents)}`,
-          icon: PiggyBank,
-        },
-        {
-          label: "Resultado do mês",
-          value: money(monthFlow.netCents, { signed: true }),
-          tone: monthFlow.netCents < 0 ? "negative" : "positive",
-          hint: `Entradas ${money(monthFlow.incomeCents)} · saídas ${money(monthFlow.expenseCents)}`,
+          label: "Receitas",
+          value: money(monthFlow.incomeCents),
+          tone: "positive",
+          hint: "Entradas confirmadas no mês",
           icon: TrendingUp,
+        },
+        {
+          label: "Despesas",
+          value: money(monthFlow.expenseCents),
+          tone: "negative",
+          hint: "Saídas confirmadas no mês",
+          icon: TrendingDown,
+        },
+        {
+          label: "Investimentos",
+          value: money(position.investmentsCents),
+          tone: "accent",
+          hint: "Aplicações e reservas investidas",
+          icon: PiggyBank,
         },
       ]}
     />

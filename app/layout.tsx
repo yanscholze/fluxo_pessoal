@@ -19,7 +19,6 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Fluxo", statusBarStyle: "black-translucent" },
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
       { url: "/icons/icone-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icone-512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -29,8 +28,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f0eff5" },
-    { media: "(prefers-color-scheme: dark)", color: "#161826" },
+    { media: "(prefers-color-scheme: light)", color: "#eef4fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1728" },
   ],
 };
 
@@ -45,14 +44,14 @@ const TEMA_INICIAL = `
 (function () {
   try {
     var salvo = localStorage.getItem("fluxo:tema");
-    var escuro = salvo ? salvo === "escuro" : true;
+    var escuro = salvo ? salvo === "escuro" : false;
     document.documentElement.dataset.theme = escuro ? "dark" : "light";
     var acento = localStorage.getItem("fluxo:acento");
     if (acento) document.documentElement.dataset.accent = acento;
     var fonte = localStorage.getItem("fluxo:fonte");
     if (fonte) document.documentElement.dataset.font = fonte;
   } catch (e) {
-    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.theme = "light";
   }
 })();
 `;

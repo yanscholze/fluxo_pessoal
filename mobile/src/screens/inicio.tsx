@@ -13,7 +13,7 @@ import { useConnectedSession } from "../state/session.tsx";
 import type { LocalTransaction } from "../storage/model.ts";
 import { GraficoDeLinha } from "../ui/charts.tsx";
 import { money, relativeDate } from "../ui/format.ts";
-import { IconBubble, ProfileButton } from "../ui/mockup.tsx";
+import { IconBubble, ProfileButton, ScreenGlow } from "../ui/mockup.tsx";
 import { Empty, Small, Texto } from "../ui/primitives.tsx";
 import { radius, type, usePalette } from "../ui/theme.ts";
 
@@ -43,6 +43,7 @@ export function InicioScreen({ onOpenTransaction, onNavigate }: { onOpenTransact
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <ScreenGlow height={360} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 16 }} refreshControl={<RefreshControl refreshing={sync.running || painel.carregando} onRefresh={atualizar} tintColor={palette.accent} />}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={{ flex: 1 }}><Small>Bom dia,</Small><Texto style={[type.heading, { color: palette.ink, marginTop: 1 }]}>{nomeCompleto}</Texto></View>

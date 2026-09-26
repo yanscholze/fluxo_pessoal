@@ -134,6 +134,20 @@ export const projects = sqliteTable(
   ],
 );
 
+export const projectChecklistGroups = sqliteTable(
+  "project_checklist_groups",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("project_checklist_groups_user_project_idx").on(table.userId, table.projectId)],
+);
+
 /**
  * Tarefa, pendência, suporte e melhoria — a mesma tabela, `kind` diferente.
  *
@@ -152,6 +166,8 @@ export const projectTasks = sqliteTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    groupId: text("group_id").references(() => projectChecklistGroups.id, { onDelete: "set null" }),
+    archivedAt: text("archived_at"),
     title: text("title").notNull(),
     details: text("details"),
     kind: text("kind", { enum: ["feature", "support", "improvement", "chore", "bug"] })

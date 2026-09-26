@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Fluxo
+GenericName=Finanças pessoais
+Comment=Seu dinheiro em perspectiva
+Exec=fluxo
+Icon=fluxo
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=dev.cloudfapp.fluxo

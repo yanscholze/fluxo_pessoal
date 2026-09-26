@@ -49,7 +49,7 @@ import { CardPhoto } from "../ui/card-photo.tsx";
 import { Medidor } from "../ui/charts.tsx";
 import { competence as formatCompetence, money, relativeDate } from "../ui/format.ts";
 import { Body, Card, Empty, Label, Row, Small, Texto } from "../ui/primitives.tsx";
-import { ScreenHeader } from "../ui/mockup.tsx";
+import { ScreenGlow, ScreenHeader } from "../ui/mockup.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 const { width: LARGURA_DA_TELA } = Dimensions.get("window");
@@ -65,7 +65,8 @@ const MARGEM = (LARGURA_DA_TELA - LARGURA_DA_FACE) / 2;
  * quase nada de altura. Subir demais o faria sair da tela; subir de menos
  * deixaria uma faixa morta entre ele e o conteúdo.
  */
-const ALTURA_RECOLHIDA = 132;
+const ALTURA_RECOLHIDA = 92;
+const ALTURA_DA_FACE = Math.round(LARGURA_DA_FACE / 1.69);
 
 /** Arrasto vertical que completa a abertura sozinho, mesmo sem velocidade. */
 const LIMIAR = 90;
@@ -140,9 +141,11 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
       {
         translateY: interpolate(progresso.value, [0, 1], [0, -ALTURA_RECOLHIDA], Extrapolation.CLAMP),
       },
+      { translateY: -ALTURA_DA_FACE / 2 },
       {
         rotateX: `${interpolate(progresso.value, [0, 1], [0, -78], Extrapolation.CLAMP)}deg`,
       },
+      { translateY: ALTURA_DA_FACE / 2 },
       { scale: interpolate(progresso.value, [0, 1], [1, 1.07], Extrapolation.CLAMP) },
     ],
   }));
@@ -177,12 +180,11 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <ScreenGlow height={330} />
       <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <ScreenHeader title="Cartões" subtitle="Deslize para trocar de cartão" onProfile={onAjustes} profileName={credentials.user.displayName} />
+        <ScreenHeader title="Cartões" subtitle="Arraste ← → para trocar ou ↑ para ver detalhes" onProfile={onAjustes} profileName={credentials.user.displayName} />
       </View>
-      <View style={{ position: "absolute", left: (LARGURA_DA_TELA - 420) / 2, top: -145, width: 420, height: 420, borderRadius: 210, backgroundColor: palette.accentWash, opacity: 0.68 }} />
-      <GestureDetector gesture={gesto}>
-        <Animated.View style={{ paddingTop: space.xl }}>
+      <Animated.View style={{ paddingTop: space.xl, zIndex: 3 }}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -197,14 +199,13 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
           >
             {cartoes.map((resumo, indice) => {
               const ehOEscolhido = indice === ativo;
-              return (
-                <Animated.View
+              const face = <Animated.View
                   key={resumo.card.id}
                   style={ehOEscolhido ? estiloDaFace : estiloDosVizinhos}
                 >
                   <CardFace resumo={resumo} hoje={hoje} titular={credentials.user.displayName} atenuada={!ehOEscolhido && cartoes.length > 1} />
-                </Animated.View>
-              );
+                </Animated.View>;
+              return ehOEscolhido ? <GestureDetector key={resumo.card.id} gesture={gesto}>{face}</GestureDetector> : face;
             })}
           </ScrollView>
 
@@ -239,10 +240,10 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
             que ele é aprendido.
           */}
           <Animated.View style={[{ alignItems: "center", marginTop: space.md }, estiloDosVizinhos]}>
-            <Small tone="subtle">Toque ou arraste para cima</Small>
+            <Texto style={[type.heading, { color: palette.inkSubtle, lineHeight: 18 }]}>↑</Texto>
+            <Small tone="subtle">Arraste para ver detalhes</Small>
           </Animated.View>
-        </Animated.View>
-      </GestureDetector>
+      </Animated.View>
 
       {/*
         Fechada, o conteúdo não pode interceptar toque: ele está invisível, mas
@@ -252,7 +253,7 @@ export function CarteiraScreen({ onParcelamentos, onOpenTransaction, onAjustes }
       */}
       <Animated.View
         pointerEvents={aberta ? "auto" : "none"}
-        style={[{ flex: 1, marginTop: -ALTURA_RECOLHIDA + space.xl }, estiloDoConteudo]}
+        style={[{ flex: 1, marginTop: -ALTURA_RECOLHIDA + space.xl, zIndex: 1 }, estiloDoConteudo]}
       >
         <ScrollView
           contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.md }}

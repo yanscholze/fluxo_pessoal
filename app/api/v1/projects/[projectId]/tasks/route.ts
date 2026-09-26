@@ -28,6 +28,7 @@ export const POST = handle(async (request: Request) => {
 
   const payload = {
     projectId,
+    groupId: input.optionalReference("groupId"),
     title: input.string("title", { max: 200 }),
     details: input.optionalString("details", { max: 2000 }),
     kind: input.optionalChoice("kind", NATUREZAS) ?? undefined,

@@ -53,7 +53,7 @@ export function CashflowPanel({ points }: { points: Dashboard["cashflow"] }) {
           ) : null
         }
         legend={[
-          { label: "Entradas", color: chartColor("positive") },
+          { label: "Entradas", color: chartColor("info") },
           { label: "Saídas", color: chartColor("negative") },
           { label: "Saldo projetado", color: chartColor("accent") },
         ]}
@@ -67,7 +67,7 @@ export function CashflowPanel({ points }: { points: Dashboard["cashflow"] }) {
             {
               id: "entradas",
               label: "Entradas",
-              color: chartColor("positive"),
+              color: chartColor("info"),
               values: points.map((point) => point.inflowCents),
             },
             {

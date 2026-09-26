@@ -20,7 +20,7 @@ import {
 } from "react-native";
 
 import { familiaDoPeso } from "./fonts.ts";
-import { radius, space, type, usePalette } from "./theme.ts";
+import { radius, space, type, useIsDark, usePalette } from "./theme.ts";
 
 /**
  * Todo texto do aplicativo passa por aqui.
@@ -37,6 +37,7 @@ export function Texto({ style, ...rest }: TextProps) {
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const palette = usePalette();
+  const isDark = useIsDark();
   return (
     <View
       style={[
@@ -46,6 +47,11 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
           borderWidth: 1,
           borderColor: palette.line,
           padding: space.lg,
+          elevation: 2,
+          shadowColor: isDark ? "#000000" : "#374969",
+          shadowOpacity: isDark ? .18 : .06,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
         },
         style,
       ]}

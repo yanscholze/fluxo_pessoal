@@ -33,6 +33,7 @@ export {
   ChevronsLeft,
   CircleAlert,
   CircleCheck,
+  CircleHelp,
   CirclePlus,
   ChevronsUpDown,
   Clock,

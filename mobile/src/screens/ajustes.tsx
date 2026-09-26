@@ -8,10 +8,9 @@
 
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { CaretLeft, CaretRight, CirclesFour, Robot, Wallet, Wrench } from "phosphor-react-native";
+import { CaretLeft, Moon, Sun } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { Tela } from "../shell.tsx";
 import { appVersion, deviceName } from "../device.ts";
 import { isBridgeAvailable, openListenerSettings } from "../notifications/bridge.ts";
 import { useLedger } from "../state/ledger.tsx";
@@ -22,14 +21,12 @@ import { radius, space, type, useAppearance, usePalette, type AccentId } from ".
 export function AjustesScreen({
   onAbrirCapturas,
   onVoltar,
-  onNavigate,
 }: {
   onAbrirCapturas: () => void;
   onVoltar: () => void;
-  onNavigate: (tela: Tela) => void;
 }) {
   const palette = usePalette();
-  const { accentId, setAccentId, accents } = useAppearance();
+  const { accentId, setAccentId, accents, themeId, setThemeId } = useAppearance();
   const { state, disconnect } = useSession();
   const { sync, conflicts, synchronize, resolveConflict } = useLedger();
   const [desconectando, setDesconectando] = useState(false);
@@ -56,20 +53,18 @@ export function AjustesScreen({
           </View>
         </Card>
 
-        <Grupo titulo="Fluxo">
-          <LinhaDeAjuste icon={<Robot size={19} color={palette.accent} />} label="TARS" onPress={() => onNavigate("assistente")} />
-          <LinhaDeAjuste icon={<Wallet size={19} color={palette.accent} />} label="Contas e visão geral" onPress={() => onNavigate("contas")} />
-          <LinhaDeAjuste icon={<CirclesFour size={19} color={palette.accent} />} label="Planejamento financeiro" onPress={() => onNavigate("recorrencias")} />
-          <LinhaDeAjuste icon={<Wrench size={19} color={palette.accent} />} label="Ferramentas e relatórios" onPress={() => onNavigate("relatorios")} ultimo />
-        </Grupo>
-
-        <Grupo titulo="Mais recursos">
-          <LinhaDeAjuste label="Assinaturas" onPress={() => onNavigate("assinaturas")} />
-          <LinhaDeAjuste label="Orçamentos" onPress={() => onNavigate("orcamentos")} />
-          <LinhaDeAjuste label="Patrimônio, metas e investimentos" onPress={() => onNavigate("patrimonio")} />
-          <LinhaDeAjuste label="Viagens" onPress={() => onNavigate("viagens")} />
-          <LinhaDeAjuste label="Automações e importações" onPress={() => onNavigate("automacoes")} ultimo />
-        </Grupo>
+        <Card>
+          <Label>Modo de exibição</Label>
+          <Body muted style={{ marginTop: space.sm }}>A mesma linguagem visual do Fluxo em claro ou escuro.</Body>
+          <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.md }}>
+            {(["light", "dark"] as const).map((mode) => (
+              <Pressable key={mode} accessibilityRole="radio" accessibilityState={{ checked: themeId === mode }} onPress={() => setThemeId(mode)} style={({ pressed }) => ({ flex: 1, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderRadius: radius.md, borderColor: themeId === mode ? palette.accent : palette.line, backgroundColor: themeId === mode ? palette.accentWash : palette.surfaceSunken, opacity: pressed ? .7 : 1 })}>
+                {mode === "light" ? <Sun size={19} color={themeId === mode ? palette.accent : palette.inkMuted} /> : <Moon size={19} color={themeId === mode ? palette.accent : palette.inkMuted} />}
+                <Body strong style={{ color: themeId === mode ? palette.accent : palette.ink }}>{mode === "light" ? "Claro" : "Escuro"}</Body>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
 
         <Card>
           <Label>Cor principal</Label>
@@ -261,16 +256,6 @@ export function AjustesScreen({
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  const palette = usePalette();
-  return <View><Label style={{ marginLeft: 4, marginBottom: 7 }}>{titulo}</Label><View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, overflow: "hidden" }}>{children}</View></View>;
-}
-
-function LinhaDeAjuste({ icon, label, onPress, ultimo }: { icon?: React.ReactNode; label: string; onPress: () => void; ultimo?: boolean }) {
-  const palette = usePalette();
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ minHeight: 54, flexDirection: "row", alignItems: "center", gap: 11, marginLeft: 14, paddingRight: 14, borderBottomWidth: ultimo ? 0 : 1, borderBottomColor: palette.line, backgroundColor: pressed ? palette.surfaceRaised : "transparent" })}>{icon ?? <View style={{ width: 19 }} />}<Body style={{ flex: 1 }}>{label}</Body><CaretRight size={16} color={palette.inkSubtle} /></Pressable>;
 }
 
 function iniciais(nome?: string): string { return nome?.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0]?.toUpperCase()).join("") || "F"; }

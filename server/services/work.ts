@@ -17,6 +17,7 @@ import { type Cents, cents } from "../../core/kernel/money.ts";
 import { newId } from "../../core/kernel/id.ts";
 import { type Activity, toActivity } from "../../core/domain/work/activity.ts";
 import { isOpenStatus } from "../../core/domain/work/status.ts";
+import { checklistProgress } from "../../core/domain/work/checklist.ts";
 
 /** Fases em que o trabalho está acontecendo — ou seja, ainda não foi entregue. */
 const VOLTOU_AO_TRABALHO: readonly string[] = ["active", "testing", "adjustments"];
@@ -39,6 +40,7 @@ import { getDatabase } from "../db/client.ts";
 import {
   clients,
   projectPayments,
+  projectChecklistGroups,
   projectTasks,
   projects,
   proposals,
@@ -53,6 +55,7 @@ import {
   type TimeEntryRow,
   findProject,
   listClients,
+  listChecklistGroups,
   listDeployments,
   listEvents,
   listPayments,
@@ -166,6 +169,7 @@ export type ProjectInput = {
   readonly credentialsHint?: string | null;
   readonly notes?: string | null;
   readonly color?: string | null;
+  readonly checklist?: readonly { readonly name: string; readonly tasks: readonly string[] }[];
 };
 
 export async function createProject(
@@ -188,9 +192,8 @@ export async function createProject(
   }
 
   const id = newId(now.getTime());
-  await getDatabase()
-    .insert(projects)
-    .values({
+  const database = getDatabase();
+  const statements = [database.insert(projects).values({
       id,
       userId,
       clientId: input.clientId ?? null,
@@ -213,7 +216,16 @@ export async function createProject(
       credentialsHint: input.credentialsHint ?? null,
       notes: input.notes ?? null,
       ...(input.color ? { color: input.color } : {}),
-    });
+    })];
+  for (const [groupIndex, group] of (input.checklist ?? []).entries()) {
+    const groupId = newId(now.getTime() + groupIndex + 1);
+    statements.push(database.insert(projectChecklistGroups).values({ id: groupId, userId, projectId: id, name: group.name.trim(), sortOrder: groupIndex }) as never);
+    for (const [taskIndex, title] of group.tasks.entries()) {
+      if (!title.trim()) continue;
+      statements.push(database.insert(projectTasks).values({ id: newId(now.getTime() + 100 + groupIndex * 100 + taskIndex), userId, projectId: id, groupId, title: title.trim(), kind: "chore", billable: false, sortOrder: taskIndex }) as never);
+    }
+  }
+  await database.batch(statements as never);
 
   await recordEvent({
     id: newId(now.getTime()),
@@ -340,6 +352,8 @@ export async function updateProjectStatus(
 
 export type TaskInput = {
   readonly projectId: string;
+  readonly groupId?: string | null;
+  readonly sortOrder?: number;
   readonly title: string;
   readonly details?: string | null;
   readonly kind?: "feature" | "support" | "improvement" | "chore" | "bug";
@@ -356,6 +370,11 @@ export async function createTask(
 ): Promise<string> {
   const projeto = await findProject(userId, input.projectId);
   if (!projeto) throw notFound("Projeto", input.projectId);
+  if (input.groupId) {
+    const [grupo] = await getDatabase().select({ id: projectChecklistGroups.id }).from(projectChecklistGroups)
+      .where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.projectId, input.projectId), eq(projectChecklistGroups.id, input.groupId))).limit(1);
+    if (!grupo) throw notFound("Etapa", input.groupId);
+  }
 
   const titulo = input.title.trim();
   if (!titulo) {
@@ -373,6 +392,7 @@ export async function createTask(
       id,
       userId,
       projectId: input.projectId,
+      groupId: input.groupId ?? null,
       title: titulo,
       details: input.details ?? null,
       kind: input.kind ?? "feature",
@@ -382,10 +402,57 @@ export async function createTask(
       // Suporte nasce não cobrável: consertar o que deveria funcionar
       // normalmente não se cobra, e o padrão certo é o que quase sempre vale.
       billable: input.billable ?? input.kind !== "support",
-      sortOrder: existentes.length,
+      sortOrder: input.sortOrder ?? existentes.length,
     });
 
   return id;
+}
+
+export async function createChecklistGroup(userId: string, projectId: string, name: string, sortOrder?: number, now = new Date()): Promise<string> {
+  if (!await findProject(userId, projectId)) throw notFound("Projeto", projectId);
+  const clean = name.trim();
+  if (!clean) throw validationError("Informe o nome da etapa", [{ path: "name", message: "O nome é obrigatório" }]);
+  const groups = await listChecklistGroups(userId, projectId);
+  const id = newId(now.getTime());
+  await getDatabase().insert(projectChecklistGroups).values({ id, userId, projectId, name: clean, sortOrder: sortOrder ?? groups.length, updatedAt: now.toISOString() });
+  return id;
+}
+
+export async function updateChecklistGroup(userId: string, groupId: string, patch: { name?: string; sortOrder?: number }, now = new Date()): Promise<void> {
+  const clean = patch.name?.trim();
+  if (patch.name !== undefined && !clean) throw validationError("Informe o nome da etapa", [{ path: "name", message: "O nome é obrigatório" }]);
+  const result = await getDatabase().update(projectChecklistGroups).set({ ...(clean ? { name: clean } : {}), ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}), updatedAt: now.toISOString() })
+    .where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.id, groupId)));
+  if (!result.meta.changes) throw notFound("Etapa", groupId);
+}
+
+/** Ao remover uma etapa seus itens permanecem no checklist sem etapa. */
+export async function removeChecklistGroup(userId: string, groupId: string): Promise<void> {
+  const database = getDatabase();
+  const [group] = await database.select().from(projectChecklistGroups).where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.id, groupId))).limit(1);
+  if (!group) throw notFound("Etapa", groupId);
+  await database.update(projectTasks).set({ groupId: null }).where(and(eq(projectTasks.userId, userId), eq(projectTasks.groupId, groupId)));
+  await database.delete(projectChecklistGroups).where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.id, groupId)));
+}
+
+export async function updateChecklistTask(userId: string, taskId: string, patch: { title?: string; groupId?: string | null; sortOrder?: number }, now = new Date()): Promise<void> {
+  const database = getDatabase();
+  const [task] = await database.select().from(projectTasks).where(and(eq(projectTasks.userId, userId), eq(projectTasks.id, taskId), isNull(projectTasks.archivedAt))).limit(1);
+  if (!task) throw notFound("Tarefa", taskId);
+  if (patch.groupId) {
+    const [group] = await database.select({ id: projectChecklistGroups.id }).from(projectChecklistGroups)
+      .where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.projectId, task.projectId), eq(projectChecklistGroups.id, patch.groupId))).limit(1);
+    if (!group) throw notFound("Etapa", patch.groupId);
+  }
+  if (patch.title !== undefined && !patch.title.trim()) throw validationError("Informe o nome da tarefa", [{ path: "title", message: "O nome é obrigatório" }]);
+  await database.update(projectTasks).set({ ...(patch.title !== undefined ? { title: patch.title.trim() } : {}), ...(patch.groupId !== undefined ? { groupId: patch.groupId } : {}), ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}), updatedAt: now.toISOString() }).where(and(eq(projectTasks.userId, userId), eq(projectTasks.id, taskId)));
+}
+
+/** Arquivo tarefas para preservar a relação e o histórico de horas. */
+export async function archiveChecklistTask(userId: string, taskId: string, now = new Date()): Promise<void> {
+  const result = await getDatabase().update(projectTasks).set({ archivedAt: now.toISOString(), updatedAt: now.toISOString() })
+    .where(and(eq(projectTasks.userId, userId), eq(projectTasks.id, taskId), isNull(projectTasks.archivedAt)));
+  if (!result.meta.changes) throw notFound("Tarefa", taskId);
 }
 
 export async function setTaskStatus(
@@ -418,6 +485,7 @@ export async function setTaskStatus(
 export type TimeEntryInput = {
   readonly projectId: string;
   readonly taskId?: string | null;
+  readonly completeTask?: boolean;
   readonly workedOn: LocalDate;
   readonly duration: Milli;
   readonly description: string;
@@ -432,6 +500,12 @@ export async function logTime(
 ): Promise<string> {
   const projeto = await findProject(userId, input.projectId);
   if (!projeto) throw notFound("Projeto", input.projectId);
+  if (input.taskId) {
+    const [task] = await getDatabase().select({ id: projectTasks.id }).from(projectTasks)
+      .where(and(eq(projectTasks.userId, userId), eq(projectTasks.projectId, input.projectId), eq(projectTasks.id, input.taskId), isNull(projectTasks.archivedAt))).limit(1);
+    if (!task) throw validationError("A tarefa não pertence a este projeto ou foi arquivada", [{ path: "taskId", message: "Selecione uma tarefa ativa do projeto" }]);
+  }
+  if (input.completeTask && !input.taskId) throw validationError("Selecione uma tarefa para concluir", [{ path: "taskId", message: "A conclusão precisa estar vinculada a uma tarefa" }]);
 
   const duracao = milli(input.duration);
   if (duracao === 0) {
@@ -447,9 +521,8 @@ export async function logTime(
   }
 
   const id = newId(now.getTime());
-  await getDatabase()
-    .insert(timeEntries)
-    .values({
+  const database = getDatabase();
+  const statements: unknown[] = [database.insert(timeEntries).values({
       id,
       userId,
       projectId: input.projectId,
@@ -459,7 +532,9 @@ export async function logTime(
       description: input.description.trim(),
       activity: input.activity ?? "development",
       billable: input.billable ?? true,
-    });
+    })];
+  if (input.completeTask && input.taskId) statements.push(database.update(projectTasks).set({ status: "done", completedAt: now.toISOString(), updatedAt: now.toISOString() }).where(and(eq(projectTasks.id, input.taskId), eq(projectTasks.userId, userId), eq(projectTasks.projectId, input.projectId), isNull(projectTasks.archivedAt))));
+  await database.batch(statements as never);
 
   return id;
 }
@@ -492,7 +567,7 @@ export async function updateTimeEntry(
   const database = getDatabase();
 
   const [existente] = await database
-    .select({ id: timeEntries.id })
+    .select({ id: timeEntries.id, projectId: timeEntries.projectId })
     .from(timeEntries)
     .where(and(eq(timeEntries.userId, userId), eq(timeEntries.id, entryId)))
     .limit(1);
@@ -518,7 +593,12 @@ export async function updateTimeEntry(
   if (patch.description) campos.description = patch.description.trim();
   if (patch.activity) campos.activity = patch.activity;
   if (patch.billable !== null && patch.billable !== undefined) campos.billable = patch.billable;
-  if (patch.taskId) campos.taskId = patch.taskId;
+  if (patch.taskId) {
+    const [task] = await database.select({ id: projectTasks.id }).from(projectTasks)
+      .where(and(eq(projectTasks.userId, userId), eq(projectTasks.projectId, existente.projectId), eq(projectTasks.id, patch.taskId), isNull(projectTasks.archivedAt))).limit(1);
+    if (!task) throw validationError("A tarefa não pertence a este projeto ou foi arquivada", [{ path: "taskId", message: "Selecione uma tarefa ativa do projeto" }]);
+    campos.taskId = patch.taskId;
+  }
   else if (patch.clearTask) campos.taskId = null;
 
   await database
@@ -1008,6 +1088,9 @@ export type ProjectSummary = {
   readonly dueOn: LocalDate | null;
   readonly health: ProjectHealth;
   readonly openTasks: number;
+  readonly checklistTotal: number;
+  readonly checklistCompleted: number;
+  readonly checklistPercent: number;
 };
 
 export type WorkOverview = {
@@ -1050,6 +1133,7 @@ export async function buildWorkOverview(userId: string, now: Date = new Date()):
     const doProjeto = parcelas.filter((parcela) => parcela.projectId === projeto.id);
     const sessoes = horas.filter((sessao) => sessao.projectId === projeto.id);
 
+    const checklist = checklistProgress(tarefas.filter((tarefa) => tarefa.projectId === projeto.id));
     return {
       id: projeto.id,
       name: projeto.name,
@@ -1071,6 +1155,9 @@ export async function buildWorkOverview(userId: string, now: Date = new Date()):
       openTasks: tarefas.filter(
         (tarefa) => tarefa.projectId === projeto.id && tarefa.status !== "done",
       ).length,
+      checklistTotal: checklist.total,
+      checklistCompleted: checklist.completed,
+      checklistPercent: checklist.percent,
     } satisfies ProjectSummary;
   });
 
@@ -1104,6 +1191,7 @@ export type ProjectDetail = {
   readonly clientName: string | null;
   readonly health: ProjectHealth;
   readonly tasks: Awaited<ReturnType<typeof listTasks>>;
+  readonly groups: Awaited<ReturnType<typeof listChecklistGroups>>;
   readonly entries: Awaited<ReturnType<typeof listTimeEntries>>;
   readonly payments: Awaited<ReturnType<typeof listPayments>>;
   readonly proposals: Awaited<ReturnType<typeof listProposals>>;
@@ -1121,8 +1209,9 @@ export async function buildProjectDetail(
   if (!projeto) throw notFound("Projeto", projectId);
 
   const today = todayIn(now);
-  const [tasks, entries, payments, propostas, deployments, events, listaClientes, documents] = await Promise.all([
-    listTasks(userId, projectId),
+  const [tasks, groups, entries, payments, propostas, deployments, events, listaClientes, documents] = await Promise.all([
+    listTasks(userId, projectId, true),
+    listChecklistGroups(userId, projectId),
     listTimeEntries(userId, projectId),
     listPayments(userId, projectId),
     listProposals(userId, projectId),
@@ -1149,6 +1238,7 @@ export async function buildProjectDetail(
       today,
     }),
     tasks,
+    groups,
     entries,
     payments,
     proposals: propostas,

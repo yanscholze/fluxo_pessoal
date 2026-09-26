@@ -393,6 +393,46 @@ describe("tarefas", () => {
       /Projeto/,
     );
   });
+
+  it("vincula horas apenas a tarefas do projeto e pode concluí-la junto do registro", async () => {
+    const { createTask, logTime, buildProjectDetail } = await import("./work.ts");
+    const alvo = await ambiente();
+    const { projetoId } = await projetoComCliente(alvo.userId);
+    const outroProjeto = await (await import("./work.ts")).createProject(alvo.userId, { name: "Outro" }, AGORA);
+    const outraTarefa = await createTask(alvo.userId, { projectId: outroProjeto, title: "Outra tarefa" }, AGORA);
+    await assert.rejects(() => logTime(alvo.userId, { projectId: projetoId, taskId: outraTarefa, workedOn: localDate("2026-08-19"), duration: fromHours(1), description: "Vínculo inválido" }, AGORA), /não pertence/);
+
+    const taskId = await createTask(alvo.userId, { projectId: projetoId, title: "Revisão" }, AGORA);
+    await logTime(alvo.userId, { projectId: projetoId, taskId, completeTask: true, workedOn: localDate("2026-08-19"), duration: fromHours(1), description: "Revisão final" }, AGORA);
+    const detail = await buildProjectDetail(alvo.userId, projetoId, AGORA);
+    assert.equal(detail.tasks.find((task) => task.id === taskId)?.status, "done");
+    assert.equal(detail.entries.find((entry) => entry.description === "Revisão final")?.taskId, taskId);
+  });
+
+  it("arquiva o item sem apagar nem desvincular o histórico de horas", async () => {
+    const { createTask, logTime, archiveChecklistTask, buildProjectDetail } = await import("./work.ts");
+    const alvo = await ambiente();
+    const { projetoId } = await projetoComCliente(alvo.userId);
+    const taskId = await createTask(alvo.userId, { projectId: projetoId, title: "Item concluído" }, AGORA);
+    await logTime(alvo.userId, { projectId: projetoId, taskId, workedOn: localDate("2026-08-19"), duration: fromHours(1), description: "Histórico" }, AGORA);
+    await archiveChecklistTask(alvo.userId, taskId, AGORA);
+    const detail = await buildProjectDetail(alvo.userId, projetoId, AGORA);
+    assert.ok(detail.tasks.find((task) => task.id === taskId)?.archivedAt);
+    assert.equal(detail.entries[0]?.taskId, taskId);
+  });
+
+  it("remove etapa mantendo itens e calculando o progresso com itens sem etapa", async () => {
+    const { createChecklistGroup, createTask, removeChecklistGroup, setTaskStatus, buildProjectDetail } = await import("./work.ts");
+    const alvo = await ambiente();
+    const { projetoId } = await projetoComCliente(alvo.userId);
+    const groupId = await createChecklistGroup(alvo.userId, projetoId, "Validação", 0, AGORA);
+    const taskId = await createTask(alvo.userId, { projectId: projetoId, groupId, title: "Testar fluxo" }, AGORA);
+    await setTaskStatus(alvo.userId, taskId, "done", AGORA);
+    await removeChecklistGroup(alvo.userId, groupId);
+    const detail = await buildProjectDetail(alvo.userId, projetoId, AGORA);
+    assert.equal(detail.tasks.find((task) => task.id === taskId)?.groupId, null);
+    assert.equal(detail.groups.some((group) => group.id === groupId), false);
+  });
 });
 
 describe("propostas", () => {

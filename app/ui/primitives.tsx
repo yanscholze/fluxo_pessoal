@@ -94,9 +94,9 @@ export function Panel({
    * template — as curvas ficam paralelas em vez de aninhadas.
    */
   const superficie = {
-    plain: "rounded-panel bg-surface border border-line shadow-panel",
+    plain: "fluxo-panel rounded-panel bg-surface border border-line shadow-panel",
     inset: "rounded-nested bg-surface-sunken border border-line",
-    raised: "rounded-panel bg-surface-raised border border-line-strong shadow-float",
+    raised: "fluxo-panel rounded-panel bg-surface-raised border border-line-strong shadow-float",
     bare: "",
   }[variant];
 

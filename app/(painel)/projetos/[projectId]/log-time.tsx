@@ -46,6 +46,8 @@ export function TimeEntryForm({
   projectId,
   tasks,
   sessao = null,
+  completarTarefa = false,
+  initialTaskId = "",
 }: {
   open: boolean;
   onClose: () => void;
@@ -53,6 +55,8 @@ export function TimeEntryForm({
   tasks: readonly { id: string; title: string }[];
   /** Preenchida, o formulário corrige; nula, registra uma nova. */
   sessao?: Sessao | null;
+  completarTarefa?: boolean;
+  initialTaskId?: string;
 }) {
   const router = useRouter();
   const [enviando, setEnviando] = useState(false);
@@ -65,8 +69,9 @@ export function TimeEntryForm({
   );
   const [descricao, setDescricao] = useState(sessao?.description ?? "");
   const [categoria, setCategoria] = useState<Activity>((sessao?.activity as Activity) ?? "development");
-  const [tarefa, setTarefa] = useState(sessao?.taskId ?? "");
+  const [tarefa, setTarefa] = useState(sessao?.taskId ?? initialTaskId);
   const [cobravel, setCobravel] = useState(sessao?.billable ?? true);
+  const [concluir, setConcluir] = useState(completarTarefa);
 
   const editando = sessao !== null;
 
@@ -88,6 +93,7 @@ export function TimeEntryForm({
           // indistinguível de ausente quando o JSON chega como booleano.
           billable: editando ? String(cobravel) : cobravel,
           ...(tarefa ? { taskId: tarefa } : editando ? { taskId: "" } : {}),
+          ...(!editando && tarefa && concluir ? { completeTask: true } : {}),
         }),
       },
     );
@@ -209,6 +215,8 @@ export function TimeEntryForm({
           </Field>
         ) : null}
 
+        {!editando && tarefa ? <Checkbox checked={concluir} onChange={(evento) => setConcluir(evento.target.checked)} label="Concluir esta tarefa ao registrar" hint="O registro de horas e a conclusão são salvos juntos." /> : null}
+
         <Checkbox
           checked={cobravel}
           onChange={(evento) => setCobravel(evento.target.checked)}
@@ -225,9 +233,11 @@ export function TimeEntryForm({
 export function LogTime({
   projectId,
   tasks,
+  initialTaskId = "",
 }: {
   projectId: string;
   tasks: readonly { id: string; title: string }[];
+  initialTaskId?: string;
 }) {
   const [aberto, setAberto] = useState(false);
 
@@ -238,10 +248,12 @@ export function LogTime({
       </Button>
 
       <TimeEntryForm
+        key={`${aberto}-${initialTaskId}`}
         open={aberto}
         onClose={() => setAberto(false)}
         projectId={projectId}
         tasks={tasks}
+        initialTaskId={initialTaskId}
       />
     </>
   );

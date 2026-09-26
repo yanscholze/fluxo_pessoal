@@ -28,6 +28,7 @@ export const POST = handle(async (request: Request) => {
   const payload = {
     projectId,
     taskId: input.optionalReference("taskId"),
+    completeTask: input.boolean("completeTask", false),
     workedOn: input.date("workedOn"),
     duration: fromMinutes(input.integer("minutes", { min: 1, max: MAX_MINUTOS })),
     description: input.string("description", { max: 300 }),

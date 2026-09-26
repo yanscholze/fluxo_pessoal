@@ -25,8 +25,9 @@ import { radius, space, type, usePalette } from "./theme.ts";
 /** Altura da área de plotagem das barras. Cabe sem empurrar o cartão. */
 const ALTURA = 92;
 
-export function GraficoDeLinha({ valores, altura = 112 }: { valores: readonly number[]; altura?: number }) {
+export function GraficoDeLinha({ valores, altura = 112, cor }: { valores: readonly number[]; altura?: number; cor?: string }) {
   const palette = usePalette();
+  const tinta = cor ?? palette.accent;
   const largura = 320;
   const base = altura - 10;
   const serie = valores.length > 1 ? valores : [0, 0];
@@ -45,12 +46,12 @@ export function GraficoDeLinha({ valores, altura = 112 }: { valores: readonly nu
       <Svg width="100%" height="100%" viewBox={`0 0 ${largura} ${altura}`} preserveAspectRatio="none">
         <Defs>
           <LinearGradient id="fluxoArea" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={palette.accent} stopOpacity={0.28} />
-            <Stop offset="1" stopColor={palette.accent} stopOpacity={0} />
+            <Stop offset="0" stopColor={tinta} stopOpacity={0.28} />
+            <Stop offset="1" stopColor={tinta} stopOpacity={0} />
           </LinearGradient>
         </Defs>
         <Path d={area} fill="url(#fluxoArea)" />
-        <Path d={linha} fill="none" stroke={palette.accent} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={linha} fill="none" stroke={tinta} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     </View>
   );

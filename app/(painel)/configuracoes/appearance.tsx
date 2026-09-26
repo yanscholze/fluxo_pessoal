@@ -37,13 +37,14 @@ const ACENTOS = [
  * continua na fonte escolhida; a coluna de valores continua alinhada.
  */
 const FONTES = [
-  { valor: "figtree", nome: "Figtree", nota: "Padrão · humanista", tabular: true },
+  { valor: "inter", nome: "Inter", nota: "Padrão da nova identidade", tabular: true },
+  { valor: "figtree", nome: "Figtree", nota: "Humanista", tabular: true },
   { valor: "montserrat", nome: "Montserrat", nota: "Geométrica · sóbria", tabular: true },
   { valor: "poppins", nome: "Poppins", nota: "Geométrica · arredondada", tabular: false },
   { valor: "comfortaa", nome: "Comfortaa", nota: "Muito arredondada", tabular: false },
 ] as const;
 
-const FONTE_PADRAO = "figtree";
+const FONTE_PADRAO = "inter";
 
 type Tema = "claro" | "escuro";
 
@@ -52,7 +53,7 @@ export function Appearance() {
   // são leitores dela, não uma segunda cópia do estado.
   const tema = usePreferencia<Tema>(
     (raiz) => (raiz.dataset.theme === "dark" ? "escuro" : "claro"),
-    "escuro",
+    "claro",
   );
   const acento = usePreferencia((raiz) => raiz.dataset.accent ?? PADRAO, PADRAO);
   const fonte = usePreferencia((raiz) => raiz.dataset.font ?? FONTE_PADRAO, FONTE_PADRAO);

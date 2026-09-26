@@ -15,6 +15,7 @@ import {
   projectEvents,
   projectPayments,
   projectTasks,
+  projectChecklistGroups,
   projects,
   proposals,
   timeEntries,
@@ -23,6 +24,7 @@ import {
 export type ClientRow = typeof clients.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type TaskRow = typeof projectTasks.$inferSelect;
+export type ChecklistGroupRow = typeof projectChecklistGroups.$inferSelect;
 export type TimeEntryRow = typeof timeEntries.$inferSelect;
 export type PaymentRow = typeof projectPayments.$inferSelect;
 export type ProposalRow = typeof proposals.$inferSelect;
@@ -83,13 +85,20 @@ export async function findProject(userId: string, projectId: string): Promise<Pr
 // vez de uma por projeto.
 // ---------------------------------------------------------------------------
 
-export async function listTasks(userId: string, projectId?: string): Promise<TaskRow[]> {
+export async function listTasks(userId: string, projectId?: string, includeArchived = false): Promise<TaskRow[]> {
   const database = getDatabase();
-  const condicao = projectId
+  const escopo = projectId
     ? and(eq(projectTasks.userId, userId), eq(projectTasks.projectId, projectId))
     : eq(projectTasks.userId, userId);
+  const condicao = includeArchived ? escopo : and(escopo, isNull(projectTasks.archivedAt));
 
   return database.select().from(projectTasks).where(condicao).orderBy(projectTasks.sortOrder);
+}
+
+export async function listChecklistGroups(userId: string, projectId: string): Promise<ChecklistGroupRow[]> {
+  return getDatabase().select().from(projectChecklistGroups)
+    .where(and(eq(projectChecklistGroups.userId, userId), eq(projectChecklistGroups.projectId, projectId)))
+    .orderBy(projectChecklistGroups.sortOrder);
 }
 
 export async function listTimeEntries(userId: string, projectId?: string): Promise<TimeEntryRow[]> {

@@ -56,9 +56,13 @@ function rotuloDaDuracao(minutos: number): string {
 export function HorasScreen({
   projeto,
   onClose,
+  tasks = [],
+  initialTaskId,
 }: {
   projeto: ProjetoView;
   onClose: () => void;
+  tasks?: readonly { id: string; title: string }[];
+  initialTaskId?: string;
 }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
@@ -67,6 +71,8 @@ export function HorasScreen({
   const [descricao, setDescricao] = useState("");
   const [atividade, setAtividade] = useState<string>("development");
   const [faturavel, setFaturavel] = useState(true);
+  const [taskId, setTaskId] = useState(initialTaskId ?? "");
+  const [concluir, setConcluir] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [pronto, setPronto] = useState(false);
@@ -97,6 +103,7 @@ export function HorasScreen({
           description: descricao.trim(),
           activity: atividade,
           billable: faturavel,
+          ...(taskId ? { taskId, completeTask: concluir } : {}),
         },
       });
       setPronto(true);
@@ -202,6 +209,15 @@ export function HorasScreen({
             ]}
           />
         </Card>
+
+        {tasks.length ? <Card>
+          <Label style={{ marginBottom: space.xs }}>Tarefa (opcional)</Label>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+            <Pressable onPress={() => setTaskId("")} style={{ padding: 8, borderRadius: radius.pill, backgroundColor: taskId ? palette.surfaceInset : palette.accent }}><Small tone={taskId ? "muted" : "inverse"}>Sem tarefa</Small></Pressable>
+            {tasks.map((task) => <Pressable key={task.id} onPress={() => setTaskId(task.id)} style={{ padding: 8, borderRadius: radius.pill, backgroundColor: taskId === task.id ? palette.accent : palette.surfaceInset }}><Small tone={taskId === task.id ? "inverse" : "muted"}>{task.title}</Small></Pressable>)}
+          </View>
+          {taskId ? <Pressable onPress={() => setConcluir((value) => !value)} style={{ flexDirection: "row", gap: 8, marginTop: 12 }}><Texto style={{ color: palette.accent }}>{concluir ? "☑" : "□"}</Texto><Small>Concluir a tarefa ao registrar</Small></Pressable> : null}
+        </Card> : null}
 
         <Card>
           <Label style={{ marginBottom: space.xs }}>O que foi feito</Label>

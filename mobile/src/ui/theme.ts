@@ -10,6 +10,7 @@ import {
 } from "react";
 
 export type AccentId = "blurple" | "azul" | "verde" | "coral";
+export type ThemeId = "light" | "dark";
 
 export type Palette = {
   readonly canvas: string;
@@ -38,57 +39,89 @@ export type Palette = {
 };
 
 const ACCENTS: Record<AccentId, { base: string; wash: string; edge: string; soft: string }> = {
-  blurple: { base: "#7c5cfc", wash: "#201942", edge: "#4936a1", soft: "#b9a9ff" },
-  azul: { base: "#3b82f6", wash: "#101f3d", edge: "#2455a5", soft: "#9cc3ff" },
-  verde: { base: "#22c55e", wash: "#102c1c", edge: "#187e40", soft: "#8ce2aa" },
+  blurple: { base: "#7c3aed", wash: "#2b1c4a", edge: "#6436ae", soft: "#b9a9ff" },
+  azul: { base: "#4f8cff", wash: "#101f3d", edge: "#2455a5", soft: "#9cc3ff" },
+  verde: { base: "#10b981", wash: "#102c1c", edge: "#187e40", soft: "#8ce2aa" },
   coral: { base: "#f43f5e", wash: "#35131c", edge: "#9b2639", soft: "#ffa0b0" },
 };
 
-const makePalette = (accentId: AccentId): Palette => {
+const makePalette = (accentId: AccentId, themeId: ThemeId): Palette => {
   const accent = ACCENTS[accentId];
+  if (themeId === "light") return {
+    canvas: "#eef4fb",
+    surface: "#ffffff",
+    surfaceRaised: "#ffffff",
+    surfaceSunken: "#f8fbff",
+    surfaceInset: "#f5f8fc",
+    line: "#dce4ee",
+    lineStrong: "#c9d4e2",
+    ink: "#111827",
+    inkMuted: "#6b7280",
+    inkSubtle: "#798698",
+    accent: accent.base,
+    accentInk: "#ffffff",
+    accentWash: `${accent.base}1c`,
+    accentEdge: `${accent.base}55`,
+    positive: "#10b981",
+    positiveWash: "#e4f8f1",
+    negative: "#f43f5e",
+    negativeWash: "#fff0f3",
+    caution: "#f59e0b",
+    cautionWash: "#fff5df",
+    info: "#4f8cff",
+    infoWash: "#eaf2ff",
+    viz: ["#4f8cff", "#f43f5e", "#8b5cf6", "#f59e0b", "#10b981", "#22d3ee", "#6366f1", "#64748b"],
+  };
   return {
-    canvas: "#0a0a0f",
-    surface: "#12121a",
-    surfaceRaised: "#171722",
-    surfaceSunken: "#0d0d14",
-    surfaceInset: "#1a1a28",
-    line: "#1e1e30",
-    lineStrong: "#303047",
-    ink: "#f0f0f8",
-    inkMuted: "#b0b0c8",
-    inkSubtle: "#6b6b88",
+    canvas: "#0f1728",
+    surface: "#131f34",
+    surfaceRaised: "#17243a",
+    surfaceSunken: "#111b2e",
+    surfaceInset: "#1d2d49",
+    line: "#29384e",
+    lineStrong: "#3a4b63",
+    ink: "#f8fafc",
+    inkMuted: "#94a3b8",
+    inkSubtle: "#8292a8",
     accent: accent.base,
     accentInk: "#ffffff",
     accentWash: accent.wash,
     accentEdge: accent.edge,
-    positive: "#22c55e",
+    positive: "#10b981",
     positiveWash: "#102c1c",
-    negative: "#f43f5e",
+    negative: "#fb7185",
     negativeWash: "#35131c",
     caution: "#f59e0b",
     cautionWash: "#35250b",
     info: accent.base,
     infoWash: accent.wash,
-    viz: [accent.base, "#22c55e", "#f43f5e", "#f59e0b", "#3b82f6", "#a855f7", "#14b8a6", "#6b6b88"],
+    viz: ["#60a5fa", "#fb7185", "#a78bfa", "#fbbf24", "#34d399", "#22d3ee", "#818cf8", "#94a3b8"],
   };
 };
 
 type AppearanceContextValue = {
   readonly accentId: AccentId;
   readonly setAccentId: (accent: AccentId) => void;
+  readonly themeId: ThemeId;
+  readonly setThemeId: (theme: ThemeId) => void;
   readonly accents: typeof ACCENTS;
   readonly palette: Palette;
 };
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null);
 const ACCENT_STORAGE_KEY = "fluxo.appearance.accent";
+const THEME_STORAGE_KEY = "fluxo.appearance.theme";
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [accentId, setAccentState] = useState<AccentId>("blurple");
+  const [themeId, setThemeState] = useState<ThemeId>("light");
 
   useEffect(() => {
     void SecureStore.getItemAsync(ACCENT_STORAGE_KEY).then((saved) => {
       if (saved && saved in ACCENTS) setAccentState(saved as AccentId);
+    });
+    void SecureStore.getItemAsync(THEME_STORAGE_KEY).then((saved) => {
+      if (saved === "light" || saved === "dark") setThemeState(saved);
     });
   }, []);
 
@@ -96,10 +129,14 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     setAccentState(accent);
     void SecureStore.setItemAsync(ACCENT_STORAGE_KEY, accent);
   };
+  const setThemeId = (theme: ThemeId) => {
+    setThemeState(theme);
+    void SecureStore.setItemAsync(THEME_STORAGE_KEY, theme);
+  };
 
   const value = useMemo(
-    () => ({ accentId, setAccentId, accents: ACCENTS, palette: makePalette(accentId) }),
-    [accentId],
+    () => ({ accentId, setAccentId, themeId, setThemeId, accents: ACCENTS, palette: makePalette(accentId, themeId) }),
+    [accentId, themeId],
   );
 
   return createElement(AppearanceContext.Provider, { value }, children);
@@ -116,7 +153,7 @@ export function usePalette(): Palette {
 }
 
 export function useIsDark(): boolean {
-  return true;
+  return useAppearance().themeId === "dark";
 }
 
 export const type = {
@@ -133,7 +170,7 @@ export const type = {
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 };
-export const radius = { xs: 6, sm: 8, md: 12, lg: 16, xl: 24, pill: 999 };
+export const radius = { xs: 8, sm: 12, md: 16, lg: 20, xl: 28, pill: 999 };
 
 export const elevation = {
   panel: {

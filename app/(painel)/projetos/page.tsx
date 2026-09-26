@@ -237,6 +237,13 @@ function CartaoDeProjeto({ projeto }: { projeto: Projeto }) {
         </div>
       ) : null}
 
+      <div>
+        <div className="mb-1 flex items-baseline justify-between gap-2 text-caption text-ink-subtle">
+          <span>Checklist</span><span className="tabular">{projeto.checklistCompleted}/{projeto.checklistTotal} · {projeto.checklistPercent}%</span>
+        </div>
+        <Meter value={projeto.checklistCompleted} total={Math.max(1, projeto.checklistTotal)} size="sm" tone="accent" label={`Checklist: ${projeto.checklistCompleted} de ${projeto.checklistTotal}`} />
+      </div>
+
       <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-line pt-2.5">
         <span className="text-caption text-ink-subtle">
           {deadline.dueOn ? `Prazo ${dateShort(deadline.dueOn)}` : "Sem prazo"}

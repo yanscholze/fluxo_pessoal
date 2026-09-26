@@ -51,10 +51,8 @@ export function CardFace({
       <View style={{ flex: 1, padding: 20, justifyContent: "space-between" }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
           <View>
-            <Texto style={[type.heading, { color: "#fff" }]}>{resumo.card.name}</Texto>
-            <Small style={{ color: "#ffffffb8", marginTop: 2 }}>
-              {resumo.card.kind === "credit" ? "Crédito" : "Débito"}
-            </Small>
+            <Small style={{ color: "#ffffffba" }}>{resumo.card.name}</Small>
+            <Texto style={[type.figureSm, { color: "#fff", marginTop: 4 }]}>{resumo.available === null ? money(resumo.outstanding) : money(cents(resumo.available))}</Texto>
           </View>
           <View style={{ width: 43, height: 26 }}>
             <View style={{ position: "absolute", left: 1, width: 26, height: 26, borderRadius: 13, backgroundColor: "#ffffffd9" }} />
@@ -62,23 +60,16 @@ export function CardFace({
           </View>
         </View>
 
-        <View>
-          <Small style={{ color: "#ffffffa8" }}>Fatura atual</Small>
-          <Texto style={{ color: "#fff", fontSize: 26, lineHeight: 32, fontWeight: "700", letterSpacing: -0.7, marginTop: 2 }}>
-            {money(resumo.outstanding)}
-          </Texto>
-        </View>
+        <Texto style={[type.bodySm, { color: "#fff", letterSpacing: 3.1 }]}>••••  ••••  ••••  {finalDoId}</Texto>
 
         <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
           <View style={{ flex: 1 }}>
-            <Small style={{ color: "#ffffff8f", textTransform: "uppercase" }}>{titular || "Fluxo"}</Small>
-            <Texto style={[type.bodySm, { color: "#fff", marginTop: 2, letterSpacing: 1.2 }]}>•••• {finalDoId}</Texto>
+            <Small style={{ color: "#ffffff8f", fontSize: 8, textTransform: "uppercase" }}>Titular</Small>
+            <Texto numberOfLines={1} style={[type.bodySm, { color: "#fff", marginTop: 2, letterSpacing: 0.35, textTransform: "uppercase" }]}>{titular || "Fluxo"}</Texto>
           </View>
           <View style={{ alignItems: "flex-end" }}>
-            <Small style={{ color: "#ffffff8f" }}>Disponível</Small>
-            <Texto style={[type.bodyStrong, { color: "#fff", marginTop: 2 }]}>
-              {resumo.available === null ? "—" : money(cents(resumo.available))}
-            </Texto>
+            <Small style={{ color: "#ffffff8f", fontSize: 8, textTransform: "uppercase" }}>Validade</Small>
+            <Texto style={[type.bodySm, { color: "#fff", marginTop: 2 }]}>••/••</Texto>
           </View>
         </View>
       </View>

@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { ScrollView, TextInput, View } from "react-native";
+import { Image, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { normalizeBaseUrl, suggestedBaseUrl } from "../config.ts";
@@ -28,6 +28,7 @@ import { ApiError, OfflineError } from "../net/client.ts";
 import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Figure, Label, Notice, Small } from "../ui/primitives.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
+import { ScreenGlow } from "../ui/mockup.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 type Modo = "entrar" | "criar";
@@ -105,11 +106,13 @@ export function ConectarScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
+      <ScreenGlow height={430} />
       <ScrollView
-        contentContainerStyle={{ padding: space.lg, gap: space.lg }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 32, paddingBottom: 36, gap: space.lg }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ gap: space.xs, paddingTop: space.lg }}>
+        <View style={{ alignItems: "center", gap: space.xs, paddingVertical: space.lg }}>
+          <Image source={require("../../assets/icon.png")} style={{ width: 82, height: 82, borderRadius: 20, marginBottom: 10 }} />
           <Figure small>Fluxo</Figure>
           <Body muted>
             {criando ? "Crie sua conta para começar." : "Entre com a sua conta do Fluxo."}

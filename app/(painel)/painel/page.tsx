@@ -58,33 +58,31 @@ export default async function Painel() {
         }
       />
 
-      <Stack gap="lg">
-        {/* A pergunta principal primeiro, sozinha, em tamanho que não deixa dúvida. */}
-        <FreeToSpend
-          data={dashboard.freeToSpend}
-          benefit={dashboard.benefitFreeToSpend}
-          today={dashboard.today}
-        />
-
+      <Stack gap="md">
         <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="min-w-0 lg:col-span-2">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(320px,.75fr)]">
+          <div className="min-w-0">
             <CashflowPanel points={dashboard.cashflow} />
           </div>
           <CategoryPanel categories={dashboard.categorySpend} />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-2">
-          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
+        <div className="grid gap-4 lg:grid-cols-2">
           <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
+          <FreeToSpend
+            data={dashboard.freeToSpend}
+            benefit={dashboard.benefitFreeToSpend}
+            today={dashboard.today}
+          />
         </div>
 
-        {/* O trabalho depois do dinheiro: é de onde ele vem, mas a pergunta do
-            painel é sobre a conta, e o projeto responde por que ela vai mudar. */}
-        <ProjectsPanel projects={dashboard.openProjects} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
+          <ProjectsPanel projects={dashboard.openProjects} />
+        </div>
 
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">
             <RecentPanel transactions={dashboard.recentTransactions} />
           </div>

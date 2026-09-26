@@ -16,6 +16,7 @@
 
 import { useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { CaretLeft } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
@@ -25,6 +26,7 @@ import { useRemoto } from "../state/remote.tsx";
 import { fetchAssistente, fetchDashboard, type DashboardView, type RespostaDoAssistente } from "../net/views.ts";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { money } from "../ui/format.ts";
+import { ScreenGlow } from "../ui/mockup.tsx";
 import { Body, Button, Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
@@ -83,14 +85,14 @@ export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
+      <ScreenGlow height={420} />
       <ScrollView
         contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}
         keyboardShouldPersistTaps="handled"
       >
-        <View>
-          <Texto style={[type.label, { color: palette.accent, letterSpacing: 1.8 }]}>TARS // SISTEMA FINANCEIRO</Texto>
-          <Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 6 }]}>Status do Fluxo</Texto>
-          <Small style={{ marginTop: 3 }}>Visão imediata do ciclo e comando do assistente.</Small>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {onVoltar ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onVoltar} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: palette.line, backgroundColor: pressed ? palette.surfaceRaised : palette.surface })}><CaretLeft size={20} color={palette.ink} /></Pressable> : null}
+          <View style={{ flex: 1 }}><Texto style={[type.label, { color: palette.accent, letterSpacing: 1.8 }]}>TARS // SISTEMA FINANCEIRO</Texto><Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 6 }]}>Status do Fluxo</Texto><Small style={{ marginTop: 3 }}>Visão imediata do ciclo e comando do assistente.</Small></View>
         </View>
 
         <NucleoTars dados={painel.dados} />

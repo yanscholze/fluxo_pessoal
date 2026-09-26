@@ -16,7 +16,7 @@ import { useTipografia } from "./src/ui/fonts.ts";
 import { Shell } from "./src/shell.tsx";
 import { LedgerProvider } from "./src/state/ledger.tsx";
 import { SessionProvider, useSession } from "./src/state/session.tsx";
-import { AppearanceProvider, usePalette } from "./src/ui/theme.ts";
+import { AppearanceProvider, useIsDark, usePalette } from "./src/ui/theme.ts";
 
 export default function App() {
   return (
@@ -40,6 +40,7 @@ export default function App() {
 
 function Raiz() {
   const palette = usePalette();
+  const isDark = useIsDark();
   const { state } = useSession();
   const tipografiaPronta = useTipografia();
 
@@ -49,7 +50,7 @@ function Raiz() {
   if (!tipografiaPronta || state.status === "carregando") {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: palette.canvas }}>
-        <StatusBar style="light" />
+        <StatusBar style={isDark ? "light" : "dark"} />
         <ActivityIndicator color={palette.accent} />
       </View>
     );
@@ -58,7 +59,7 @@ function Raiz() {
   if (state.status === "desconectado") {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={isDark ? "light" : "dark"} />
         <ConectarScreen />
       </>
     );
@@ -66,7 +67,7 @@ function Raiz() {
 
   return (
     <LedgerProvider>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? "light" : "dark"} />
       <Shell />
     </LedgerProvider>
   );

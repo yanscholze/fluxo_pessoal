@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { User } from "phosphor-react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { Small, Texto } from "./primitives.tsx";
 import { radius, type, usePalette } from "./theme.ts";
@@ -74,6 +75,25 @@ export function IconBubble({ children, tone = "accent" }: { children: ReactNode;
   return (
     <View style={{ width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor }}>
       {children}
+    </View>
+  );
+}
+
+/** O halo roxo do mockup, desenhado como gradiente real em vez de uma mancha opaca. */
+export function ScreenGlow({ height = 300 }: { height?: number }) {
+  const palette = usePalette();
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, height, overflow: "hidden" }}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id="screenGlow" cx="78%" cy="18%" rx="72%" ry="82%">
+            <Stop offset="0" stopColor={palette.accent} stopOpacity={0.24} />
+            <Stop offset="0.38" stopColor={palette.accentEdge} stopOpacity={0.13} />
+            <Stop offset="1" stopColor={palette.canvas} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#screenGlow)" />
+      </Svg>
     </View>
   );
 }

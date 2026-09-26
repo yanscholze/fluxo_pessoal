@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 
 import { money, percent } from "./format.ts";
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "./icons.tsx";
-import { Label, type Tone, join, toneFill, toneText } from "./primitives.tsx";
+import { type Tone, join, toneFill, toneText } from "./primitives.tsx";
 
 // ---------------------------------------------------------------------------
 // Dinheiro
@@ -103,16 +103,16 @@ export type MetricProps = {
 /** Um indicador: rótulo, valor, variação e a nota que explica o que ele é. */
 export function Metric({ label, value, tone = "neutral", hint, delta, icon: Icon }: MetricProps) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-1.5">
-        {Icon ? <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-subtle" aria-hidden /> : null}
-        <Label>{label}</Label>
+    <div className="flex min-w-0 items-center gap-3">
+      {Icon ? <span className={join("fluxo-metric-icon grid size-[42px] shrink-0 place-items-center rounded-[13px]", tone === "positive" ? "bg-positive-wash text-positive" : tone === "negative" ? "bg-negative-wash text-negative" : tone === "accent" ? "bg-accent-wash text-accent" : "bg-info-wash text-info")}><Icon size={20} strokeWidth={1.9} aria-hidden /></span> : null}
+      <div className="min-w-0">
+        <span className="block text-[12px] text-ink-muted">{label}</span>
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className={join("tabular text-figure font-bold", tone === "neutral" ? "text-ink" : toneText(tone))}>{value}</p>
+          {delta ? <Delta {...delta} /> : null}
+        </div>
+        {hint ? <p className="mt-0.5 text-[11px] leading-snug text-ink-subtle">{hint}</p> : null}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <p className={join("tabular text-figure", toneText(tone))}>{value}</p>
-        {delta ? <Delta {...delta} /> : null}
-      </div>
-      {hint ? <p className="mt-1 text-caption leading-snug text-ink-subtle">{hint}</p> : null}
     </div>
   );
 }
@@ -129,13 +129,13 @@ export function MetricStrip({ metrics, className }: { metrics: readonly MetricPr
   return (
     <div
       className={join(
-        "grid gap-px overflow-hidden rounded-panel border border-line bg-line shadow-panel",
+        "fluxo-metrics grid gap-3 rounded-panel border-0 shadow-none",
         metrics.length >= 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3",
         className,
       )}
     >
       {metrics.map((metrica) => (
-        <div key={metrica.label} className="bg-surface p-4 sm:p-5">
+        <div key={metrica.label} className="fluxo-metric bg-surface p-4 sm:p-5">
           <Metric {...metrica} />
         </div>
       ))}
