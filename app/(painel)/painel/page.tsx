@@ -10,9 +10,8 @@ import { ProjectsPanel } from "../../ui/dashboard/projects-panel.tsx";
 import { PositionStrip } from "../../ui/dashboard/position-strip.tsx";
 import { RecentPanel } from "../../ui/dashboard/recent-panel.tsx";
 import { UpcomingPanel } from "../../ui/dashboard/upcoming-panel.tsx";
-import { competenceLong } from "../../ui/format.ts";
 import { Plus } from "../../ui/icons.tsx";
-import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { Page, Stack } from "../../ui/page-frame.tsx";
 
 /** Depende da identidade da requisição: nunca pode ser servida de cache. */
 export const dynamic = "force-dynamic";
@@ -47,19 +46,13 @@ export default async function Painel() {
 
   return (
     <Page>
-      <PageHeader
-        eyebrow={competenceLong(dashboard.competence)}
-        title="Painel"
-        description={`${saudacao(hora)}, ${primeiroNome}. Seu dinheiro em perspectiva, do saldo de hoje aos próximos ciclos.`}
-        actions={
-          <LinkButton href="/lancamentos?novo=1" variant="primary" icon={Plus}>
-            Novo lançamento
-          </LinkButton>
-        }
-      />
-
       <Stack gap="md">
         <PositionStrip position={dashboard.position} monthFlow={dashboard.monthFlow} />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-body-sm text-ink-muted">{saudacao(hora)}, {primeiroNome}. Seu dinheiro em perspectiva, do saldo de hoje aos próximos ciclos.</p>
+          <LinkButton href="/lancamentos?novo=1" variant="primary" icon={Plus}>Novo lançamento</LinkButton>
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(320px,.75fr)]">
           <div className="min-w-0">

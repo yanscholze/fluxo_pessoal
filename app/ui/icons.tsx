@@ -10,6 +10,12 @@
  */
 
 export {
+  WalletCards,
+  ReceiptText,
+  Import,
+  FileChartColumnIncreasing,
+  ChartColumn,
+  BriefcaseBusiness,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowLeft,
@@ -27,6 +33,7 @@ export {
   CalendarClock,
   Camera,
   Check,
+  Circle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,

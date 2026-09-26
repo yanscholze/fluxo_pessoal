@@ -79,10 +79,24 @@ const WALLET_APPS = [
   "com.apple.wallet",
 ];
 
-/** Apps de banco reconhecidos sem o usuário precisar configurar nada. */
+/**
+ * Apps de banco reconhecidos sem o usuário precisar configurar nada.
+ *
+ * São **prefixos de fornecedor**, e não pacotes exatos. A lista trazia
+ * `com.caju.app`, um pacote que não existe — o aplicativo da Caju é
+ * `com.caju.employeeApp`. O aparelho encaminhava toda notificação da Caju (o
+ * filtro de lá é por trecho do nome), o servidor a descartava como
+ * `app_nao_confiavel`, e nada aparecia na fila. Sem mensagem nenhuma: a
+ * contagem por motivo não guarda qual app foi recusado.
+ *
+ * Por isso prefixo. Um banco que publique um segundo aplicativo, ou renomeie o
+ * pacote dentro do próprio domínio, continua sendo lido sem ninguém precisar
+ * descobrir que parou. O limite é o ponto: `com.caju` reconhece
+ * `com.caju.employeeApp`, e não reconheceria um `com.cajuxyz` de outro dono.
+ */
 const TRUSTED_APPS = [
   "com.nu.production",
-  "com.caju.app",
+  "com.caju",
   "com.mercadopago.wallet",
   "br.com.xp.carteira",
   "com.itau",
@@ -93,6 +107,13 @@ const TRUSTED_APPS = [
   "com.c6bank.app",
   "br.com.intermedium",
 ];
+
+/** O pacote é do fornecedor quando é o próprio prefixo ou um filho dele. */
+function isTrusted(sourceApp: string): boolean {
+  return TRUSTED_APPS.some(
+    (prefixo) => sourceApp === prefixo || sourceApp.startsWith(`${prefixo}.`),
+  );
+}
 
 /** Regra que o usuário definiu para um app. */
 export type SourceRule = {
@@ -178,7 +199,7 @@ export function captureNotification(
 
   // 3. Sem regra, só app reconhecido passa. O padrão é não capturar: ler
   //    notificação de todos os apps instalados seria invasivo e ruidoso.
-  if (!regra && !TRUSTED_APPS.includes(event.sourceApp)) {
+  if (!regra && !isTrusted(event.sourceApp)) {
     return { kind: "ignored", reason: "app_nao_confiavel" };
   }
 

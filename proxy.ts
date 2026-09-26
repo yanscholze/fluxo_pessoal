@@ -32,8 +32,6 @@ export function proxy(request: NextRequest) {
       "/investimentos": { path: "/patrimonio", tab: "investimentos" },
       "/metas": { path: "/patrimonio", tab: "metas" },
       "/saude": { path: "/patrimonio", tab: "saude" },
-      "/parcelamentos": { path: "/planejamento", tab: "parcelamentos" },
-      "/assinaturas": { path: "/planejamento", tab: "assinaturas" },
       "/importar": { path: "/automaticos", tab: "importacoes" },
       "/conectar": { path: "/configuracoes", tab: "aparelhos" },
       "/recompensas": { path: "/cartoes", tab: "recompensas" },

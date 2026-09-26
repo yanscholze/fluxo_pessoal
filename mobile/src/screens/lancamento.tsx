@@ -17,16 +17,30 @@ import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { competenceForPurchase } from "@fluxo/core/domain/card/invoice-cycle.ts";
+import { scheduleInstallments } from "@fluxo/core/domain/installment/plan.ts";
 import type { TransactionKind } from "@fluxo/core/domain/ledger/types.ts";
 import { type Cents, parseMoney } from "@fluxo/core/kernel/money.ts";
 import { competenceOf } from "@fluxo/core/time/competence.ts";
 import { type LocalDate, addDays, isLocalDate, todayIn } from "@fluxo/core/time/local-date.ts";
+import { OfflineError } from "../net/client.ts";
+import { criarCompraParcelada } from "../net/parcelamento.ts";
 import { useLedger } from "../state/ledger.tsx";
+import { useConnectedSession } from "../state/session.tsx";
 import type { LocalTransaction, TransactionDraft } from "../storage/model.ts";
-import { competence as formatCompetence } from "../ui/format.ts";
+import { competence as formatCompetence, money } from "../ui/format.ts";
 import { Body, Button, Card, Label, Notice, Small , Texto } from "../ui/primitives.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
+
+/**
+ * Os números que se escolhe de fato.
+ *
+ * O teclado numérico aceitaria qualquer coisa, e a maior parte dos parcelamentos
+ * do varejo brasileiro cai nesta lista. Quem precisa de 7× continua podendo
+ * lançar pelo site — no telefone, um campo livre custaria mais toque do que
+ * resolve.
+ */
+const OPCOES_DE_PARCELA = [1, 2, 3, 4, 5, 6, 8, 10, 12, 18, 24] as const;
 
 const TIPOS: { readonly value: TransactionKind; readonly label: string }[] = [
   { value: "expense", label: "Despesa" },
@@ -42,7 +56,8 @@ export function LancamentoScreen({
   onClose: () => void;
 }) {
   const palette = usePalette();
-  const { accounts, cards, categories, create, update, remove } = useLedger();
+  const { accounts, cards, categories, create, update, remove, synchronize } = useLedger();
+  const { credentials } = useConnectedSession();
 
   const hoje = todayIn();
 
@@ -57,6 +72,36 @@ export function LancamentoScreen({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const cartoesDeCredito = useMemo(() => cards.filter((item) => item.kind === "credit"), [cards]);
+  const cartoesDeDebito = useMemo(() => cards.filter((item) => item.kind !== "credit"), [cards]);
+
+  /**
+   * Débito ou crédito, escolhido antes da conta.
+   *
+   * Antes a tela punha contas e cartões numa lista só, e a diferença entre
+   * pagar no débito e pagar no crédito ficava implícita no nome do item — quem
+   * não sabe que "Nubank UV" é cartão de crédito não tem como saber que aquela
+   * compra vai para a fatura de outubro em vez de sair do saldo hoje. É a
+   * decisão que mais muda o significado do lançamento, e agora ela é explícita,
+   * igual ao site.
+   */
+  const [origem, setOrigem] = useState<"conta" | "credito">(
+    existing?.cardId && cards.find((item) => item.id === existing.cardId)?.kind === "credit"
+      ? "credito"
+      : "conta",
+  );
+  const [parcelas, setParcelas] = useState(1);
+
+  /*
+   * Parcelar só vale ao criar.
+   *
+   * Transformar um lançamento que já existe num plano de seis parcelas criaria
+   * as seis e deixaria a original solta — o endereço de edição do servidor
+   * mexe num lançamento, não monta plano. Quem precisa converter refaz: apaga
+   * e lança de novo.
+   */
+  const podeParcelar =
+    !existing && kind === "expense" && origem === "credito" && cartoesDeCredito.length > 0;
   const noCartao = kind === "expense" && cartaoId !== null;
   const cartao = useMemo(() => cards.find((item) => item.id === cartaoId) ?? null, [cards, cartaoId]);
 
@@ -69,6 +114,36 @@ export function LancamentoScreen({
     if (!dataValida) return null;
     return cartao ? competenceForPurchase(cartao, dataValida) : competenceOf(dataValida);
   }, [cartao, dataValida]);
+
+  /**
+   * "12× de R$ 100,00, de out/2026 a set/2027".
+   *
+   * Sai de `scheduleInstallments`, a mesma função que o servidor chama — a
+   * prévia não pode ser uma divisão à parte, senão ela promete um valor e a
+   * fatura cobra outro.
+   */
+  const previaDoParcelamento = useMemo(() => {
+    if (!podeParcelar || !cartao || !centavos || centavos <= 0 || !dataValida) return null;
+    if (parcelas <= 1) return null;
+
+    const cronograma = scheduleInstallments({
+      totalAmount: centavos,
+      installmentCount: parcelas,
+      purchaseDate: dataValida,
+      cycle: cartao,
+    });
+    const primeira = cronograma[0];
+    const ultima = cronograma[cronograma.length - 1];
+    if (!primeira || !ultima) return null;
+
+    const valores = new Set(cronograma.map((item) => item.amount));
+    const quanto =
+      valores.size === 1
+        ? `${parcelas}× de ${money(primeira.amount)}`
+        : `${parcelas}× de ${money(primeira.amount)} (a última fecha a conta)`;
+
+    return `${quanto}, de ${formatCompetence(primeira.competence)} a ${formatCompetence(ultima.competence)}`;
+  }, [podeParcelar, cartao, centavos, dataValida, parcelas]);
 
   const categoriasVisiveis = categories.filter((categoria) =>
     kind === "income" ? categoria.kind !== "expense" : categoria.kind !== "income",
@@ -93,6 +168,48 @@ export function LancamentoScreen({
     }
     if (!noCartao && !contaId) {
       setErro("Selecione a conta.");
+      return;
+    }
+    if (podeParcelar && !cartaoId) {
+      setErro("Selecione o cartão de crédito.");
+      return;
+    }
+
+    /*
+     * Parcelado é outro caminho, e de propósito.
+     *
+     * O plano — N parcelas amarradas, cada uma na sua fatura — é montado pelo
+     * servidor, pela mesma função que o site chama. Criar as N linhas aqui
+     * seria escrever a regra de parcelamento uma segunda vez. Depois de criar,
+     * a sincronização traz as parcelas para o razão local.
+     */
+    if (parcelas > 1 && cartaoId) {
+      setSalvando(true);
+      setErro(null);
+      try {
+        await criarCompraParcelada(
+          {
+            description: descricao.trim(),
+            amountCents: centavos,
+            occurredOn: dataValida,
+            cardId: cartaoId,
+            categoryId: categoriaId,
+            installmentCount: parcelas,
+          },
+          credentials,
+        );
+        await synchronize();
+        onClose();
+      } catch (problema) {
+        setErro(
+          problema instanceof OfflineError
+            ? "Parcelar precisa de conexão. Sem rede, dá para lançar à vista agora e editar depois."
+            : problema instanceof Error
+              ? problema.message
+              : "Não foi possível registrar a compra parcelada.",
+        );
+        setSalvando(false);
+      }
       return;
     }
 
@@ -332,22 +449,64 @@ export function LancamentoScreen({
         {kind === "expense" ? (
           <Card>
             <Label>Pago com</Label>
-            <Options
-              options={[
-                ...accounts.map((conta) => ({ id: `conta:${conta.id}`, label: conta.name })),
-                ...cards.map((item) => ({ id: `cartao:${item.id}`, label: item.name })),
-              ]}
-              selected={noCartao ? `cartao:${cartaoId}` : contaId ? `conta:${contaId}` : null}
-              onSelect={(escolha) => {
-                const [tipo, id] = escolha.split(":");
-                if (tipo === "cartao") {
-                  setCartaoId(id);
-                } else {
-                  setCartaoId(null);
-                  setContaId(id);
-                }
-              }}
-            />
+
+            {cartoesDeCredito.length ? (
+              <View style={{ marginTop: space.sm }}>
+                <Segmentos
+                  opcoes={[
+                    { id: "conta", label: "Conta / débito" },
+                    { id: "credito", label: "Cartão de crédito" },
+                  ]}
+                  selecionado={origem}
+                  onSelect={(escolha) => {
+                    const alvo = escolha as "conta" | "credito";
+                    setOrigem(alvo);
+                    if (alvo === "conta") {
+                      setCartaoId(null);
+                      setParcelas(1);
+                      if (!contaId) setContaId(accounts[0]?.id ?? null);
+                    } else {
+                      // Uma compra no crédito precisa de um cartão escolhido; o
+                      // primeiro é o palpite certo em quem só tem um.
+                      setCartaoId((atual) =>
+                        atual && cartoesDeCredito.some((item) => item.id === atual)
+                          ? atual
+                          : (cartoesDeCredito[0]?.id ?? null),
+                      );
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+
+            <View style={{ marginTop: space.sm }}>
+              {origem === "credito" ? (
+                <Options
+                  options={cartoesDeCredito.map((item) => ({ id: item.id, label: item.name }))}
+                  selected={cartaoId}
+                  onSelect={setCartaoId}
+                />
+              ) : (
+                <Options
+                  options={[
+                    ...accounts.map((conta) => ({ id: `conta:${conta.id}`, label: conta.name })),
+                    // O cartão de débito fica deste lado, e não do crédito: ele
+                    // tira do saldo na hora, que é o que "débito" quer dizer.
+                    ...cartoesDeDebito.map((item) => ({ id: `cartao:${item.id}`, label: item.name })),
+                  ]}
+                  selected={noCartao ? `cartao:${cartaoId}` : contaId ? `conta:${contaId}` : null}
+                  onSelect={(escolha) => {
+                    const [tipo, id] = escolha.split(":");
+                    if (tipo === "cartao") {
+                      setCartaoId(id);
+                    } else {
+                      setCartaoId(null);
+                      setContaId(id);
+                    }
+                  }}
+                />
+              )}
+            </View>
           </Card>
         ) : (
           <Card>
@@ -359,6 +518,49 @@ export function LancamentoScreen({
             />
           </Card>
         )}
+
+        {podeParcelar && cartao ? (
+          <Card>
+            <Label>Parcelas</Label>
+            <View style={{ marginTop: space.sm }}>
+              <Options
+                options={OPCOES_DE_PARCELA.map((numero) => ({
+                  id: String(numero),
+                  label: numero === 1 ? "À vista" : `${numero}×`,
+                }))}
+                selected={String(parcelas)}
+                onSelect={(escolha) => setParcelas(Number(escolha))}
+              />
+            </View>
+
+            {/*
+              A prévia sai da **mesma** função que o servidor usa para montar o
+              plano. Dividir por N aqui daria um número que não fecha: os
+              centavos que sobram têm dono, e quem decide qual parcela fica com
+              eles é o domínio.
+            */}
+            {previaDoParcelamento ? (
+              <View
+                style={{
+                  marginTop: space.sm,
+                  padding: space.sm + 2,
+                  borderRadius: radius.md,
+                  backgroundColor: palette.cautionWash,
+                }}
+              >
+                <Small tone="caution">{previaDoParcelamento}</Small>
+              </View>
+            ) : null}
+
+            {parcelas > 1 ? (
+              <Small tone="muted" style={{ marginTop: space.sm }}>
+                Parcelar precisa de conexão: o plano é montado no servidor, com
+                a mesma conta do site. Uma compra à vista continua entrando sem
+                rede.
+              </Small>
+            ) : null}
+          </Card>
+        ) : null}
 
         {kind === "transfer" ? (
           <Card>

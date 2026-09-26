@@ -150,7 +150,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
             <Link href="/configuracoes" className="fluxo-profile hidden items-center gap-2 px-2 py-1 sm:flex" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span><span className="max-w-28 truncate text-body-sm font-semibold text-ink">{userName}</span></Link>
           </div>
         </header>
-        <div className="min-w-0 pb-24 lg:pb-0">{children}</div>
+        <main id="conteudo" className="min-w-0 pb-24 lg:pb-0">{children}</main>
       </div>
       <BottomNav onMenuOpen={() => setMenuAberto(true)} menuOpen={menuAberto} />
       <Dialog open={buscaAberta} onClose={fecharBusca} title="Aonde vamos?" description="Encontre uma área do seu Fluxo.">

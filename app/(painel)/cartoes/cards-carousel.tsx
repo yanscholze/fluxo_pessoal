@@ -36,6 +36,7 @@ export function CardsCarousel({
   selectedCardId,
   activeTab,
   rewards,
+  hideFaces,
 }: {
   cards: readonly CardView[];
   accounts: CardsView["accounts"];
@@ -43,6 +44,14 @@ export function CardsCarousel({
   selectedCardId: string;
   activeTab: "faturas" | "recompensas";
   rewards?: CardRewardsView;
+  /**
+   * Esconde a fileira de faces.
+   *
+   * Na tela de Cartões o cartão já aparece grande no alto, no desenho do Mesa,
+   * e as setas ao lado dele trocam a seleção. Repetir a fileira de miniaturas
+   * aqui embaixo seria mostrar a mesma escolha duas vezes.
+   */
+  hideFaces?: boolean;
 }) {
   const selecionado = cards.find((card) => card.id === selectedCardId) ?? cards[0];
   const temRecompensas = selecionado?.kind === "credit" && selecionado.rewardMode !== "none";
@@ -56,7 +65,7 @@ export function CardsCarousel({
 
   return (
     <div className="space-y-5">
-      <nav aria-label="Seus cartões" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:mx-0 sm:px-0">
+      {hideFaces ? null : <nav aria-label="Seus cartões" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:mx-0 sm:px-0">
         {cards.map((card) => (
           <Link
             key={card.id}
@@ -69,7 +78,7 @@ export function CardsCarousel({
             <CardFace data={paraFace(card)} selected={cards.length > 1 ? card.id === selecionado?.id : undefined} />
           </Link>
         ))}
-      </nav>
+      </nav>}
 
       {selecionado && temRecompensas ? (
         <nav aria-label={`Seções do ${selecionado.name}`} className="flex gap-2 border-b border-line">

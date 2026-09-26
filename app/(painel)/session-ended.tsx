@@ -36,8 +36,10 @@ export function SessionEnded() {
     router.replace("/entrar");
   }, [router]);
 
+  // Esta tela substitui a casca inteira — o layout devolve ela **no lugar** do
+  // `<Shell>` —, então o `<main>` que a casca abriria não existe aqui.
   return (
-    <Page width="narrow">
+    <Page as="main" width="narrow">
       <div className="pt-10">
         <ErrorState
           title="Sua sessão terminou"

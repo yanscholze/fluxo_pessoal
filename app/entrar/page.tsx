@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { InstallApp } from "../ui/install-app.tsx";
 import { currentUser } from "../auth-context.ts";
 import { ArrowUpRight, CreditCard, Wallet } from "../ui/icons.tsx";
+import { join } from "../ui/primitives.tsx";
 import { AccessForm } from "./access-form.tsx";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +25,14 @@ export default async function Entrar() {
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      <section className="relative hidden flex-col justify-between overflow-hidden bg-surface p-10 lg:flex xl:p-14">
+      {/* Fundo de tela, e não de painel: os três cartões de exemplo são
+          `surface`, e sobre uma coluna também `surface` eles sumiam. É a mesma
+          relação da casca do aplicativo — o halo roxo no alto à esquerda é o
+          do `.app-shell`. */}
+      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-line bg-canvas p-10 lg:flex xl:p-14">
         <span
           aria-hidden
-          className="pointer-events-none absolute -left-40 -top-40 size-[36rem] rounded-full bg-accent/8 blur-3xl"
+          className="pointer-events-none absolute -left-40 -top-40 size-[36rem] rounded-full bg-accent/10 blur-3xl"
         />
 
         <p className="relative flex items-center gap-2.5 text-title text-ink">
@@ -51,7 +56,10 @@ export default async function Entrar() {
             conta fixa saem da conta antes — o que sobra é seu de verdade.
           </p>
 
-          <ol className="mt-9 grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-3">
+          {/* Cartões soltos, como os indicadores do resto do produto. A conta
+              "tenho − comprometido = livre" continua legível pela ordem e pelo
+              destaque no terceiro, sem precisar dos três estarem colados. */}
+          <ol className="mt-9 grid gap-3 sm:grid-cols-3">
             <Exemplo icone={Wallet} rotulo="Saldo hoje" valor="R$ 8.420" nota="o que existe" />
             <Exemplo icone={CreditCard} rotulo="Comprometido" valor="R$ 3.180" nota="já tem dono" />
             <Exemplo
@@ -100,7 +108,12 @@ function Exemplo({
   destaque?: boolean;
 }) {
   return (
-    <li className={destaque ? "bg-accent-wash p-4" : "bg-surface p-4"}>
+    <li
+      className={join(
+        "rounded-nested border p-4",
+        destaque ? "border-accent-edge bg-accent-wash" : "border-line bg-surface",
+      )}
+    >
       <p className="flex items-center gap-1.5 text-label uppercase text-ink-subtle">
         <Icone size={12} strokeWidth={2} aria-hidden />
         {rotulo}

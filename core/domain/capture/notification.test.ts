@@ -55,6 +55,24 @@ describe("captura por notificação", () => {
       assert.equal(motivoDeIgnorar(evento({ sourceApp: "com.zap.delivery" })), "app_nao_confiavel");
     });
 
+    it("reconhece o app do fornecedor pelo prefixo do pacote", () => {
+      /*
+       * O caso da Caju.
+       *
+       * A lista de confiança trazia `com.caju.app`, que não existe — o
+       * aplicativo é `com.caju.employeeApp`. Com comparação exata, toda
+       * notificação da Caju era descartada como app não confiável, e o usuário
+       * não tinha como saber: a contagem por motivo não guarda qual pacote foi
+       * recusado. O prefixo cobre o fornecedor inteiro.
+       */
+      const draft = capturar(evento({ sourceApp: "com.caju.employeeApp" }));
+      assert.equal(draft.amount, 8650);
+
+      // E continua sendo o domínio do fornecedor, não qualquer parecido.
+      assert.equal(motivoDeIgnorar(evento({ sourceApp: "com.cajuxyz" })), "app_nao_confiavel");
+      assert.equal(motivoDeIgnorar(evento({ sourceApp: "com.caju" })), null);
+    });
+
     it("aceita app desconhecido quando o usuário permite", () => {
       const draft = capturar(evento({ sourceApp: "com.banco.novo" }), [
         { sourceApp: "com.banco.novo", action: "allow" },

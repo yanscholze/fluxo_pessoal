@@ -58,7 +58,13 @@ export default async function Importar({
       />
 
       <Stack gap="lg">
-        <ol className="grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-4">
+        {/*
+         * Quatro cartões soltos, como os indicadores do Mesa — e não uma
+         * faixa colada dividida por fios. A leitura de "etapas de uma mesma
+         * coisa" continua vindo da numeração, que é mais forte do que a
+         * vizinhança.
+         */}
+        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {ETAPAS.map((etapa, indice) => {
             const concluida = indice < etapaAtual;
             const atual = indice === etapaAtual;
@@ -66,7 +72,9 @@ export default async function Importar({
               <li
                 key={etapa}
                 aria-current={atual ? "step" : undefined}
-                className={`flex items-center gap-2.5 p-3.5 ${atual ? "bg-accent-wash" : "bg-surface"}`}
+                className={`flex items-center gap-2.5 rounded-nested border p-4 ${
+                  atual ? "border-accent-edge bg-accent-wash" : "border-line bg-surface"
+                }`}
               >
                 <span
                   className={`tabular flex size-6 shrink-0 items-center justify-center rounded-full text-caption font-semibold ${

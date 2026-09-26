@@ -1,10 +1,10 @@
 import { parseCompetence, shift } from "../../../core/time/competence.ts";
+import { todayIn } from "../../../core/time/local-date.ts";
 import { buildStatement } from "../../../server/services/statement.ts";
 import { currentUser } from "../../auth-context.ts";
-import { MetricStrip } from "../../ui/data-display.tsx";
+import { Donut, MetricTile, PanelHeading } from "../../ui/mesa.tsx";
 import { competenceLong, money } from "../../ui/format.ts";
-import { ArrowDownRight, ArrowUpRight, Receipt, Scale } from "../../ui/icons.tsx";
-import { Page, PageHeader, Stack } from "../../ui/page-frame.tsx";
+import { ArrowDownRight, ArrowUpRight, ReceiptText } from "../../ui/icons.tsx";
 import { Composer } from "./composer.tsx";
 import { CompetenceNav } from "./competence-nav.tsx";
 import { StatementList } from "./statement-list.tsx";
@@ -12,12 +12,15 @@ import { StatementList } from "./statement-list.tsx";
 export const dynamic = "force-dynamic";
 
 /**
- * Extrato da competência.
+ * Extrato da competência, no desenho do Mesa.
  *
- * A pergunta é "o que entrou e saiu neste mês, e no que deu". Os três números
- * do topo respondem o "no que deu"; a tabela responde o "o quê". Navegar entre
- * competências fica junto do título porque o mês é o recorte de tudo o que
- * está abaixo — não é um filtro secundário.
+ * Três indicadores em cima, a rosca de categorias à esquerda e a lista à
+ * direita. O recorte é sempre um mês — por isso a navegação entre competências
+ * fica no cabeçalho da lista, ao lado do filtro: ela não é um filtro
+ * secundário, é o que define tudo que está abaixo.
+ *
+ * Os números vêm de `buildStatement`, inclusive o agrupamento por categoria e
+ * a maior saída. A tela não soma centavo nenhum.
  */
 export default async function Lancamentos({
   searchParams,
@@ -38,72 +41,123 @@ export default async function Lancamentos({
   });
   const selectedCard = cardId ? statement.options.cards.find((card) => card.id === cardId) : undefined;
 
-  const saldo = statement.incomeCents - statement.expenseCents;
+  /*
+   * O dia de hoje vem do servidor, e não do relógio do navegador.
+   *
+   * O formulário é componente de cliente, mas também é renderizado no
+   * servidor. Se cada lado lesse o próprio relógio, um acesso perto da
+   * meia-noite — ou com o computador em outro fuso — geraria datas diferentes
+   * nas duas renderizações, e o React acusaria a divergência na hidratação.
+   */
+  const hoje = todayIn();
+
+  const maiorCategoria = statement.categorySpend[0];
+  const fatia = maiorCategoria ? Math.round(maiorCategoria.percent) : 0;
 
   return (
-    <Page>
-      <PageHeader
-        eyebrow={
-          selectedCard
-            ? `${selectedCard.name} · ${competenceLong(statement.competence)}`
-            : competenceLong(statement.competence)
-        }
-        title={selectedCard ? "Lançamentos da fatura" : "Lançamentos"}
-        description={
-          selectedCard
-            ? "Compras, estornos e pagamentos ligados somente a esta fatura."
-            : "Tudo que entrou e saiu na competência, incluindo o que está previsto."
-        }
-        actions={
-          <>
-            <CompetenceNav
-              anterior={shift(statement.competence, -1)}
-              proxima={shift(statement.competence, 1)}
-              cardId={selectedCard?.id}
-            />
-            <Composer
-              options={statement.options}
-              competence={statement.competence}
-              defaultOpen={params.novo === "1"}
-            />
-          </>
-        }
-      />
+    <div className="content-area">
+      <div className="grid gap-5 xl:grid-cols-12">
+        <div className="xl:col-span-4">
+          <MetricTile
+            tom="negative"
+            icone={<ArrowDownRight className="size-4" aria-hidden />}
+            rotulo="Saídas do mês"
+            valor={money(statement.expenseCents)}
+            apoio={
+              maiorCategoria
+                ? `${maiorCategoria.name} é a maior categoria`
+                : "Nenhuma saída nesta competência"
+            }
+          />
+        </div>
+        <div className="xl:col-span-4">
+          <MetricTile
+            tom="positive"
+            icone={<ArrowUpRight className="size-4" aria-hidden />}
+            rotulo="Entradas do mês"
+            valor={money(statement.incomeCents)}
+            apoio={
+              statement.incomeCount === 1
+                ? "1 recebimento"
+                : `${statement.incomeCount} recebimentos`
+            }
+          />
+        </div>
+        <div className="xl:col-span-4">
+          <MetricTile
+            tom="caution"
+            icone={<ReceiptText className="size-4" aria-hidden />}
+            rotulo="Maior saída"
+            valor={statement.largestExpense ? money(statement.largestExpense.amountCents) : "—"}
+            apoio={
+              statement.largestExpense
+                ? [statement.largestExpense.description, statement.largestExpense.categoryName]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "Sem saídas registradas"
+            }
+          />
+        </div>
 
-      <Stack gap="lg">
-        <MetricStrip
-          metrics={[
-            {
-              label: "Entradas",
-              value: money(statement.incomeCents),
-              tone: "positive",
-              icon: ArrowUpRight,
-              hint: "Receitas confirmadas e previstas do mês",
-            },
-            {
-              label: "Saídas",
-              value: money(statement.expenseCents),
-              icon: ArrowDownRight,
-              hint: "Despesas do mês, sem contar transferências",
-            },
-            {
-              label: "Resultado",
-              value: money(saldo, { signed: true }),
-              tone: saldo < 0 ? "negative" : "positive",
-              icon: Scale,
-              hint: saldo < 0 ? "Saiu mais do que entrou nesta competência" : "Sobrou depois de tudo",
-            },
-            {
-              label: "Lançamentos",
-              value: String(statement.rows.length),
-              icon: Receipt,
-              hint: "Registros na competência",
-            },
-          ]}
-        />
+        {/* ---------------------------------------------------------------- */}
+        {/* A rosca: quanto a maior categoria ocupa do mês.                   */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="glass-panel p-6 xl:col-span-5">
+          <PanelHeading
+            titulo="Saídas por categoria"
+            apoio={`Distribuição de ${competenceLong(statement.competence).toLowerCase()}`}
+          />
+          {statement.categorySpend.length ? (
+            <>
+              <Donut percent={fatia} />
+              <div className="mt-6 space-y-3">
+                {statement.categorySpend.slice(0, 5).map((categoria) => (
+                  <div key={categoria.name} className="flex justify-between text-caption">
+                    <span className="min-w-0 truncate text-ink">{categoria.name}</span>
+                    <span className="tabular shrink-0 text-ink-subtle">
+                      {money(categoria.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-body-sm text-ink-subtle">
+              Nenhuma saída nesta competência para distribuir.
+            </p>
+          )}
+        </section>
 
-        <StatementList rows={statement.rows} options={statement.options} />
-      </Stack>
-    </Page>
+        {/* ---------------------------------------------------------------- */}
+        {/* A lista, com a navegação de mês e o filtro no cabeçalho.          */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="glass-panel p-6 xl:col-span-7">
+          <PanelHeading
+            titulo={selectedCard ? `Lançamentos · ${selectedCard.name}` : "Todos os lançamentos"}
+            apoio={
+              selectedCard
+                ? "Compras, estornos e pagamentos ligados somente a esta fatura"
+                : "Tudo que entrou e saiu na competência, incluindo o previsto"
+            }
+            acao={
+              <div className="flex shrink-0 items-center gap-2">
+                <CompetenceNav
+                  anterior={shift(statement.competence, -1)}
+                  proxima={shift(statement.competence, 1)}
+                  cardId={selectedCard?.id}
+                />
+                <Composer
+                  options={statement.options}
+                  competence={statement.competence}
+                  today={hoje}
+                  defaultOpen={params.novo === "1"}
+                />
+              </div>
+            }
+          />
+          <StatementList rows={statement.rows} options={statement.options} />
+        </section>
+      </div>
+    </div>
   );
 }

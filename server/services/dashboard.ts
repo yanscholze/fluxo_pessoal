@@ -27,8 +27,15 @@ import {
   projectCashflow,
 } from "../../core/domain/position/financial-position.ts";
 import { type Cents, sum } from "../../core/kernel/money.ts";
-import { type Competence, competenceOf, series, shift } from "../../core/time/competence.ts";
-import { type LocalDate, addDays, todayIn } from "../../core/time/local-date.ts";
+import {
+  type Competence,
+  competenceOf,
+  firstDay,
+  lastDay,
+  series,
+  shift,
+} from "../../core/time/competence.ts";
+import { type LocalDate, addDays, eachDay, todayIn } from "../../core/time/local-date.ts";
 import {
   type CardRecord,
   type CategoryRecord,
@@ -111,6 +118,21 @@ export type CategorySpend = {
   readonly percent: number;
 };
 
+/**
+ * Um ponto da curva de gastos do mês.
+ *
+ * `accumulatedCents` é o gasto **somado desde o primeiro dia da competência**
+ * até o dia do ponto — e não o gasto do dia. Em telefone, uma série de gastos
+ * diários vira um serrote: zero na maioria dos dias, um pico no dia do
+ * mercado, e nenhuma leitura possível num traço de 90px de altura. A curva
+ * acumulada responde a pergunta que a tela faz — "em que ritmo o mês está
+ * indo" — e termina exatamente no total que aparece ao lado dela.
+ */
+export type SpendPoint = {
+  readonly date: LocalDate;
+  readonly accumulatedCents: number;
+};
+
 export type Dashboard = {
   readonly today: LocalDate;
   readonly competence: Competence;
@@ -147,6 +169,14 @@ export type Dashboard = {
   readonly cards: readonly CardSummary[];
   readonly upcoming: readonly UpcomingItem[];
   readonly categorySpend: readonly CategorySpend[];
+  /**
+   * A curva de gastos da competência corrente, dia a dia até hoje.
+   *
+   * Vem do servidor, e não do razão local do aplicativo, porque o número que
+   * fica ao lado dela — o total de saídas do mês — também vem. Duas origens
+   * fariam o traço terminar num lugar e o total dizer outro.
+   */
+  readonly dailySpend: readonly SpendPoint[];
   readonly cashflow: readonly {
     competence: Competence;
     inflowCents: number;
@@ -428,6 +458,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     cards: cards.map((card) => summarizeCard(card, entries, today)),
     upcoming: upcomingCommitments(entries, meta, today, projectedTransactionIds),
     categorySpend: spendByCategory(entries, meta, categories, competence),
+    dailySpend: dailySpend(entries, accounts, competence, today),
     cashflow: projectCashflow({
       ...positionInput,
       // A série começa na competência **corrente**, não na seguinte.
@@ -528,6 +559,43 @@ function monthFlow(
   // despesa que nunca existiu.
   const totals = flow(entries, { accountIds, competence, states: ["confirmed"], kinds: CONSUMPTION });
   return { incomeCents: totals.inflow, expenseCents: totals.outflow, netCents: totals.net };
+}
+
+/**
+ * A curva de gastos do mês.
+ *
+ * Cada ponto é o mesmo cálculo de `monthFlow`, recortado por `upTo` — não uma
+ * segunda soma escrita à parte. É o que garante que o último ponto seja o
+ * total do mês: os dois saem da mesma função, com o mesmo filtro de contas, de
+ * situação e de natureza.
+ *
+ * A série para em **hoje**, e não no fim do mês. Desenhar os dias que ainda
+ * não aconteceram acrescenta um trecho reto à direita, que o olho lê como
+ * "parei de gastar" em vez de "o mês ainda não chegou lá".
+ */
+function dailySpend(
+  entries: readonly LedgerEntry[],
+  accounts: Awaited<ReturnType<typeof listAccounts>>,
+  competence: Competence,
+  today: LocalDate,
+): SpendPoint[] {
+  const accountIds = new Set(liquidAccounts(accounts).map((account) => account.id));
+  const inicio = firstDay(competence);
+  const fim = lastDay(competence);
+  const ate = today < fim ? today : fim;
+  // Competência futura — acontece em projeção — não tem dia decorrido nenhum.
+  if (ate < inicio) return [];
+
+  return eachDay(inicio, ate).map((dia) => ({
+    date: dia,
+    accumulatedCents: flow(entries, {
+      accountIds,
+      competence,
+      states: ["confirmed"],
+      kinds: CONSUMPTION,
+      upTo: dia,
+    }).outflow,
+  }));
 }
 
 /** Compromissos previstos dos próximos dias — a agenda da saúde financeira. */

@@ -16,7 +16,7 @@ import {
   type LucideIcon,
   Receipt,
 } from "../../ui/icons.tsx";
-import { Badge, Empty, Panel, type Tone } from "../../ui/primitives.tsx";
+import { Badge, Empty, type Tone } from "../../ui/primitives.tsx";
 import { RowActions } from "./row-actions.tsx";
 
 const NATUREZA: Record<StatementRow["kind"], { label: string; icon: LucideIcon; tone: Tone }> = {
@@ -108,18 +108,16 @@ export function StatementList({
 
   if (!rows.length) {
     return (
-      <Panel>
-        <Empty
-          icon={Receipt}
-          title="Nenhum lançamento nesta competência"
-          hint="Registre um movimento ou navegue para outro mês."
-        />
-      </Panel>
+      <Empty
+        icon={Receipt}
+        title="Nenhum lançamento nesta competência"
+        hint="Registre um movimento ou navegue para outro mês."
+      />
     );
   }
 
   return (
-    <Panel>
+    <>
       {selecionados.length ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md bg-accent-wash px-3 py-2">
           <p className="text-body-sm text-ink">
@@ -296,6 +294,6 @@ export function StatementList({
           {erro ? <p role="alert" className="text-body-sm text-negative">{erro}</p> : null}
         </div>
       </Dialog>
-    </Panel>
+    </>
   );
 }
