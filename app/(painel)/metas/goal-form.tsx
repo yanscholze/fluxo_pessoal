@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ModalPortal } from "../../ui/modal-portal.tsx";
 
 export function GoalForm({ accounts }: { accounts: readonly { id: string; name: string }[] }) {
   const router = useRouter();
@@ -57,12 +58,13 @@ export function GoalForm({ accounts }: { accounts: readonly { id: string; name: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-6">
+    <ModalPortal onClose={() => setAberto(false)}>
+    <div className="fluxo-modal-overlay">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Nova meta"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
+        className="fluxo-modal-card w-full max-w-md border border-line bg-surface p-5 shadow-float"
       >
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-title font-semibold text-ink">Nova meta</h2>
@@ -134,6 +136,7 @@ export function GoalForm({ accounts }: { accounts: readonly { id: string; name: 
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

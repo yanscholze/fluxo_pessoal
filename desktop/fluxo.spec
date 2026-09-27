@@ -1,5 +1,5 @@
 Name: fluxo
-Version: 0.5.1
+Version: 0.5.2
 Release: 1%{?dist}
 Summary: Aplicação de finanças pessoais Fluxo
 License: Proprietary

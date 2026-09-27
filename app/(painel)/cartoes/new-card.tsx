@@ -19,6 +19,7 @@ import { useState } from "react";
 import { Button, Field, Input, MoneyInput, Select } from "../../ui/controls.tsx";
 import { CreditCard, Plus, X } from "../../ui/icons.tsx";
 import { Notice, Panel } from "../../ui/primitives.tsx";
+import { ModalPortal } from "../../ui/modal-portal.tsx";
 import { CardFace } from "./card-face.tsx";
 
 /**
@@ -191,17 +192,18 @@ export function NewCard({
         </Button>
       )}
 
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-canvas/80 p-4 backdrop-blur-sm sm:p-8">
+      <ModalPortal onClose={fechar}>
+      <div className="fluxo-modal-overlay">
         <button
           type="button"
           aria-label="Fechar"
           onClick={fechar}
-          className="fixed inset-0 -z-10 cursor-default"
+          className="absolute inset-0 z-0 cursor-default"
         />
 
         <Panel
           variant="raised"
-          className="mx-auto w-full max-w-[56rem] animate-rise"
+          className="fluxo-modal-card relative z-10 w-full max-w-[56rem] animate-rise"
           role="dialog"
           aria-modal="true"
           aria-label={editando ? "Editar cartão" : "Novo cartão"}
@@ -511,6 +513,7 @@ export function NewCard({
         </div>
         </Panel>
       </div>
+      </ModalPortal>
     </>
   );
 }

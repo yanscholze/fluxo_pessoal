@@ -11,5 +11,5 @@ cp "$repo_root/desktop/fluxo.spec" "$rpm_root/SPECS/fluxo.spec"
 rpmbuild -bb "$rpm_root/SPECS/fluxo.spec" --define "_topdir $rpm_root"
 find "$rpm_root/RPMS" -type f -name '*.rpm' -print
 mkdir -p "$repo_root/builds"
-cp "$rpm_root/RPMS/noarch/fluxo-0.5.1-1.fc44.noarch.rpm" "$repo_root/builds/Fluxo-Fedora-0.5.1.fc44.noarch.rpm"
-echo "$repo_root/builds/Fluxo-Fedora-0.5.1.fc44.noarch.rpm"
+cp "$rpm_root/RPMS/noarch/fluxo-0.5.2-1.fc44.noarch.rpm" "$repo_root/builds/Fluxo-Fedora-0.5.2.fc44.noarch.rpm"
+echo "$repo_root/builds/Fluxo-Fedora-0.5.2.fc44.noarch.rpm"

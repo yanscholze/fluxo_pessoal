@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "./controls.tsx";
 import { Panel, join } from "./primitives.tsx";
 import { CircleAlert, X } from "./icons.tsx";
+import { ModalPortal } from "./modal-portal.tsx";
 
 const FOCALIZAVEIS =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -189,17 +190,18 @@ export function Dialog({
   const largura = width === "sm" ? "max-w-md" : width === "lg" ? "max-w-[56rem]" : "max-w-xl";
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-canvas/80 p-4 backdrop-blur-sm sm:p-8">
+    <ModalPortal>
+    <div className="fluxo-modal-overlay">
       <button
         type="button"
         aria-label="Fechar"
         onClick={fechar}
-        className="fixed inset-0 -z-10 cursor-default"
+        className="absolute inset-0 z-0 cursor-default"
       />
 
       <Panel
         variant="raised"
-        className={join("mx-auto w-full animate-rise", largura)}
+        className={join("fluxo-modal-card relative z-10 w-full animate-rise", largura)}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -225,6 +227,7 @@ export function Dialog({
         </div>
       </Panel>
     </div>
+    </ModalPortal>
   );
 }
 

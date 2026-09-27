@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 import { competenceOf, type Competence } from "../../../core/time/competence.ts";
 import type { LocalDate } from "../../../core/time/local-date.ts";
 import type { Statement } from "../../../server/services/statement.ts";
+import { ModalPortal } from "../../ui/modal-portal.tsx";
 
 type Tipo = "expense" | "income" | "transfer";
 type Origem = "account" | "card";
@@ -121,12 +122,13 @@ export function Composer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+    <ModalPortal onClose={() => setAberto(false)}>
+    <div className="fluxo-modal-overlay">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Novo lançamento"
-        className="max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
+        className="fluxo-modal-card w-full max-w-lg border border-line bg-surface p-5 shadow-float"
       >
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-title font-semibold text-ink">Novo lançamento</h2>
@@ -311,6 +313,7 @@ export function Composer({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

@@ -13,6 +13,7 @@ import { useState } from "react";
 
 import type { CardsView, InvoiceView } from "../../../server/services/cards.ts";
 import { competenceShort, date, money } from "../../ui/format.ts";
+import { ModalPortal } from "../../ui/modal-portal.tsx";
 
 export function PayInvoice({
   cardId,
@@ -67,12 +68,13 @@ export function PayInvoice({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-6">
+    <ModalPortal onClose={onClose}>
+    <div className="fluxo-modal-overlay">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Pagar fatura"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
+        className="fluxo-modal-card w-full max-w-md border border-line bg-surface p-5 shadow-float"
       >
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
@@ -145,5 +147,6 @@ export function PayInvoice({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "../../ui/controls.tsx";
 import { Plus } from "../../ui/icons.tsx";
+import { ModalPortal } from "../../ui/modal-portal.tsx";
 
 const CLASSES = [
   ["fixed_income", "Renda fixa"],
@@ -81,12 +82,13 @@ export function InvestmentForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-6">
+    <ModalPortal onClose={() => setAberto(false)}>
+    <div className="fluxo-modal-overlay">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Novo investimento"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-panel border border-line bg-surface p-5 shadow-float sm:rounded-panel"
+        className="fluxo-modal-card w-full max-w-md border border-line bg-surface p-5 shadow-float"
       >
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-title font-semibold text-ink">Novo investimento</h2>
@@ -175,6 +177,7 @@ export function InvestmentForm({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

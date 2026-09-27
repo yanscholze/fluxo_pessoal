@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { BottomNav } from "./bottom-nav.tsx";
 import { InstallApp } from "./install-app.tsx";
 import { Dialog } from "./dialog.tsx";
 import { Input } from "./controls.tsx";
 import { gravarPreferencia, usePreferencia } from "./browser-preference.ts";
 import {
-  ArrowRight, BarChart3, Bell, Bot, Briefcase, CircleHelp, CreditCard, Landmark,
-  LayoutDashboard, LogOut, type LucideIcon, Menu, Moon, PanelLeft,
-  PanelLeftClose, Plane, Receipt, Repeat, Search, Settings, Sun, Wallet, X, Zap,
+  ArrowRight, BarChart3, Bell, Bot, Briefcase, CreditCard, Landmark,
+  LayoutDashboard, type LucideIcon, Menu, Moon, Plane, Receipt, Repeat,
+  Search, Settings, Sun, Wallet, X, Zap,
 } from "./icons.tsx";
 import { join } from "./primitives.tsx";
 
@@ -37,11 +37,10 @@ export const NAV: readonly NavGroup[] = [
     { href: "/projetos", label: "Projetos", icon: Briefcase },
   ] },
   { title: "Organização", items: [
-    { href: "/automaticos", label: "Automações e importações", icon: Zap },
+    { href: "/automaticos", label: "Automações", icon: Zap },
   ] },
 ];
 const SETTINGS: NavItem = { href: "/configuracoes", label: "Configurações", icon: Settings };
-const CHAVE_RECOLHIDA = "fluxo:menu-recolhido";
 const ATALHOS = [
   ...NAV.flatMap((grupo) => grupo.items), SETTINGS,
   { href: "/planejamento?aba=parcelamentos", label: "Parcelamentos", icon: Repeat },
@@ -58,6 +57,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
+  const [hoverBloqueado, setHoverBloqueado] = useState(false);
   const [consulta, setConsulta] = useState("");
   const [rotaDaGaveta, setRotaDaGaveta] = useState(pathname);
   const navegacao = useRef<HTMLElement>(null);
@@ -67,7 +67,6 @@ export function Shell({ userName, children }: { userName: string; children: Reac
     setMenuAberto(false);
     setBuscaAberta(false);
   }
-  const recolhida = usePreferencia(() => localStorage.getItem(CHAVE_RECOLHIDA) !== "0", true);
   const grupo = NAV.find((g) => g.items.some((item) => rotaAtiva(item.href, pathname)));
   const atual = grupo?.items.find((item) => rotaAtiva(item.href, pathname)) ?? SETTINGS;
   const resultados = ATALHOS.filter((item) => normalizar(item.label).includes(normalizar(consulta)));
@@ -102,14 +101,22 @@ export function Shell({ userName, children }: { userName: string; children: Reac
     return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", tecla); anterior?.focus(); };
   }, [menuAberto]);
 
+  function navegarPelaSidebar(evento: MouseEvent<HTMLElement>) {
+    const alvo = evento.target;
+    if (!(alvo instanceof Element) || !alvo.closest("a[href]")) return;
+    setMenuAberto(false);
+    setHoverBloqueado(true);
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+
   return (
     <div className="app-shell fluxo-shell flex min-h-dvh">
       <a href="#conteudo" className="skip-link">Ir para o conteúdo</a>
       {menuAberto ? <button type="button" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} className="fixed inset-0 z-30 bg-canvas/75 backdrop-blur-sm lg:hidden" /> : null}
-      <nav ref={navegacao} id="navegacao" aria-label="Navegação principal" className={join(
+      <nav ref={navegacao} id="navegacao" aria-label="Navegação principal" data-hover-bloqueado={hoverBloqueado} onMouseLeave={() => setHoverBloqueado(false)} onClickCapture={navegarPelaSidebar} className={join(
         "app-sidebar fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-line bg-surface transition-[transform,width] duration-200 lg:translate-x-0",
         menuAberto ? "visible translate-x-0" : "invisible -translate-x-full lg:visible",
-        recolhida ? "w-[16.5rem] lg:w-[4.75rem]" : "w-[16.5rem]",
+        "w-[16.5rem] lg:w-[4.75rem]",
       )}>
         <div className="sidebar-brand flex h-16 shrink-0 items-center gap-3 px-3">
           <Link href="/" className="flex items-center gap-3" aria-label="Fluxo — início">
@@ -118,23 +125,16 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           </Link>
           <button type="button" onClick={() => setMenuAberto(false)} aria-label="Fechar menu" className="ml-auto flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-surface-inset lg:hidden"><X size={19} aria-hidden /></button>
         </div>
-        <div className="sidebar-links min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        <div className="sidebar-links min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-0 pb-2">
           {NAV.map((g) => <div key={g.title} className="mb-3 last:mb-0">
             <p className="sidebar-group-label px-3 pb-2 pt-1 text-label uppercase text-ink-subtle">{g.title}</p>
-            <ul className="space-y-1">{g.items.map((item) => <li key={item.href}><ItemDeNavegacao item={item} pathname={pathname} recolhida={recolhida} /></li>)}</ul>
+            <ul>{g.items.map((item) => <li key={item.href}><ItemDeNavegacao item={item} pathname={pathname} /></li>)}</ul>
           </div>)}
         </div>
-        <div className="sidebar-footer shrink-0 border-t border-line p-3">
-          <ItemDeNavegacao item={SETTINGS} pathname={pathname} recolhida={recolhida} />
-          <InstallApp className="sidebar-label my-2 w-full" />
-          <Link href="/configuracoes" className={join("mt-1 flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-surface-inset", recolhida && "lg:justify-center")} aria-label={`Conta de ${userName}`}>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-accent-edge bg-accent-wash text-caption font-semibold uppercase text-accent">{iniciais(userName)}</span>
-            <span className="sidebar-label min-w-0 flex-1"><span className="block truncate text-body-sm font-medium text-ink">{userName}</span><span className="block text-caption text-ink-subtle">Meu espaço pessoal</span></span>
-          </Link>
-          <div className={join("mt-1 flex gap-1", recolhida && "lg:flex-col")}>
-            <BotaoDeTema recolhida={recolhida} /><BotaoDeSaida recolhida={recolhida} />
-            <button type="button" onClick={() => gravarPreferencia(() => {}, CHAVE_RECOLHIDA, recolhida ? "0" : "1")} aria-label={recolhida ? "Expandir menu" : "Recolher menu"} title={recolhida ? "Expandir menu" : "Recolher menu"} className="hidden size-10 items-center justify-center rounded-md text-ink-muted hover:bg-surface-inset lg:inline-flex">{recolhida ? <PanelLeft size={17} aria-hidden /> : <PanelLeftClose size={17} aria-hidden />}</button>
-          </div>
+        <div className="flex shrink-0 items-center justify-center gap-3 border-t border-line px-3 py-3 lg:hidden">
+          <Link href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span></Link>
+          <Link href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
+          <BotaoDeTema inDrawer />
         </div>
       </nav>
       <div className="fluxo-main min-w-0 flex-1" inert={menuAberto || undefined}>
@@ -146,7 +146,9 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => { setConsulta(""); setBuscaAberta(true); }} className="fluxo-search flex h-11 items-center gap-2 border border-line px-3 text-caption text-ink-muted transition-colors hover:border-accent-edge hover:text-ink" aria-label="Buscar uma área do app"><Search size={17} aria-hidden /><span className="hidden sm:inline">Pesquisar...</span><kbd className="ml-auto hidden text-label text-ink-subtle lg:inline">⌘ K</kbd></button>
             <Link href="/#pendencias" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent" aria-label="Ver pendências no TARS"><Bell size={18} aria-hidden /></Link>
-            <Link href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Ajuda e configurações"><CircleHelp size={18} aria-hidden /></Link>
+            <InstallApp className="fluxo-top-icon hidden h-11 items-center px-3 lg:inline-flex" />
+            <Link href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
+            <BotaoDeTema />
             <Link href="/configuracoes" className="fluxo-profile hidden items-center gap-2 px-2 py-1 sm:flex" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span><span className="max-w-28 truncate text-body-sm font-semibold text-ink">{userName}</span></Link>
           </div>
         </header>
@@ -166,13 +168,12 @@ export function Shell({ userName, children }: { userName: string; children: Reac
 }
 function normalizar(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function rotaAtiva(href: string, pathname: string) { return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`); }
-function ItemDeNavegacao({ item, pathname, recolhida }: { item: NavItem; pathname: string; recolhida: boolean }) {
+function ItemDeNavegacao({ item, pathname }: { item: NavItem; pathname: string }) {
   const ativo = rotaAtiva(item.href, pathname);
   const Icone = item.icon;
-  return <Link href={item.href} aria-current={ativo ? "page" : undefined} title={recolhida ? item.label : undefined} className={join("nav-item relative flex min-h-9 items-center gap-3 rounded-md px-3 py-1.5 text-body-sm transition-colors", recolhida && "lg:justify-center lg:px-0", ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-inset hover:text-ink")}>
+  return <Link href={item.href} aria-current={ativo ? "page" : undefined} title={item.label} className={join("nav-item relative flex min-h-9 items-center gap-3 rounded-md px-3 py-1.5 text-body-sm transition-colors", ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-inset hover:text-ink")}>
     {ativo ? <span className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent" aria-hidden /> : null}
     <Icone size={20} strokeWidth={1.9} className="shrink-0" aria-hidden /><span className="sidebar-label leading-snug">{item.label}</span>
-    {item.href === "/" ? <span className={join("ml-auto size-1.5 shrink-0 rounded-full bg-accent", recolhida && "lg:hidden")} aria-hidden /> : null}
   </Link>;
 }
 
@@ -183,7 +184,7 @@ function iniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
-function BotaoDeTema({ recolhida }: { recolhida: boolean }) {
+function BotaoDeTema({ inDrawer = false }: { inDrawer?: boolean }) {
   // `null` no servidor: lá não há `<html>` com tema para consultar, e chutar
   // "claro" faria o botão trocar de rótulo sozinho na hidratação.
   const escuro = usePreferencia<boolean | "">(
@@ -210,37 +211,9 @@ function BotaoDeTema({ recolhida }: { recolhida: boolean }) {
       onClick={alternar}
       aria-label={rotulo}
       title={rotulo}
-      className={join(
-        "inline-flex size-10 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink",
-        recolhida ? "" : "flex-1",
-      )}
+      className={join("fluxo-top-icon size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent", inDrawer ? "inline-flex" : "hidden sm:inline-flex")}
     >
       {escuro === false ? <Moon size={16} strokeWidth={1.5} aria-hidden /> : <Sun size={16} strokeWidth={1.5} aria-hidden />}
-    </button>
-  );
-}
-
-function BotaoDeSaida({ recolhida }: { recolhida: boolean }) {
-  const router = useRouter();
-
-  async function sair() {
-    await fetch("/api/v1/session", { method: "DELETE" });
-    router.replace("/entrar");
-    router.refresh();
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={sair}
-      aria-label="Sair"
-      title="Sair"
-      className={join(
-        "inline-flex size-10 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-negative-wash hover:text-negative",
-        recolhida ? "" : "flex-1",
-      )}
-    >
-      <LogOut size={16} strokeWidth={1.5} aria-hidden />
     </button>
   );
 }
