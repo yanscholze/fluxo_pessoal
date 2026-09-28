@@ -21,6 +21,6 @@ export const GET = handle(async (request: Request) => {
   const projeto = await findProject(user.id, projectId);
   if (!projeto) throw notFound("Projeto", projectId);
 
-  const atividade = await repositoryActivity(projeto.repositoryUrl, projeto.mainBranch);
+  const atividade = await repositoryActivity(user.id, projeto.repositoryUrl, projeto.mainBranch);
   return json({ data: atividade });
 });

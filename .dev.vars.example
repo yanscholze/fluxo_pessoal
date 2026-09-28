@@ -1,26 +1,8 @@
-# Segredos do Worker no desenvolvimento local.
-#
-# Copie para `.dev.vars` e preencha o que for usar. O Wrangler lê esse arquivo
-# e expõe cada linha como `env.NOME` dentro do Worker — o mesmo caminho que
-# `wrangler secret put NOME` usa em produção. `.dev.vars` é ignorado pelo git.
-#
-# Nenhum deles é obrigatório: sem qualquer um, o Fluxo sobe e funciona, apenas
-# com o recurso correspondente desligado e dizendo isso na tela.
+# Segredo de criptografia do servidor para as integrações pessoais.
+# Gere UMA vez com `openssl rand -base64 32` e guarde o valor: substituí-lo
+# impede a leitura das chaves que as contas já cadastraram.
+# Este arquivo é apenas um modelo. Copie para `.dev.vars`, ignorado pelo Git.
+INTEGRATION_ENCRYPTION_KEY=
 
-# Liga o assistente e a leitura de cupom fiscal.
-OPENAI_API_KEY=
-
-# Liga a lista de repositórios e a atividade do GitHub na tela do projeto.
-#
-# Um Personal Access Token (fine-grained) com permissão de LEITURA:
-#   Repository access: os repositórios que você quer vincular
-#   Permissions → Repository → Contents: Read-only
-#                              Issues: Read-only
-#                              Pull requests: Read-only
-#                              Metadata: Read-only  (vem junto)
-#
-# Nenhuma rota do Fluxo escreve no GitHub: não abre issue, não comenta, não faz
-# merge. Permissão de escrita aqui só aumentaria o estrago de um vazamento.
-#
-# Crie em: https://github.com/settings/personal-access-tokens/new
-GITHUB_TOKEN=
+# As chaves de Gemini, OpenAI e GitHub são cadastradas por cada pessoa na aba
+# Configurações → Integrações da aplicação, nunca neste arquivo.

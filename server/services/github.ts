@@ -1,27 +1,23 @@
 /**
  * Leitura do GitHub.
  *
- * O token **não** fica no banco. Ele é segredo do ambiente
- * (`wrangler secret put GITHUB_TOKEN`), pelo mesmo motivo da senha do painel do
- * cliente: um vazamento do Fluxo não pode virar acesso de escrita ao código de
- * todos os projetos. Sem o segredo, a tela continua funcionando — mostra os
- * atalhos e diz que a atividade não está ligada.
+ * Cada usuário usa seu próprio token, cifrado no banco. Sem ele, a tela
+ * continua mostrando atalhos e avisa que a atividade não está ligada.
  *
  * Só leitura. Nada aqui abre issue, comenta ou faz merge: o Fluxo acompanha o
  * trabalho, não o executa.
  */
 
-import { env } from "cloudflare:workers";
-
 import { parseGithubRepository, type Repository } from "../../core/domain/work/repository.ts";
+import { integrationToken } from "./integration-credentials.ts";
 
 const API = "https://api.github.com";
 const TIMEOUT_MS = 8_000;
 /** Quanto de cada lista cabe num painel sem virar rolagem infinita. */
 const LIMITE = 5;
 
-export function isConfigured(): boolean {
-  return typeof env.GITHUB_TOKEN === "string" && env.GITHUB_TOKEN.length > 0;
+export async function isConfigured(userId: string): Promise<boolean> {
+  return (await integrationToken(userId, "github")) !== null;
 }
 
 export type Commit = {
@@ -70,7 +66,7 @@ export type RepositoryActivity =
       readonly issues: readonly Issue[];
     };
 
-async function pedir<T>(caminho: string): Promise<T | null> {
+async function pedir<T>(caminho: string, token: string): Promise<T | null> {
   const controlador = new AbortController();
   const relogio = setTimeout(() => controlador.abort(), TIMEOUT_MS);
 
@@ -78,7 +74,7 @@ async function pedir<T>(caminho: string): Promise<T | null> {
     const resposta = await fetch(`${API}${caminho}`, {
       headers: {
         accept: "application/vnd.github+json",
-        authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        authorization: `Bearer ${token}`,
         "user-agent": "fluxo-pessoal",
         "x-github-api-version": "2022-11-28",
       },
@@ -129,13 +125,14 @@ const PAGINAS = 2;
  * Ordenados pelo último push, porque o repositório que se quer vincular é
  * quase sempre aquele em que se mexeu por último.
  */
-export async function listRepositories(): Promise<RepositoryOption[] | null> {
-  if (!isConfigured()) return null;
+export async function listRepositories(userId: string): Promise<RepositoryOption[] | null> {
+  const token = await integrationToken(userId, "github");
+  if (!token) return null;
 
   const paginas = await Promise.all(
     Array.from({ length: PAGINAS }, (_, indice) =>
       pedir<ListaResposta[]>(
-        `/user/repos?per_page=${POR_PAGINA}&page=${indice + 1}&sort=pushed&affiliation=owner,collaborator,organization_member`,
+        `/user/repos?per_page=${POR_PAGINA}&page=${indice + 1}&sort=pushed&affiliation=owner,collaborator,organization_member`, token,
       ),
     ),
   );
@@ -169,14 +166,16 @@ export async function listRepositories(): Promise<RepositoryOption[] | null> {
  * saber que há três PRs abertos é útil mesmo quando os commits não vieram.
  */
 export async function repositoryActivity(
+  userId: string,
   repositoryUrl: string | null,
   branch: string | null,
 ): Promise<RepositoryActivity> {
   const repo = parseGithubRepository(repositoryUrl);
   if (!repo) return { available: false, reason: "sem-repositorio" };
-  if (!isConfigured()) return { available: false, reason: "sem-token" };
+  const token = await integrationToken(userId, "github");
+  if (!token) return { available: false, reason: "sem-token" };
 
-  const dados = await pedir<RepoResposta>(`/repos/${repo.slug}`);
+  const dados = await pedir<RepoResposta>(`/repos/${repo.slug}`, token);
   // Repositório privado sem permissão devolve 404, igual a inexistente — do
   // ponto de vista de quem olha a tela, é a mesma situação: não dá para ver.
   if (!dados) return { available: false, reason: "sem-acesso" };
@@ -184,9 +183,9 @@ export async function repositoryActivity(
   const ramo = branch?.trim() || dados.default_branch || "main";
 
   const [commits, pulls, issues] = await Promise.all([
-    pedir<CommitResposta[]>(`/repos/${repo.slug}/commits?sha=${encodeURIComponent(ramo)}&per_page=${LIMITE}`),
-    pedir<PullResposta[]>(`/repos/${repo.slug}/pulls?state=open&per_page=${LIMITE}`),
-    pedir<IssueResposta[]>(`/repos/${repo.slug}/issues?state=open&per_page=${LIMITE}`),
+    pedir<CommitResposta[]>(`/repos/${repo.slug}/commits?sha=${encodeURIComponent(ramo)}&per_page=${LIMITE}`, token),
+    pedir<PullResposta[]>(`/repos/${repo.slug}/pulls?state=open&per_page=${LIMITE}`, token),
+    pedir<IssueResposta[]>(`/repos/${repo.slug}/issues?state=open&per_page=${LIMITE}`, token),
   ]);
 
   return {

@@ -1,3 +1,8 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <path d="M286 694L512 468L674 630V326H370" fill="none" stroke="#FFFFFF" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 42 42" role="img" aria-label="Marca do Fluxo">
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b5cf6"/><stop offset="1" stop-color="#6d28d9"/></linearGradient>
+  </defs>
+  <g transform="translate(8 7) rotate(34 10 14)"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#blue)"/></g>
+  <g transform="translate(15 7) rotate(34 10 14)" opacity=".9"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#purple)"/></g>
 </svg>

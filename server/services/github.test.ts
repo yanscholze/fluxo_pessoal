@@ -12,8 +12,19 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { definirSegredo } from "../testing/worker-env.ts";
+import { zerar } from "../testing/cenario.ts";
+import { signUp } from "./auth.ts";
+import { removeIntegrationToken, saveIntegrationToken } from "./integration-credentials.ts";
 
 const fetchOriginal = globalThis.fetch;
+let userId = "";
+
+async function setup() {
+  zerar();
+  definirSegredo("INTEGRATION_ENCRYPTION_KEY", btoa("0123456789abcdef0123456789abcdef"));
+  userId = (await signUp({ email: "github@teste.app", password: "senha-de-teste-123", displayName: "GitHub Teste" })).user.id;
+  await saveIntegrationToken(userId, "github", "token-de-teste");
+}
 
 /** Responde cada caminho da API com o corpo combinado. 404 no que não estiver. */
 function responderCom(rotas: Record<string, unknown>): void {
@@ -29,13 +40,10 @@ function responderCom(rotas: Record<string, unknown>): void {
 }
 
 describe("atividade do repositório", () => {
-  beforeEach(() => {
-    definirSegredo("GITHUB_TOKEN", "token-de-teste");
-  });
+  beforeEach(setup);
 
   afterEach(() => {
     globalThis.fetch = fetchOriginal;
-    definirSegredo("GITHUB_TOKEN", undefined);
   });
 
   it("sem endereço de repositório, não tenta a rede", async () => {
@@ -46,7 +54,7 @@ describe("atividade do repositório", () => {
       return new Response("null", { status: 200 });
     }) as typeof fetch;
 
-    const resultado = await repositoryActivity(null, null);
+    const resultado = await repositoryActivity(userId, null, null);
 
     assert.equal(resultado.available, false);
     assert.equal(resultado.available === false && resultado.reason, "sem-repositorio");
@@ -55,9 +63,9 @@ describe("atividade do repositório", () => {
 
   it("sem token no ambiente, diz que falta ligar — não que falhou", async () => {
     const { repositoryActivity } = await import("./github.ts");
-    definirSegredo("GITHUB_TOKEN", undefined);
+    await removeIntegrationToken(userId, "github");
 
-    const resultado = await repositoryActivity("https://github.com/dono/repo", null);
+    const resultado = await repositoryActivity(userId, "https://github.com/dono/repo", null);
 
     assert.equal(resultado.available === false && resultado.reason, "sem-token");
   });
@@ -66,7 +74,7 @@ describe("atividade do repositório", () => {
     const { repositoryActivity } = await import("./github.ts");
     responderCom({});
 
-    const resultado = await repositoryActivity("https://github.com/dono/privado", null);
+    const resultado = await repositoryActivity(userId, "https://github.com/dono/privado", null);
 
     assert.equal(resultado.available === false && resultado.reason, "sem-acesso");
   });
@@ -77,7 +85,7 @@ describe("atividade do repositório", () => {
       throw new Error("getaddrinfo ENOTFOUND");
     }) as typeof fetch;
 
-    const resultado = await repositoryActivity("https://github.com/dono/repo", null);
+    const resultado = await repositoryActivity(userId, "https://github.com/dono/repo", null);
 
     assert.equal(resultado.available === false && resultado.reason, "sem-acesso");
   });
@@ -107,7 +115,7 @@ describe("atividade do repositório", () => {
       ],
     });
 
-    const resultado = await repositoryActivity("https://github.com/dono/repo.git", null);
+    const resultado = await repositoryActivity(userId, "https://github.com/dono/repo.git", null);
 
     assert.equal(resultado.available, true);
     if (!resultado.available) return;
@@ -135,25 +143,36 @@ describe("atividade do repositório", () => {
       "/repos/dono/repo/issues?state=open&per_page=5": [],
     });
 
-    const resultado = await repositoryActivity("https://github.com/dono/repo", "producao");
+    const resultado = await repositoryActivity(userId, "https://github.com/dono/repo", "producao");
 
     assert.equal(resultado.available === true && resultado.defaultBranch, "producao");
   });
 });
 
 describe("lista de repositórios", () => {
-  beforeEach(() => {
-    definirSegredo("GITHUB_TOKEN", "token-de-teste");
-  });
+  beforeEach(setup);
 
   afterEach(() => {
     globalThis.fetch = fetchOriginal;
-    definirSegredo("GITHUB_TOKEN", undefined);
+  });
+
+  it("usa o token da conta que pediu a lista", async () => {
+    const { listRepositories } = await import("./github.ts");
+    const sibling = (await signUp({ email: "irmao@teste.app", password: "senha-de-teste-123", displayName: "Irmão" })).user.id;
+    await saveIntegrationToken(sibling, "github", "token-do-irmao");
+    const received: string[] = [];
+    globalThis.fetch = (async (_url, init) => {
+      received.push(new Headers(init?.headers).get("authorization") ?? "");
+      return Response.json([]);
+    }) as typeof fetch;
+    await listRepositories(userId);
+    await listRepositories(sibling);
+    assert.deepEqual(received, ["Bearer token-de-teste", "Bearer token-de-teste", "Bearer token-do-irmao", "Bearer token-do-irmao"]);
   });
 
   it("sem token não consulta e devolve null", async () => {
     const { listRepositories } = await import("./github.ts");
-    definirSegredo("GITHUB_TOKEN", undefined);
+    await removeIntegrationToken(userId, "github");
 
     let chamou = false;
     globalThis.fetch = (async () => {
@@ -161,7 +180,7 @@ describe("lista de repositórios", () => {
       return new Response("[]", { status: 200 });
     }) as typeof fetch;
 
-    assert.equal(await listRepositories(), null);
+    assert.equal(await listRepositories(userId), null);
     assert.equal(chamou, false);
   });
 
@@ -186,7 +205,7 @@ describe("lista de repositórios", () => {
       ],
     });
 
-    const lista = await listRepositories();
+    const lista = await listRepositories(userId);
 
     assert.deepEqual(
       lista?.map((repo) => repo.slug),
@@ -205,10 +224,10 @@ describe("lista de repositórios", () => {
         { full_name: "dono/unico", html_url: "https://github.com/dono/unico" },
       ],
     });
-    assert.equal((await listRepositories())?.length, 1);
+    assert.equal((await listRepositories(userId))?.length, 1);
 
     // Nenhuma responde: token recusado, e a tela precisa saber disso.
     responderCom({});
-    assert.equal(await listRepositories(), null);
+    assert.equal(await listRepositories(userId), null);
   });
 });

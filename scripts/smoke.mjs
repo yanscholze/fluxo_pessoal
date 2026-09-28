@@ -479,7 +479,7 @@ async function main() {
   conferir("cota diária do assistente exposta", assistente.advice.limit, 60);
   conferir("cota diária de leitura de cupom exposta", assistente.receipt.limit, 30);
 
-  // Sem OPENAI_API_KEY o app funciona normal, só sem as duas features de IA —
+  // Sem uma chave pessoal de IA o app funciona normal, só sem as duas features de IA —
   // e a tentativa não pode queimar a cota de algo que nunca rodou.
   if (!assistente.configured) {
     let recusouSemChave = false;
@@ -687,6 +687,27 @@ async function main() {
     ],
   });
   conferir("apagar o que nunca existiu não é erro", exclusaoFantasma.results[0].status, "noop");
+
+  // --- Integrações pessoais ------------------------------------------------
+  const chaveGithub = "github-token-ficticio-de-teste";
+  const chaveGemini = "gemini-chave-ficticia-de-teste";
+  const semIntegracoes = await api("/api/v1/integrations");
+  conferir("conta nova não herda tokens globais", semIntegracoes.saved.github, false);
+  const comGithub = await api("/api/v1/integrations", { method: "POST", body: { provider: "github", token: chaveGithub } });
+  conferir("token GitHub pertence à conta atual", comGithub.saved.github, true);
+  const comGemini = await api("/api/v1/integrations", { method: "POST", body: { provider: "gemini", token: chaveGemini } });
+  conferir("Gemini selecionado nesta conta", comGemini.activeAiProvider, "gemini");
+  const respostaIntegracoes = await api("/api/v1/integrations");
+  conferir("API nunca devolve a chave pessoal", JSON.stringify(respostaIntegracoes).includes(chaveGithub) || JSON.stringify(respostaIntegracoes).includes(chaveGemini), false);
+  await api("/api/v1/integrations", { method: "DELETE", body: { provider: "github" } });
+  const semGithub = await api("/api/v1/integrations");
+  conferir("exclusão remove só a chave escolhida", semGithub.saved.github === false && semGithub.saved.gemini === true, true);
+
+  const semOrigem = await fetch(`${BASE}/api/v1/integrations`, {
+    method: "DELETE", headers: { "content-type": "application/json", cookie: sessaoWeb }, body: JSON.stringify({ provider: "gemini" }),
+  });
+  conferir("cookie web sem origem não altera tokens", semOrigem.ok, false);
+  await api("/api/v1/integrations", { method: "DELETE", body: { provider: "gemini" } });
 
   // --- Telas ---------------------------------------------------------------
   // Um serviço que quebra derruba a página inteira; render é a única prova de

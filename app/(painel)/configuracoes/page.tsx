@@ -90,7 +90,7 @@ export default async function Configuracoes({
           {
             value: "integracoes",
             label: "Integrações",
-            content: <Integrations />,
+            content: <Integrations userId={user.id} />,
           },
           {
             value: "seguranca",

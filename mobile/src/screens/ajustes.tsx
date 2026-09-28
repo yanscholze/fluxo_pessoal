@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { appVersion, deviceName } from "../device.ts";
 import { isBridgeAvailable, openListenerSettings } from "../notifications/bridge.ts";
+import { IntegrationSettings } from "./integration-settings.tsx";
 import { useLedger } from "../state/ledger.tsx";
 import { useSession } from "../state/session.tsx";
 import { Body, Button, Card, Divider, Label, Notice, Row, Small } from "../ui/primitives.tsx";
@@ -99,6 +100,8 @@ export function AjustesScreen({
           </View>
           <Small style={{ marginTop: space.sm }}>{accentId === "blurple" ? "Roxo oficial" : accentId}</Small>
         </Card>
+
+        {conectado ? <IntegrationSettings baseUrl={conectado.credentials.baseUrl} token={conectado.credentials.token} /> : null}
 
         <Card>
           <Label>Sincronização</Label>

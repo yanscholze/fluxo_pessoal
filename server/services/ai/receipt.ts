@@ -102,14 +102,14 @@ export async function readReceipt(
   // A validação e a checagem de configuração vêm antes da cota: nenhuma das
   // duas chega a chamar o modelo, e cobrar por elas gastaria a cota do usuário
   // sem que nada tivesse rodado.
-  assertConfigured();
+  await assertConfigured(userId);
   assertImage(input.imageDataUrl);
 
   const quota = await consume(userId, "receipt", now);
   const categorias = await listCategories(userId);
   const deSaida = categorias.filter((item) => item.kind === "expense").map((item) => item.name);
 
-  const bruto = await ask<ReceiptReading>({
+  const bruto = await ask<ReceiptReading>(userId, {
     instructions: INSTRUCTIONS,
     schemaName: "leitura_de_cupom",
     schema: SCHEMA,

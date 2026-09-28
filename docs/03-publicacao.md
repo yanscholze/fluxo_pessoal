@@ -52,44 +52,24 @@ deploy: é o `vite.config.ts` que o escreve no `wrangler.json` gerado.
 O token precisa de permissão de edição em Workers e em D1. Em máquina pessoal,
 `npx wrangler login` faz o mesmo por navegador e dispensa o token.
 
-### Segredos opcionais
+### Chaves pessoais das integrações
 
-Nada disso é obrigatório: sem qualquer um deles o Fluxo sobe e funciona, apenas
-com o recurso correspondente desligado e dizendo isso na tela.
+Cada pessoa cadastra as próprias chaves de Gemini, OpenAI e GitHub em
+**Configurações → Integrações**, após entrar na sua conta. A chave não é devolvida
+ao navegador depois de salva; o banco guarda apenas o texto cifrado e o servidor
+o decifra para chamar o provedor daquela conta. A pessoa escolhe qual provedor
+de IA deseja usar para TARS e leitura de comprovantes.
 
-```bash
-npx wrangler secret put OPENAI_API_KEY --config dist/server/wrangler.json
-npx wrangler secret put GITHUB_TOKEN --config dist/server/wrangler.json
-```
+O servidor precisa de **um único segredo de criptografia**, comum à instalação:
+`INTEGRATION_ENCRYPTION_KEY`. Gere uma vez com `openssl rand -base64 32` e salve
+como *Secret* no Worker. Preserve esse valor em um gerenciador de senhas: trocá-lo
+impede a leitura das chaves pessoais já cadastradas. Para desenvolvimento local,
+coloque o mesmo tipo de valor em `.dev.vars` (veja `.dev.vars.example`). Nunca
+adicione o arquivo de segredos ao Git.
 
-Quem prefere não abrir terminal faz o mesmo pelo painel da Cloudflare:
-**Workers & Pages → fluxo-pessoal → Settings → Variables and Secrets → Add**,
-tipo *Secret*, nome exatamente `GITHUB_TOKEN` (ou `OPENAI_API_KEY`), e o valor
-colado. O segredo só vale para as execuções que vierem **depois**: se o Worker
-já estava no ar, reimplante — ou use *Deployments → Rollback* para a mesma
-versão, que reinicia com o segredo já visível.
-
-| Segredo | Liga | Permissão mínima |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Assistente e leitura de comprovante | — |
-| `GITHUB_TOKEN` | Lista de repositórios para vincular, commits, PRs e issues | leitura: Contents, Issues, Pull requests |
-
-No desenvolvimento local os mesmos segredos vão em `.dev.vars` na raiz — o
-Wrangler o lê e expõe cada linha como `env.NOME`, o mesmo caminho do
-`wrangler secret put`. Há um `.dev.vars.example` para copiar; `.dev.vars` é
-ignorado pelo git.
-
-A aba **Integrações**, em Configurações, mostra se cada segredo pegou. Sem ela,
-quem acabou de configurar descobre pelo silêncio — e não sabe se o token está
-errado, ausente ou sem permissão.
-
-Segredo do Worker, **nunca** coluna no banco. O Fluxo guarda dado financeiro de
-uma pessoa; um vazamento dele não pode virar acesso de escrita ao código de
-todos os clientes dela. Pelo mesmo motivo a ficha do projeto guarda onde a
-senha do painel está — "1Password, cofre Clientes" — e não a senha.
-
-O token do GitHub é usado só para ler. Nenhuma rota do Fluxo abre issue,
-comenta ou faz merge.
+O token do GitHub é usado só para leitura. Um token *fine-grained* pode limitar
+os repositórios e as permissões a Contents, Issues e Pull requests em leitura.
+Nenhuma rota do Fluxo abre issue, comenta ou faz merge.
 
 ### Depois de publicar
 

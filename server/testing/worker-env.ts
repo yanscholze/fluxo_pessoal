@@ -19,14 +19,14 @@
  * existe token" sem que o código de produção ganhe um jeito de ser configurado
  * por fora.
  */
-export const env: { DB: unknown; GITHUB_TOKEN?: string; OPENAI_API_KEY?: string } = { DB: null };
+export const env: { DB: unknown; INTEGRATION_ENCRYPTION_KEY?: string } = { DB: null };
 
 export function instalarBinding(binding: unknown): void {
   env.DB = binding;
 }
 
 /** Define ou remove um segredo do ambiente simulado. */
-export function definirSegredo(nome: "GITHUB_TOKEN" | "OPENAI_API_KEY", valor: string | undefined): void {
+export function definirSegredo(nome: "INTEGRATION_ENCRYPTION_KEY", valor: string | undefined): void {
   if (valor === undefined) delete env[nome];
   else env[nome] = valor;
 }

@@ -141,13 +141,11 @@ function VincularRepositorio({
  * O motivo diz o que fazer, e não só o que houve.
  *
  * "Não está ligada" é diagnóstico; sozinho ele deixa o dono do app sem o passo
- * seguinte. O token é segredo do Worker — não pode ser digitado numa tela do
- * próprio app, porque a tela não tem como gravá-lo fora do banco — então o
- * texto aponta exatamente onde ele mora.
+ * seguinte. Cada conta cadastra sua própria chave em Configurações → Integrações.
  */
 const MOTIVO: Record<string, string> = {
   "sem-token":
-    "A leitura do GitHub ainda não tem token. Cadastre um em Cloudflare → Workers & Pages → fluxo-pessoal → Settings → Variables and Secrets, com o nome GITHUB_TOKEN, e reimplante. Os atalhos acima continuam funcionando sem ele.",
+    "A leitura do GitHub ainda não tem token nesta conta. Cadastre o seu em Configurações → Integrações. Os atalhos acima continuam funcionando sem ele.",
   "sem-acesso":
     "O repositório não foi encontrado, ou o token não alcança ele. Repositório privado precisa de um token com acesso.",
   falhou: "Não foi possível falar com o GitHub agora.",

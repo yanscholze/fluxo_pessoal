@@ -79,7 +79,21 @@ fi
 
 echo "→ gerando o projeto nativo (expo prebuild ${LIMPO:-incremental})"
 cd "$RAIZ/mobile"
+# Um prebuild limpo apaga android/app/debug.keystore. Enquanto o projeto não
+# tiver uma chave de release própria, preservar esta chave permite instalar a
+# nova versão por cima do APK anterior sem perder os dados locais.
+CHAVE_ANTERIOR="$RAIZ/mobile/android/app/debug.keystore"
+CHAVE_TEMPORARIA="$CACHE/fluxo-debug-keystore-$$_backup"
+# O Expo também pode limpar `android/` num prebuild incremental (por exemplo,
+# após mudar app.json); por isso a cópia é feita em qualquer prebuild.
+if [[ -f "$CHAVE_ANTERIOR" ]]; then
+  cp "$CHAVE_ANTERIOR" "$CHAVE_TEMPORARIA"
+fi
 npx expo prebuild --platform android --no-install ${LIMPO:+--clean}
+if [[ -f "$CHAVE_TEMPORARIA" ]]; then
+  cp "$CHAVE_TEMPORARIA" "$CHAVE_ANTERIOR"
+  rm "$CHAVE_TEMPORARIA"
+fi
 
 # `reactNativeArchitectures` decide quais bibliotecas nativas são compiladas e
 # empacotadas. O `expo prebuild` escreve as quatro em `gradle.properties` —

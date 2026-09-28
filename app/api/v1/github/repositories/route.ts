@@ -17,13 +17,13 @@ import { isConfigured, listRepositories } from "../../../../../server/services/g
 export const dynamic = "force-dynamic";
 
 export const GET = handle(async (request: Request) => {
-  await requireUser(request);
+  const user = await requireUser(request);
 
-  const repositorios = await listRepositories();
+  const repositorios = await listRepositories(user.id);
 
   return json({
     data: {
-      configured: isConfigured(),
+      configured: await isConfigured(user.id),
       // `null` do serviço significa "não deu para consultar" — sem token, ou
       // token que o GitHub recusou. A tela distingue pelos dois campos.
       available: repositorios !== null,

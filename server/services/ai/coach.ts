@@ -75,12 +75,12 @@ export async function askCoach(
 ): Promise<{ advice: Advice; remaining: number }> {
   // Conferir a configuração antes de consumir a cota: numa instalação sem
   // chave, toda tentativa queimaria uma consulta que nunca chegou a acontecer.
-  assertConfigured();
+  await assertConfigured(userId);
 
   const quota = await consume(userId, "advice", now);
   const contexto = await buildContext(userId, now);
 
-  const advice = await ask<Advice>({
+  const advice = await ask<Advice>(userId, {
     instructions: INSTRUCTIONS,
     schemaName: "conselho_financeiro",
     schema: SCHEMA,

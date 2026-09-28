@@ -19,7 +19,7 @@ export const GET = handle(async (request: Request) => {
     quotaStatus(user.id, "receipt"),
   ]);
 
-  return json({ data: { configured: isConfigured(), advice, receipt } });
+  return json({ data: { configured: await isConfigured(user.id), advice, receipt } });
 });
 
 export const POST = handle(async (request: Request) => {

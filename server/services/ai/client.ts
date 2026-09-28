@@ -1,24 +1,28 @@
 /**
- * Cliente da API da OpenAI.
+ * Cliente de IA do Fluxo. Cada usuário escolhe e guarda a própria chave;
+ * nenhuma credencial global é compartilhada entre contas.
  *
- * Sempre com saída estruturada (`json_schema` estrito) e `store: false`. O
- * schema é o que impede a resposta virar texto livre que a interface precisa
- * adivinhar como exibir; o `store` é privacidade: dado financeiro do usuário
- * não fica guardado no provedor.
+ * Ambos recebem o mesmo schema de saída e as mesmas regras de domínio. A
+ * chamada à OpenAI usa `store: false`; a do Gemini usa JSON estruturado.
  */
 
-import { env } from "cloudflare:workers";
-
 import { DomainError, rateLimited } from "../../../core/kernel/errors.ts";
+import { integrationStatus, integrationToken } from "../integration-credentials.ts";
 
-const ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const TIMEOUT_MS = 45_000;
 
-/** Modelo padrão. Barato o suficiente para as duas features do produto. */
-const MODEL = "gpt-5-mini";
+const OPENAI_MODEL = "gpt-5-mini";
 
-export function isConfigured(): boolean {
-  return typeof env.OPENAI_API_KEY === "string" && env.OPENAI_API_KEY.length > 0;
+export async function activeProvider(userId: string): Promise<"Gemini" | "OpenAI" | null> {
+  const provider = (await integrationStatus(userId)).activeAiProvider;
+  return provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : null;
+}
+
+export async function isConfigured(userId: string): Promise<boolean> {
+  return (await integrationStatus(userId)).activeAiProvider !== null;
 }
 
 /**
@@ -27,10 +31,10 @@ export function isConfigured(): boolean {
  * Chame antes de consumir cota: numa instalação sem chave, cada tentativa
  * queimaria uma consulta que nunca chegou a acontecer.
  */
-export function assertConfigured(): void {
-  if (!isConfigured()) {
-    throw new DomainError("conflict", "O assistente não está configurado nesta instalação", {
-      details: { missing: "OPENAI_API_KEY" },
+export async function assertConfigured(userId: string): Promise<void> {
+  if (!(await isConfigured(userId))) {
+    throw new DomainError("conflict", "Configure sua chave de IA em Configurações → Integrações.", {
+      details: { missing: "Chave pessoal do Gemini ou da OpenAI" },
     });
   }
 }
@@ -52,26 +56,38 @@ type ResponsesBody = {
   error?: { message?: string };
 };
 
-/**
- * Faz a chamada e devolve o objeto já validado pelo schema.
- *
- * Erros do provedor viram `DomainError` com código estável, para a borda HTTP
- * traduzir sem que a rota precise conhecer a OpenAI.
- */
-export async function ask<T>(input: AskInput): Promise<T> {
-  assertConfigured();
+type GeminiBody = {
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
+};
 
+/**
+ * Faz a chamada e devolve o objeto estruturado pelo provedor. Os serviços
+ * de cada recurso ainda validam o conteúdo antes de usá-lo.
+ *
+ * Erros do provedor viram `DomainError` com código estável para a borda HTTP.
+ */
+export async function ask<T>(userId: string, input: AskInput): Promise<T> {
+  const provider = (await integrationStatus(userId)).activeAiProvider;
+  if (!provider) {
+    throw new DomainError("conflict", "Configure sua chave de IA em Configurações → Integrações.");
+  }
+  const token = await integrationToken(userId, provider);
+  if (!token) throw new DomainError("conflict", "A chave de IA selecionada não está disponível.");
+  return provider === "gemini" ? askGemini<T>(input, token) : askOpenAI<T>(input, token);
+}
+
+async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
   let resposta: Response;
   try {
-    resposta = await fetch(ENDPOINT, {
+    resposta = await fetch(OPENAI_ENDPOINT, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.OPENAI_API_KEY as string}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
       signal: AbortSignal.timeout(TIMEOUT_MS),
       body: JSON.stringify({
-        model: MODEL,
+        model: OPENAI_MODEL,
         instructions: input.instructions,
         input: [{ role: "user", content: input.content }],
         store: false,
@@ -105,6 +121,54 @@ export async function ask<T>(input: AskInput): Promise<T> {
 
   const corpo = (await resposta.json()) as ResponsesBody;
   const texto = corpo.output_text ?? extractText(corpo);
+  return parseStructured<T>(texto);
+}
+
+async function askGemini<T>(input: AskInput, token: string): Promise<T> {
+  let resposta: Response;
+  try {
+    resposta = await fetch(GEMINI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": token,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: input.instructions }] },
+        contents: [{ role: "user", parts: input.content.map(geminiPart) }],
+        generationConfig: {
+          responseFormat: { text: { mimeType: "application/json", schema: input.schema } },
+        },
+      }),
+    });
+  } catch (causa) {
+    throw new DomainError("conflict", "O assistente demorou demais para responder. Tente de novo.", {
+      cause: causa,
+    });
+  }
+
+  if (resposta.status === 429) {
+    throw rateLimited("O provedor está sobrecarregado. Tente daqui a pouco.", 30);
+  }
+  if (!resposta.ok) {
+    console.error("Falha na API do Gemini", resposta.status);
+    throw new DomainError("conflict", "Não foi possível falar com o assistente agora.");
+  }
+
+  const corpo = (await resposta.json()) as GeminiBody;
+  const texto = corpo.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? null;
+  return parseStructured<T>(texto);
+}
+
+function geminiPart(part: ContentPart) {
+  if (part.type === "input_text") return { text: part.text };
+  const match = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(part.image_url);
+  if (!match) throw new DomainError("conflict", "Formato da imagem não reconhecido pelo assistente.");
+  return { inlineData: { mimeType: match[1], data: match[2] } };
+}
+
+function parseStructured<T>(texto: string | null): T {
   if (!texto) throw new DomainError("conflict", "O assistente devolveu uma resposta vazia.");
 
   try {

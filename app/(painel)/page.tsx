@@ -17,7 +17,7 @@ export default async function Tars() {
   if (!user) return null;
 
   const now = new Date();
-  const assistantReady = isConfigured();
+  const assistantReady = await isConfigured(user.id);
   const [dashboard, goals, pending, advice, receipt] = await Promise.all([
     buildDashboard(user.id, now),
     buildGoalsView(user.id, now),
