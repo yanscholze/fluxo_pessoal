@@ -179,10 +179,13 @@ export function computeFreeToSpend(input: PositionInput, purse: Purse = "all"): 
 
   let openInvoices = 0;
   for (const card of creditCards) {
+    const cardEntries = input.entries.filter(
+      (entry) => entry.party.kind === "card" && entry.party.cardId === card.id,
+    );
     const active = activeCompetence(card, input.today);
-    for (const competence of [...overdueCompetences(input.entries, card.id, active), active]) {
-      const { outstanding } = invoiceTotals(input.entries, card.id, competence);
-      const ignorado = excludedInvoiceCharges(input.entries, card.id, competence, isExcluded);
+    for (const competence of [...overdueCompetences(cardEntries, card.id, active), active]) {
+      const { outstanding } = invoiceTotals(cardEntries, card.id, competence);
+      const ignorado = excludedInvoiceCharges(cardEntries, card.id, competence, isExcluded);
       const devido = Math.max(0, outstanding - ignorado);
       if (devido <= 0) continue;
       openInvoices += devido;
@@ -416,15 +419,16 @@ export function projectedInvoicePayments(input: PositionInput): Map<Competence, 
   for (const card of input.cards) {
     if (card.kind !== "credit") continue;
 
+    const cardEntries = input.entries.filter(
+      (entry) => entry.party.kind === "card" && entry.party.cardId === card.id,
+    );
     const competences = new Set<Competence>();
-    for (const entry of input.entries) {
-      if (entry.party.kind === "card" && entry.party.cardId === card.id) competences.add(entry.competence);
-    }
+    for (const entry of cardEntries) competences.add(entry.competence);
 
     for (const competence of competences) {
       // Aqui a projeção **entra**: a pergunta é quanto a fatura vai custar
       // quando vencer, e a assinatura recorrente vai estar nela.
-      const { outstanding } = invoiceTotals(input.entries, card.id, competence, undefined, {
+      const { outstanding } = invoiceTotals(cardEntries, card.id, competence, undefined, {
         includeProjected: true,
       });
       if (outstanding <= 0) continue;

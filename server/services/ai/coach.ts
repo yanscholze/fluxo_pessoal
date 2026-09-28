@@ -15,8 +15,8 @@ import { buildReport } from "../reports.ts";
 import { ask, assertConfigured } from "./client.ts";
 import { consume } from "./quota.ts";
 
-/** Teto de lançamentos no contexto. Além disso o prompt fica caro sem ganhar precisão. */
-const MAX_TRANSACTIONS = 400;
+/** Teto de detalhes recentes; os totais e categorias vêm do relatório completo. */
+const MAX_TRANSACTIONS = 120;
 
 export type Advice = {
   readonly answer: string;

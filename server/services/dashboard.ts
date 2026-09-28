@@ -15,6 +15,7 @@ import {
   availableLimit,
   flow,
   invoiceTotals,
+  matches,
   overdueCompetences,
 } from "../../core/domain/ledger/balance.ts";
 import { projectRecurrences } from "../../core/domain/recurrence/projection.ts";
@@ -425,6 +426,16 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
   };
 
   const position = computeFinancialPosition(positionInput);
+  // As consultas de fatura de cada cartão percorrem várias competências.
+  // Entregar só as linhas daquele cartão evita reler o razão inteiro a cada
+  // vencimento, mantendo os mesmos filtros e totais do domínio.
+  const entriesByCard = new Map<string, LedgerEntry[]>();
+  for (const entry of entries) {
+    if (entry.party.kind !== "card") continue;
+    const rows = entriesByCard.get(entry.party.cardId) ?? [];
+    rows.push(entry);
+    entriesByCard.set(entry.party.cardId, rows);
+  }
 
   return {
     today,
@@ -455,7 +466,7 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
     },
     monthFlow: monthFlow(entries, accounts, competence),
     accounts: summarizeAccounts(accounts, entries, today),
-    cards: cards.map((card) => summarizeCard(card, entries, today)),
+    cards: cards.map((card) => summarizeCard(card, entriesByCard.get(card.id) ?? [], today)),
     upcoming: upcomingCommitments(entries, meta, today, projectedTransactionIds),
     categorySpend: spendByCategory(entries, meta, categories, competence),
     dailySpend: dailySpend(entries, accounts, competence, today),
@@ -564,10 +575,8 @@ function monthFlow(
 /**
  * A curva de gastos do mês.
  *
- * Cada ponto é o mesmo cálculo de `monthFlow`, recortado por `upTo` — não uma
- * segunda soma escrita à parte. É o que garante que o último ponto seja o
- * total do mês: os dois saem da mesma função, com o mesmo filtro de contas, de
- * situação e de natureza.
+ * Usa o mesmo filtro de `monthFlow` e acumula os lançamentos uma vez. Reler
+ * o razão inteiro em cada dia ultrapassava o limite de CPU do Worker.
  *
  * A série para em **hoje**, e não no fim do mês. Desenhar os dias que ainda
  * não aconteceram acrescenta um trecho reto à direita, que o olho lê como
@@ -586,16 +595,19 @@ function dailySpend(
   // Competência futura — acontece em projeção — não tem dia decorrido nenhum.
   if (ate < inicio) return [];
 
-  return eachDay(inicio, ate).map((dia) => ({
-    date: dia,
-    accumulatedCents: flow(entries, {
-      accountIds,
-      competence,
-      states: ["confirmed"],
-      kinds: CONSUMPTION,
-      upTo: dia,
-    }).outflow,
-  }));
+  const filter = { accountIds, competence, states: ["confirmed"] as const, kinds: CONSUMPTION };
+  const expenses = entries
+    .filter((entry) => entry.amount < 0 && matches(entry, filter) && entry.effectiveOn <= ate)
+    .sort((left, right) => left.effectiveOn.localeCompare(right.effectiveOn));
+  let accumulated = 0;
+  let next = 0;
+  return eachDay(inicio, ate).map((dia) => {
+    while (next < expenses.length && expenses[next].effectiveOn <= dia) {
+      accumulated -= expenses[next].amount;
+      next++;
+    }
+    return { date: dia, accumulatedCents: accumulated };
+  });
 }
 
 /** Compromissos previstos dos próximos dias — a agenda da saúde financeira. */

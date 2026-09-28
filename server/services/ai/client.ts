@@ -10,8 +10,8 @@ import { DomainError, rateLimited } from "../../../core/kernel/errors.ts";
 import { integrationStatus, integrationToken } from "../integration-credentials.ts";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_FALLBACK_MODEL = "gemini-3.8-flash";
 const TIMEOUT_MS = 45_000;
 
 const OPENAI_MODEL = "gpt-5-mini";
@@ -125,9 +125,47 @@ async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
 }
 
 async function askGemini<T>(input: AskInput, token: string): Promise<T> {
+  let resposta = await requestGemini(GEMINI_MODEL, input, token);
+  // O provedor recomenda recuar progressivamente quando retorna 503. A chave
+  // pode estar correta e o modelo indisponível; repetir imediatamente a mesma
+  // chamada só aumenta a fila. Depois tentamos outro modelo da mesma conta.
+  if (resposta.status === 503) {
+    await delay(1_000);
+    resposta = await requestGemini(GEMINI_MODEL, input, token);
+  }
+  if (resposta.status === 503) {
+    await delay(2_000);
+    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token);
+  }
+
+  if (resposta.status === 429) {
+    throw rateLimited("O provedor está sobrecarregado. Tente daqui a pouco.", 30);
+  }
+  if (!resposta.ok) {
+    const corpo = (await resposta.json().catch(() => ({}))) as { error?: { status?: string } };
+    console.error("Falha na API do Gemini", resposta.status, corpo.error?.status);
+    if (resposta.status === 503) {
+      throw new DomainError("conflict", "O Gemini está temporariamente indisponível. Sua chave está cadastrada; tente novamente em alguns minutos.");
+    }
+    if (resposta.status === 401 || resposta.status === 403) {
+      throw new DomainError("conflict", "A chave Gemini não tem acesso ao modelo. Confira a chave em Configurações → Integrações.");
+    }
+    throw new DomainError("conflict", "Não foi possível falar com o assistente agora.");
+  }
+
+  const corpo = (await resposta.json()) as GeminiBody;
+  const texto = corpo.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? null;
+  return parseStructured<T>(texto);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestGemini(model: string, input: AskInput, token: string): Promise<Response> {
   let resposta: Response;
   try {
-    resposta = await fetch(GEMINI_ENDPOINT, {
+    resposta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: {
         "x-goog-api-key": token,
@@ -138,7 +176,8 @@ async function askGemini<T>(input: AskInput, token: string): Promise<T> {
         systemInstruction: { parts: [{ text: input.instructions }] },
         contents: [{ role: "user", parts: input.content.map(geminiPart) }],
         generationConfig: {
-          responseFormat: { text: { mimeType: "application/json", schema: input.schema } },
+          responseMimeType: "application/json",
+          responseJsonSchema: input.schema,
         },
       }),
     });
@@ -148,17 +187,7 @@ async function askGemini<T>(input: AskInput, token: string): Promise<T> {
     });
   }
 
-  if (resposta.status === 429) {
-    throw rateLimited("O provedor está sobrecarregado. Tente daqui a pouco.", 30);
-  }
-  if (!resposta.ok) {
-    console.error("Falha na API do Gemini", resposta.status);
-    throw new DomainError("conflict", "Não foi possível falar com o assistente agora.");
-  }
-
-  const corpo = (await resposta.json()) as GeminiBody;
-  const texto = corpo.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? null;
-  return parseStructured<T>(texto);
+  return resposta;
 }
 
 function geminiPart(part: ContentPart) {

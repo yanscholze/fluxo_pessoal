@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Máscara em alpha. O launcher escolhe a cor Material You no Android 13+. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="42"
+    android:viewportHeight="42">
+    <group android:pivotX="21" android:pivotY="21" android:scaleX="0.72" android:scaleY="0.72">
+        <group android:translateX="8" android:translateY="7" android:pivotX="10" android:pivotY="14" android:rotation="34">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M10,0h0c5.52,0 10,4.48 10,10v10c0,4.42 -3.58,8 -8,8H10C4.48,28 0,23.52 0,18v-8C0,4.48 4.48,0 10,0Z"/>
+        </group>
+        <group android:translateX="15" android:translateY="7" android:pivotX="10" android:pivotY="14" android:rotation="34">
+            <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.70" android:pathData="M10,0h0c5.52,0 10,4.48 10,10v10c0,4.42 -3.58,8 -8,8H10C4.48,28 0,23.52 0,18v-8C0,4.48 4.48,0 10,0Z"/>
+        </group>
+    </group>
+</vector>

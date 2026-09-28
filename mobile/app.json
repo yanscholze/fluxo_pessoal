@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fluxo",
     "slug": "fluxo-pessoal",
-    "version": "0.6.4",
+    "version": "0.6.5",
     "owner": "yan.scholze",
     "scheme": "fluxo",
     "orientation": "portrait",
@@ -10,10 +10,12 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 30,
+      "versionCode": 31,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#eef4fb"
+        "backgroundColor": "#f4f6ff",
+        "backgroundImage": "./assets/adaptive-background.png",
+        "monochromeImage": "./assets/adaptive-monochrome.png"
       },
       "predictiveBackGestureEnabled": true
     },

@@ -3,6 +3,9 @@
     <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
     <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b5cf6"/><stop offset="1" stop-color="#6d28d9"/></linearGradient>
   </defs>
-  <g transform="translate(8 7) rotate(34 10 14)"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#blue)"/></g>
-  <g transform="translate(15 7) rotate(34 10 14)" opacity=".9"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#purple)"/></g>
+  <!-- Android reserva apenas o círculo central de 66/108 para a marca. -->
+  <g transform="translate(21 21) scale(.72) translate(-21 -21)">
+    <g transform="translate(8 7) rotate(34 10 14)"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#blue)"/></g>
+    <g transform="translate(15 7) rotate(34 10 14)" opacity=".9"><path d="M10 0h0c5.52 0 10 4.48 10 10v10c0 4.42-3.58 8-8 8H10C4.48 28 0 23.52 0 18v-8C0 4.48 4.48 0 10 0Z" fill="url(#purple)"/></g>
+  </g>
 </svg>

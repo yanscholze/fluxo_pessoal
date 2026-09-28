@@ -35,10 +35,26 @@ test("cada conta escolhe Gemini e envia schema estruturado", async () => {
     const body = JSON.parse(String(init?.body));
     assert.equal(body.systemInstruction.parts[0].text, entrada.instructions);
     assert.equal(body.contents[0].parts[0].text, "Oi");
-    assert.deepEqual(body.generationConfig.responseFormat.text.schema, entrada.schema);
+    assert.equal(body.generationConfig.responseMimeType, "application/json");
+    assert.deepEqual(body.generationConfig.responseJsonSchema, entrada.schema);
     return Response.json({ candidates: [{ content: { parts: [{ text: '{"answer":"Olá"}' }] } }] });
   };
   assert.deepEqual(await ask<{ answer: string }>(userId, entrada), { answer: "Olá" });
+});
+
+test("Gemini recua e usa modelo alternativo quando o preferido está sobrecarregado", async () => {
+  await saveIntegrationToken(userId, "gemini", "chave-gemini-de-teste");
+  const models: string[] = [];
+  globalThis.fetch = async (url) => {
+    models.push(String(url));
+    return models.length < 3
+      ? Response.json({ error: { status: "UNAVAILABLE" } }, { status: 503 })
+      : Response.json({ candidates: [{ content: { parts: [{ text: '{"answer":"Olá"}' }] } }] });
+  };
+  assert.deepEqual(await ask<{ answer: string }>(userId, entrada), { answer: "Olá" });
+  assert.match(models[0], /gemini-3\.6-flash/);
+  assert.match(models[1], /gemini-3\.6-flash/);
+  assert.match(models[2], /gemini-3\.8-flash/);
 });
 
 test("envia foto ao Gemini como dados inline com MIME correto", async () => {

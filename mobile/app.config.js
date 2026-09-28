@@ -23,5 +23,6 @@ export default {
     "./plugins/with-notification-listener.cjs",
     "./plugins/with-assinatura-release.cjs",
     "./plugins/with-release-sem-cliente-dev.cjs",
+    "./plugins/with-adaptive-icon-vector.cjs",
   ],
 };
