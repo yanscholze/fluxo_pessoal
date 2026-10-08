@@ -9,7 +9,7 @@
  */
 
 import { nthBusinessDayOfMonth, businessDaysInMonth } from "../core/time/brazilian-calendar.ts";
-import { todayIn, year, month, addMonths } from "../core/time/local-date.ts";
+import { todayIn, year, month, addMonths, addDays } from "../core/time/local-date.ts";
 
 const BASE = process.argv[2] ?? "http://localhost:5173";
 
@@ -394,7 +394,9 @@ async function main() {
 
   painel = await api("/api/v1/dashboard");
   const agenda = painel.upcoming.map((item) => item.description);
-  conferir("projeção do salário aparece na agenda", agenda.includes("Salário"), true);
+  // O 5º dia útil pode cair mais de 30 dias à frente (feriados/fim de semana).
+  // A agenda não deve mostrar uma ocorrência fora da janela do painel.
+  conferir("agenda respeita a janela de 30 dias do salário", agenda.includes("Salário"), proximoSalario <= addDays(hoje, 30));
   conferir("projeção do VA aparece na agenda", agenda.includes("Vale-alimentação"), true);
 
   // Confirmar torna real, e a projeção precisa sumir para não contar em dobro.
@@ -416,6 +418,35 @@ async function main() {
     lancamentosDeSetembro.filter((item) => item.description === "Salário").length,
     1,
   );
+
+  // --- Baixa sem duplicar um movimento que já entrou no extrato ------------
+  const regraDeVinculo = await api("/api/v1/recurrences", { method: "POST", body: {
+    kind: "income", description: "Compromisso para vincular", amount: 210000,
+    scheduleDay: 5, accountId: contaId, startsOn: "2026-01-01",
+  } });
+  const receitaDeVinculo = await api("/api/v1/transactions", { method: "POST", body: {
+    kind: "income", description: "Depósito já lançado", amount: 209999,
+    occurredOn: hoje, accountId: contaId,
+  } });
+  const idDaReceita = receitaDeVinculo.ids[0];
+  const competenciaDoVinculo = hoje.slice(0, 7);
+  const candidatas = await api(`/api/v1/recurrences/confirm?recurrenceId=${regraDeVinculo.id}&competence=${competenciaDoVinculo}`);
+  conferir("baixa oferece receita existente compatível", candidatas.transactions.some((t) => t.id === idDaReceita), true);
+  const saldoAntesDoVinculo = (await api("/api/v1/dashboard")).freeToSpend.liquidBalanceCents;
+  const vinculo = await api("/api/v1/recurrences/confirm", { method: "POST", body: {
+    recurrenceId: regraDeVinculo.id, competence: competenciaDoVinculo, transactionId: idDaReceita,
+  } });
+  conferir("vínculo usa o valor real", vinculo.amountCents, 209999);
+  conferir("vínculo preserva o saldo", (await api("/api/v1/dashboard")).freeToSpend.liquidBalanceCents, saldoAntesDoVinculo);
+  const repeticaoDoVinculo = await api("/api/v1/recurrences/confirm", { method: "POST", body: {
+    recurrenceId: regraDeVinculo.id, competence: competenciaDoVinculo,
+  } });
+  conferir("confirmar após vincular não cria outro lançamento", repeticaoDoVinculo.transactionId, idDaReceita);
+  await api(`/api/v1/transactions/${idDaReceita}`, { method: "PATCH", body: { description: "Depósito corrigido" } });
+  conferir("edição mantém a previsão baixada", (await api("/api/v1/planning")).recurrences.find((r) => r.id === regraDeVinculo.id).pending, null);
+  await api(`/api/v1/transactions/${idDaReceita}`, { method: "DELETE" });
+  conferir("exclusão devolve a previsão", Boolean((await api("/api/v1/planning")).recurrences.find((r) => r.id === regraDeVinculo.id).pending), true);
+  await api(`/api/v1/recurrences/${regraDeVinculo.id}`, { method: "DELETE" });
 
   // --- Guardas encontradas pela revisão adversarial ------------------------
   let recusouFuturo = false;

@@ -107,51 +107,71 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
   const podeSerCartao = row.kind === "expense" || row.kind === "refund";
 
   function fechar() {
+    if (enviando) return;
     setModo(null);
     setErro(null);
+  }
+
+  function editar() {
+    setDescricao(row.description);
+    setValor((row.amountCents / 100).toFixed(2).replace(".", ","));
+    setData(row.occurredOn);
+    setCategoria(row.categoryId ?? "");
+    setOrigem(`${row.originKind === "card" ? "cartao" : "conta"}:${row.originId}`);
+    setDestino(row.destinationId ?? "");
+    setSituacao(row.state === "planned" ? "planned" : "confirmed");
+    setObservacao(row.notes ?? "");
+    setErro(null);
+    setModo("editar");
   }
 
   async function chamar(metodo: "PATCH" | "DELETE", corpo?: Record<string, unknown>) {
     setEnviando(true);
     setErro(null);
 
-    const resposta = await fetch(`/api/v1/transactions/${row.id}`, {
-      method: metodo,
-      ...(corpo
-        ? { headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) }
-        : {}),
-    });
+    try {
+      const resposta = await fetch(`/api/v1/transactions/${row.id}`, {
+        method: metodo,
+        ...(corpo
+          ? { headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) }
+          : {}),
+      });
 
-    setEnviando(false);
+      if (!resposta.ok) {
+        /*
+         * O erro precisa dizer o que houve, não "tente de novo".
+         *
+         * A mensagem genérica aparecia sempre que a resposta não trazia um erro
+         * estruturado — um 500, uma página de erro, uma queda de rede — e nesses
+         * casos ela é exatamente a informação que falta para resolver. Os
+         * detalhes por campo vêm junto: é neles que está o campo culpado.
+         */
+        const dados = (await resposta.json().catch(() => null)) as {
+          error?: { message?: string; issues?: { path?: string; message?: string }[] };
+        } | null;
 
-    if (!resposta.ok) {
-      /*
-       * O erro precisa dizer o que houve, não "tente de novo".
-       *
-       * A mensagem genérica aparecia sempre que a resposta não trazia um erro
-       * estruturado — um 500, uma página de erro, uma queda de rede — e nesses
-       * casos ela é exatamente a informação que falta para resolver. Os
-       * detalhes por campo vêm junto: é neles que está o campo culpado.
-       */
-      const dados = (await resposta.json().catch(() => null)) as {
-        error?: { message?: string; details?: { path?: string; message?: string }[] };
-      } | null;
+        const campos = dados?.error?.issues
+          ?.map((item) => `${item.path}: ${item.message}`)
+          .join(" · ");
 
-      const campos = dados?.error?.details
-        ?.map((item) => `${item.path}: ${item.message}`)
-        .join(" · ");
+        setErro(
+          dados?.error?.message
+            ? [dados.error.message, campos].filter(Boolean).join(" — ")
+            : `O servidor respondeu ${resposta.status}. Recarregue a página e tente de novo.`,
+        );
+        return false;
+      }
 
-      setErro(
-        dados?.error?.message
-          ? [dados.error.message, campos].filter(Boolean).join(" — ")
-          : `O servidor respondeu ${resposta.status}. Recarregue a página e tente de novo.`,
-      );
+      setModo(null);
+      setErro(null);
+      router.refresh();
+      return true;
+    } catch {
+      setErro("Não foi possível acessar o servidor. Confira a conexão antes de tentar novamente.");
       return false;
+    } finally {
+      setEnviando(false);
     }
-
-    fechar();
-    router.refresh();
-    return true;
   }
 
   function salvar() {
@@ -195,22 +215,24 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
 
   return (
     <>
-      <span className="flex items-center justify-end gap-0.5">
+      <span className="flex items-center justify-end gap-1">
         {editavel ? (
           <button
             type="button"
-            onClick={() => setModo("editar")}
-            aria-label={`Corrigir ${row.description}`}
-            className="rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
+            onClick={editar}
+            aria-label={`Editar ${row.description}`}
+            title="Editar lançamento"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink-muted transition-colors hover:bg-accent-wash hover:text-accent"
           >
             <Pencil size={14} strokeWidth={1.5} aria-hidden />
           </button>
         ) : null}
         <button
           type="button"
-          onClick={() => setModo("apagar")}
-          aria-label={`Apagar ${row.description}`}
-          className="rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-negative-wash hover:text-negative"
+          onClick={() => { setErro(null); setModo("apagar"); }}
+          aria-label={`Excluir ${row.description}`}
+          title="Excluir lançamento"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink-muted transition-colors hover:bg-negative-wash hover:text-negative"
         >
           <Trash2 size={14} strokeWidth={1.5} aria-hidden />
         </button>
@@ -358,7 +380,8 @@ export function RowActions({ row, options }: { row: StatementRow; options: Opcoe
         onConfirm={() => chamar("DELETE")}
         busy={enviando}
         title="Apagar lançamento"
-        consequence={`"${row.description}", de ${money(row.amountCents)}, sai do extrato e o valor volta para o saldo. ${
+        error={erro}
+        consequence={`"${row.description}", de ${money(row.amountCents)}, sai do extrato e seu efeito no saldo será desfeito. ${
           row.installmentLabel ? "Esta é uma parcela: as demais continuam de pé." : ""
         }`}
       />

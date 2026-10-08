@@ -135,16 +135,15 @@ export function StatementList({
         </div>
       ) : null}
       <DataTable
+        className="statement-table"
         caption="Lançamentos da competência"
         columns={[
           { key: "descricao", header: "Lançamento", flexible: true },
           { key: "categoria", header: "Categoria", hideBelow: "md" },
           { key: "conta", header: "Conta", hideBelow: "lg" },
-          { key: "natureza", header: "Natureza", hideBelow: "lg" },
           { key: "data", header: "Data", align: "right", width: "5.5rem", hideBelow: "sm" },
           { key: "valor", header: "Valor", align: "right", width: "8rem" },
-          { key: "acoes", header: "Ações", align: "right", width: "4.5rem" },
-          { key: "selecionar", header: "Agrupar", align: "right", width: "4.25rem" },
+          { key: "acoes", header: "Ações", align: "right", width: "6rem" },
         ]}
       >
         {rows.map((row) => {
@@ -163,6 +162,10 @@ export function StatementList({
             <Tr key={row.id}>
               <Td truncate>
                 <span className="flex min-w-0 items-center gap-2.5">
+                  {despesasSelecionaveis(row) ? (
+                    <input type="checkbox" checked={idsSelecionados.has(row.id)} onChange={() => alternarSelecao(row)}
+                      aria-label={`Selecionar ${row.description} para agrupar`} className="size-4 shrink-0 accent-[var(--color-accent)]" />
+                  ) : null}
                   <span
                     className={`flex size-7 shrink-0 items-center justify-center rounded-md ${
                       entrada ? "bg-positive-wash text-positive" : "bg-surface-inset text-ink-muted"
@@ -183,16 +186,17 @@ export function StatementList({
                         e escondê-la sem devolvê-la deixaria a linha sem
                         resposta para "quando foi isso". */}
                     <span className="mt-0.5 block truncate text-caption text-ink-subtle">
-                      <span className="@sm:hidden">{dateShort(row.occurredOn)}</span>
+                      <span>{natureza.label} · {row.originName}{row.destinationName ? ` → ${row.destinationName}` : ""}</span>
+                      <span className="@sm:hidden"> · {dateShort(row.occurredOn)}</span>
                       {row.installmentLabel ? (
                         <>
-                          <span className="@sm:hidden"> · </span>
+                          <span> · </span>
                           {row.installmentLabel}
                         </>
                       ) : null}
                       {faturaDeOutroMes ? (
                         <>
-                          {row.installmentLabel ? " · " : <span className="@sm:hidden"> · </span>}
+                          {" · "}
                           {`fatura ${row.competence}`}
                         </>
                       ) : null}
@@ -221,10 +225,6 @@ export function StatementList({
                 {row.destinationName ? ` → ${row.destinationName}` : ""}
               </Td>
 
-              <Td hideBelow="lg">
-                <Badge tone={natureza.tone}>{natureza.label}</Badge>
-              </Td>
-
               <Td align="right" hideBelow="sm" className="tabular whitespace-nowrap text-caption text-ink-subtle">
                 {dateShort(row.occurredOn)}
               </Td>
@@ -244,17 +244,6 @@ export function StatementList({
                   celular: é justamente lá que o valor é digitado com pressa. */}
               <Td align="right">
                 <RowActions row={row} options={options} />
-              </Td>
-              <Td align="right">
-                {despesasSelecionaveis(row) ? (
-                  <input
-                    type="checkbox"
-                    checked={idsSelecionados.has(row.id)}
-                    onChange={() => alternarSelecao(row)}
-                    aria-label={`Selecionar ${row.description} para agrupar`}
-                    className="size-4 accent-[var(--color-accent)]"
-                  />
-                ) : null}
               </Td>
             </Tr>
           );

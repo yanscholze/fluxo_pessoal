@@ -73,12 +73,21 @@ export async function confirmedOccurrenceKeys(userId: string): Promise<Set<strin
   const rows = await database
     .select({ fingerprint: transactions.fingerprint })
     .from(transactions)
-    .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)));
+    .where(and(eq(transactions.userId, userId), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
+
+  // Um movimento importado mantém sua impressão digital. A confirmação pode
+  // vir do vínculo, sem regravar o razão nem perder a deduplicação do extrato.
+  const linked = await database
+    .select({ recurrenceId: recurrenceRuns.recurrenceId, competence: recurrenceRuns.competence })
+    .from(recurrenceRuns)
+    .innerJoin(transactions, eq(transactions.id, recurrenceRuns.transactionId))
+    .where(and(eq(recurrenceRuns.userId, userId), eq(transactions.userId, userId),
+      eq(recurrenceRuns.outcome, "confirmed"), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
 
   return new Set(
-    rows
+    [...linked.map((row) => `recurrence:${row.recurrenceId}:${row.competence}`), ...rows
       .map((row) => row.fingerprint)
-      .filter((value): value is string => Boolean(value?.startsWith("recurrence:"))),
+      .filter((value): value is string => Boolean(value?.startsWith("recurrence:")))],
   );
 }
 
@@ -128,6 +137,22 @@ export async function recordRun(input: {
     })
     // Chave natural `(recurrence_id, competence)`: rodar de novo não duplica.
     .onConflictDoNothing();
+}
+
+/** Devolve o fato real que confirmou a ocorrência, inclusive após edição. */
+export async function confirmedOccurrence(userId: string, recurrenceId: string, competence: Competence) {
+  const database = getDatabase();
+  const [linked] = await database.select({ transactionId: transactions.id, amountCents: transactions.amountCents })
+    .from(recurrenceRuns).innerJoin(transactions, eq(transactions.id, recurrenceRuns.transactionId))
+    .where(and(eq(recurrenceRuns.userId, userId), eq(recurrenceRuns.recurrenceId, recurrenceId),
+      eq(recurrenceRuns.competence, competence), eq(recurrenceRuns.outcome, "confirmed"),
+      eq(transactions.userId, userId), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt))).limit(1);
+  if (linked) return linked;
+  const [generated] = await database.select({ transactionId: transactions.id, amountCents: transactions.amountCents })
+    .from(transactions).where(and(eq(transactions.userId, userId),
+      eq(transactions.fingerprint, `recurrence:${recurrenceId}:${competence}`),
+      eq(transactions.state, "confirmed"), isNull(transactions.deletedAt))).limit(1);
+  return generated ?? null;
 }
 
 export async function runsFor(userId: string, recurrenceIds: readonly string[]): Promise<Map<string, RunRecord[]>> {

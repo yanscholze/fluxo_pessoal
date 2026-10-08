@@ -10,39 +10,20 @@
  * Assinaturas e projeção vêm depois: são leitura, não ação.
  */
 
-import { useState } from "react";
 import { View } from "react-native";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
-import { call } from "../net/client.ts";
 import { fetchPlanning } from "../net/views.ts";
-import { useConnectedSession } from "../state/session.tsx";
 import { useRemoto } from "../state/remote.tsx";
 import { competence, money, relativeDate } from "../ui/format.ts";
-import { Body, Button, Card, Empty, Figure, Label, Row, Small } from "../ui/primitives.tsx";
+import { Body, Card, Empty, Figure, Label, Row, Small } from "../ui/primitives.tsx";
 import { TelaRemota } from "../ui/tela-remota.tsx";
 import { space, usePalette } from "../ui/theme.ts";
+import { OccurrenceActions } from "./occurrence-actions.tsx";
 
 export function PlanejamentoScreen({ onVoltar }: { onVoltar?: () => void }) {
   const palette = usePalette();
-  const { credentials } = useConnectedSession();
   const remoto = useRemoto(fetchPlanning);
-  const [confirmando, setConfirmando] = useState<string | null>(null);
-
-  async function confirmar(recurrenceId: string, competencia: string) {
-    setConfirmando(recurrenceId);
-    try {
-      await call("/api/v1/recurrences/confirm", {
-        baseUrl: credentials.baseUrl,
-        token: credentials.token,
-        method: "POST",
-        body: { recurrenceId, competence: competencia },
-      });
-      remoto.recarregar();
-    } finally {
-      setConfirmando(null);
-    }
-  }
 
   return (
     <TelaRemota
@@ -52,7 +33,7 @@ export function PlanejamentoScreen({ onVoltar }: { onVoltar?: () => void }) {
       onVoltar={onVoltar}
     >
       {(dados) => {
-        const pendentes = dados.recurrences.filter((regra) => regra.pending !== null);
+        const pendentes = dados.recurrences.filter((regra) => regra.isActive && regra.pending !== null);
 
         return (
           <>
@@ -88,14 +69,7 @@ export function PlanejamentoScreen({ onVoltar }: { onVoltar?: () => void }) {
                         {money(cents(regra.pending?.amountCents ?? regra.amountCents))}
                       </Body>
                     </View>
-                    <Button
-                      label="Confirmar"
-                      variant="secondary"
-                      busy={confirmando === regra.id}
-                      onPress={() => {
-                        if (regra.pending) void confirmar(regra.id, regra.pending.competence);
-                      }}
-                    />
+                    <OccurrenceActions rule={regra} onDone={remoto.recarregar} />
                   </View>
                 ))
               )}

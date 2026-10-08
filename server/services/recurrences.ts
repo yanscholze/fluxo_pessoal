@@ -6,6 +6,7 @@
  * idempotente por `(regra, competência)`.
  */
 
+import { and, eq, isNull, lte, notExists, sql } from "drizzle-orm";
 import { competenceForPurchase } from "../../core/domain/card/invoice-cycle.ts";
 import { accountParty, cardParty, type Party, type Transaction } from "../../core/domain/ledger/types.ts";
 import {
@@ -20,13 +21,87 @@ import { conflict, notFound, validationError } from "../../core/kernel/errors.ts
 import { newId } from "../../core/kernel/id.ts";
 import type { Cents } from "../../core/kernel/money.ts";
 import type { Competence } from "../../core/time/competence.ts";
-import { type LocalDate, todayIn } from "../../core/time/local-date.ts";
+import { type LocalDate, localDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
-import { recurrences } from "../db/schema/index.ts";
+import { projectPayments, recurrenceRuns, recurrences, transactions } from "../db/schema/index.ts";
 import { findAccount, findCard, listCategories } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
-import { saveTransactionBatch } from "../repositories/ledger.ts";
-import { findRecurrence, recordRun } from "../repositories/recurrences.ts";
+import { transactionSaveStatements } from "../repositories/ledger.ts";
+import { confirmedOccurrence, findRecurrence } from "../repositories/recurrences.ts";
+
+export type OccurrenceTransaction = {
+  id: string;
+  description: string;
+  occurredOn: LocalDate;
+  amountCents: number;
+};
+
+async function occurrenceRule(userId: string, recurrenceId: string, competence: Competence) {
+  const rule = await findRecurrence(userId, recurrenceId);
+  if (!rule) throw notFound("Recorrência", recurrenceId);
+  if (!appliesTo(rule, competence)) throw conflict("Esta recorrência não vale para a competência informada", { competence });
+  return rule;
+}
+
+/** Somente movimentos reais, da mesma natureza e conta/cartão da previsão. */
+function availableTransaction(userId: string, rule: Recurrence, now: Date) {
+  const database = getDatabase();
+  return and(eq(transactions.userId, userId), eq(transactions.kind, rule.kind),
+    eq(transactions.state, "confirmed"), isNull(transactions.deletedAt),
+    isNull(transactions.recurrenceId), isNull(transactions.installmentPlanId),
+    lte(transactions.occurredOn, todayIn(now)),
+    rule.cardId ? eq(transactions.originCardId, rule.cardId) : eq(transactions.originAccountId, rule.accountId!),
+    rule.kind === "transfer" ? eq(transactions.destinationAccountId, rule.destinationAccountId!) : undefined,
+    notExists(database.select({ id: recurrenceRuns.id }).from(recurrenceRuns)
+      .where(eq(recurrenceRuns.transactionId, transactions.id))),
+    notExists(database.select({ id: projectPayments.id }).from(projectPayments)
+      .where(eq(projectPayments.transactionId, transactions.id))));
+}
+
+export async function occurrenceTransactions(userId: string, recurrenceId: string, competence: Competence, now = new Date()): Promise<OccurrenceTransaction[]> {
+  const rule = await occurrenceRule(userId, recurrenceId, competence);
+  const rows = await getDatabase().select({ id: transactions.id, description: transactions.description,
+    occurredOn: transactions.occurredOn, amountCents: transactions.amountCents })
+    .from(transactions).where(availableTransaction(userId, rule, now))
+    .orderBy(sql`abs(${transactions.amountCents} - ${occurrenceAmount(rule, competence)})`,
+      sql`abs(julianday(${transactions.occurredOn}) - julianday(${occurrenceDate(rule, competence)}))`).limit(100);
+  return rows.map((row) => ({ ...row, occurredOn: localDate(row.occurredOn) }));
+}
+
+function removeStaleRun(userId: string, recurrenceId: string, competence: Competence) {
+  return getDatabase().delete(recurrenceRuns).where(and(eq(recurrenceRuns.userId, userId),
+    eq(recurrenceRuns.recurrenceId, recurrenceId), eq(recurrenceRuns.competence, competence),
+    sql`NOT EXISTS (SELECT 1 FROM transactions AS live WHERE live.id = recurrence_runs.transaction_id
+      AND live.user_id = ${userId} AND live.deleted_at IS NULL AND live.state = 'confirmed')`));
+}
+
+/** Vincula sem tocar no valor, data, categoria, impressão digital ou razão. */
+export async function linkOccurrence(userId: string, recurrenceId: string, competence: Competence, transactionId: string, now = new Date()) {
+  const rule = await occurrenceRule(userId, recurrenceId, competence);
+  const previous = await confirmedOccurrence(userId, recurrenceId, competence);
+  if (previous) {
+    if (previous.transactionId !== transactionId) throw conflict("Esta ocorrência já está vinculada a outro lançamento");
+    return { ...previous, alreadyConfirmed: true };
+  }
+  const database = getDatabase();
+  const runId = newId(now.getTime());
+  const insert = database.insert(recurrenceRuns).select(database.select({
+    id: sql<string>`${runId}`.as("id"), userId: sql<string>`${userId}`.as("user_id"), recurrenceId: sql<string>`${rule.id}`.as("recurrence_id"),
+    competence: sql<string>`${competence}`.as("competence"), transactionId: transactions.id,
+    outcome: sql<"confirmed">`'confirmed'`.as("outcome"), scheduledFor: transactions.occurredOn,
+    amountCents: transactions.amountCents, ranAt: sql<string>`${now.toISOString()}`.as("ran_at"),
+  }).from(transactions).where(and(eq(transactions.id, transactionId), availableTransaction(userId, rule, now))))
+    .onConflictDoNothing();
+  await database.batch([
+    removeStaleRun(userId, recurrenceId, competence), insert,
+    database.update(transactions).set({ recurrenceId: rule.id, updatedAt: now.toISOString(), version: sql`${transactions.version} + 1` })
+      .where(and(eq(transactions.userId, userId), eq(transactions.id, transactionId),
+        sql`EXISTS (SELECT 1 FROM recurrence_runs WHERE id = ${runId} AND transaction_id = ${transactionId})`)),
+  ] as never);
+  const linked = await confirmedOccurrence(userId, recurrenceId, competence);
+  if (!linked || linked.transactionId !== transactionId) throw conflict("O lançamento não está disponível para este compromisso. Atualize a lista e escolha um movimento confirmado da mesma conta ou cartão.");
+  return { ...linked, alreadyConfirmed: false };
+}
 
 export type RecurrenceInput = {
   readonly role?: Recurrence["role"];
@@ -176,11 +251,9 @@ export async function confirmOccurrence(
   overrides: { amount?: Cents | null; occurredOn?: LocalDate | null } = {},
   now: Date = new Date(),
 ): Promise<{ transactionId: string; amountCents: number; alreadyConfirmed: boolean }> {
-  const rule = await findRecurrence(userId, recurrenceId);
-  if (!rule) throw notFound("Recorrência", recurrenceId);
-  if (!appliesTo(rule, competence)) {
-    throw conflict("Esta recorrência não vale para a competência informada", { competence });
-  }
+  const rule = await occurrenceRule(userId, recurrenceId, competence);
+  const previous = await confirmedOccurrence(userId, recurrenceId, competence);
+  if (previous) return { ...previous, alreadyConfirmed: true };
 
   const chave = occurrenceKey(rule.id, competence);
   const amount = overrides.amount ?? occurrenceAmount(rule, competence);
@@ -218,26 +291,23 @@ export async function confirmOccurrence(
   };
 
   try {
-    await saveTransactionBatch([{ transaction, options: { fingerprint: chave, recurrenceId: rule.id } }]);
+    const database = getDatabase();
+    await database.batch([
+      removeStaleRun(userId, recurrenceId, competence),
+      ...transactionSaveStatements(transaction, { fingerprint: chave, recurrenceId: rule.id }),
+      database.insert(recurrenceRuns).values({ id: newId(now.getTime()), userId,
+        recurrenceId: rule.id, competence, transactionId: transaction.id,
+        outcome: "confirmed", scheduledFor: occurredOn, amountCents: amount as number }),
+    ] as never);
   } catch (error) {
     // Violação do índice único significa que outra confirmação chegou antes.
     // Não é erro para o usuário: o resultado que ele queria já aconteceu.
-    if (String(error).includes("UNIQUE") || String(error).includes("constraint")) {
-      return { transactionId: transaction.id, amountCents: amount, alreadyConfirmed: true };
+    if (String(error).includes("UNIQUE")) {
+      const confirmed = await confirmedOccurrence(userId, recurrenceId, competence);
+      if (confirmed) return { ...confirmed, alreadyConfirmed: true };
     }
     throw error;
   }
-
-  await recordRun({
-    id: newId(now.getTime()),
-    userId,
-    recurrenceId: rule.id,
-    competence,
-    transactionId: transaction.id,
-    outcome: "confirmed",
-    scheduledFor: occurredOn,
-    amountCents: amount as number,
-  });
 
   return { transactionId: transaction.id, amountCents: amount, alreadyConfirmed: false };
 }

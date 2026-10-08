@@ -1025,6 +1025,7 @@ body {
 [data-theme="dark"] .fluxo-shell .app-sidebar {
   border-color: rgb(148 163 184 / .11);
   background: rgb(16 25 43 / .82);
+  box-shadow: var(--shadow-raise), inset 0 1px 0 rgb(148 163 184 / .06);
 }
 .fluxo-shell .app-sidebar:not([data-hover-bloqueado="true"]):is(:hover,:focus-within) { width: 220px; box-shadow: var(--shadow-raise), 0 12px 34px rgb(79 140 255 / .19); }
 .fluxo-shell .app-sidebar .sidebar-label { max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; transform: translateX(-8px); transition: max-width 220ms ease, opacity 160ms ease, transform 220ms ease; }
@@ -1047,7 +1048,8 @@ body {
 .fluxo-shell .brand-mark__dot--b { right: 7px; bottom: 7px; background: linear-gradient(145deg, #8b5cf6, #6d28d9); opacity: .9; }
 .fluxo-shell .sidebar-brand { justify-content: center; padding-inline: 0; }
 .fluxo-shell .app-sidebar:not([data-hover-bloqueado="true"]):is(:hover,:focus-within) .sidebar-brand { justify-content: flex-start; padding-inline: 6px; }
-.fluxo-shell .sidebar-brand a { gap: 12px; }
+.fluxo-shell .sidebar-brand a { min-width: 0; gap: 0; }
+.fluxo-shell .app-sidebar:not([data-hover-bloqueado="true"]):is(:hover,:focus-within) .sidebar-brand a { gap: 12px; }
 .fluxo-shell .sidebar-brand .sidebar-label { font-weight: 800; letter-spacing: -.03em; }
 .fluxo-main { min-width: 0; padding: 20px 20px 28px 118px; }
 .fluxo-main .app-topbar { padding: 0; margin-bottom: 18px; }
@@ -1075,6 +1077,9 @@ body {
 .fluxo-modal-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(9 16 30 / .56); backdrop-filter: blur(12px); }
 .fluxo-modal-card { max-height: calc(100dvh - 32px); overflow-x: hidden; overflow-y: auto; border-radius: 20px; }
 
+/* Mantém valor e ações acessíveis mesmo no painel estreito do extrato. */
+.statement-table :is(th, td) { padding-inline: 8px; }
+
 @media (max-width: 1023px) {
   .fluxo-main { padding: 12px 14px 28px; }
   .fluxo-shell .app-sidebar { top: 0; bottom: 0; left: 0; width: 264px; height: 100dvh; border-radius: 0 24px 24px 0; }
@@ -1084,6 +1089,7 @@ body {
   .fluxo-shell .app-sidebar .nav-item { justify-content: flex-start; gap: 12px; padding-inline: 11px; }
   .fluxo-shell .app-sidebar:not([data-hover-bloqueado="true"]):is(:hover,:focus-within) { width: 264px; }
   .fluxo-shell .app-sidebar .sidebar-brand { justify-content: flex-start; padding-inline: 6px; }
+  .fluxo-shell .app-sidebar .sidebar-brand a { gap: 12px; }
   .fluxo-main .app-topbar { margin-bottom: 12px; }
 }
 @media (max-width: 620px) {

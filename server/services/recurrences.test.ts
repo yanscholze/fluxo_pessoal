@@ -79,10 +79,11 @@ describe("recorrência", () => {
     const alvo = await ambiente(100_000);
     const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
 
-    await confirmOccurrence(alvo.userId, regra, competence("2026-08"), {}, AGORA);
+    const primeira = await confirmOccurrence(alvo.userId, regra, competence("2026-08"), {}, AGORA);
     const segunda = await confirmOccurrence(alvo.userId, regra, competence("2026-08"), {}, AGORA);
 
     assert.equal(segunda.alreadyConfirmed, true, "a segunda confirmação é reconhecida como repetida");
+    assert.equal(segunda.transactionId, primeira.transactionId, "devolve o lançamento real, não um id inventado");
 
     const lancamentos = await listTransactions(alvo.userId, { limit: 100 });
     assert.equal(lancamentos.length, 1, "a competência confirmada tem um lançamento, não dois");
@@ -209,5 +210,107 @@ describe("recorrência", () => {
       () => confirmOccurrence(alvo.userId, regra, competence("2026-01"), {}, AGORA),
       /competência/i,
     );
+  });
+
+  it("vincula receita existente com valor real sem duplicar saldo, alterar o razão ou perder a deduplicação da importação", async () => {
+    const { recordTransaction } = await import("./transactions.ts");
+    const { linkOccurrence, confirmOccurrence } = await import("./recurrences.ts");
+    const { loadLedger, findTransaction, transactionSaveStatements, listTransactions } = await import("../repositories/ledger.ts");
+    const { getDatabase } = await import("../db/client.ts");
+    const { transactions } = await import("../db/schema/index.ts");
+    const { eq } = await import("drizzle-orm");
+    const { buildPlanningView } = await import("./planning.ts");
+    const alvo = await ambiente();
+    const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
+    const { ids } = await recordTransaction(alvo.userId, { kind: "income", state: "confirmed", source: "import", description: "Depósito real",
+      amount: cents(599_999), occurredOn: localDate("2026-08-06"), accountId: alvo.contaId, notes: "Extrato original" }, AGORA);
+    const tx = (await findTransaction(alvo.userId, ids[0]))!;
+    await getDatabase().batch(transactionSaveStatements(tx, { fingerprint: "ofx:deposito-original" }) as never);
+    const ledgerAntes = await loadLedger(alvo.userId);
+    const vinculada = await linkOccurrence(alvo.userId, regra, competence("2026-08"), ids[0], AGORA);
+    assert.equal(vinculada.amountCents, 599_999);
+    assert.deepEqual(await loadLedger(alvo.userId), ledgerAntes);
+    assert.equal((await buildPlanningView(alvo.userId, AGORA)).recurrences.find((r) => r.id === regra)?.pending, null);
+    const [linha] = await getDatabase().select().from(transactions).where(eq(transactions.id, ids[0]));
+    assert.equal(linha.fingerprint, "ofx:deposito-original");
+    assert.equal(linha.source, "import");
+    assert.equal(linha.description, "Depósito real");
+    assert.equal(linha.notes, "Extrato original");
+    assert.equal(linha.version, 2);
+    assert.equal((await linkOccurrence(alvo.userId, regra, competence("2026-08"), ids[0], AGORA)).alreadyConfirmed, true);
+    assert.equal((await confirmOccurrence(alvo.userId, regra, competence("2026-08"), {}, AGORA)).transactionId, ids[0]);
+    assert.equal((await listTransactions(alvo.userId)).length, 1);
+  });
+
+  it("vincula despesas no cartão e transferências sem novos efeitos financeiros", async () => {
+    const { createAccount } = await import("./catalog.ts");
+    const { createRecurrence, linkOccurrence } = await import("./recurrences.ts");
+    const { recordTransaction } = await import("./transactions.ts");
+    const { loadLedger } = await import("../repositories/ledger.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const alvo = await ambiente();
+    const destino = await createAccount(alvo.userId, { name: "Reserva", kind: "savings", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
+    for (const kind of ["expense", "transfer"] as const) {
+      const origin = kind === "expense" ? { cardId: alvo.cartaoId } : { accountId: alvo.contaId, destinationAccountId: destino };
+      const regra = await createRecurrence(alvo.userId, { kind, description: kind, amount: cents(10000), scheduleDay: 10, startsOn: localDate("2026-01-01"), ...origin }, AGORA);
+      const { ids } = await recordTransaction(alvo.userId, { kind, state: "confirmed", description: "Já registrado", amount: cents(9500), occurredOn: localDate("2026-08-10"), ...origin }, AGORA);
+      const antes = await loadLedger(alvo.userId);
+      await linkOccurrence(alvo.userId, regra, competence("2026-08"), ids[0], AGORA);
+      assert.deepEqual(await loadLedger(alvo.userId), antes);
+      assert.equal((await buildPlanningView(alvo.userId, AGORA)).recurrences.find((r) => r.id === regra)?.pending, null);
+    }
+  });
+
+  it("não oferece nem vincula previstos, excluídos, outra natureza, outra conta ou outro usuário", async () => {
+    const { createAccount } = await import("./catalog.ts");
+    const { signUp } = await import("./auth.ts");
+    const { occurrenceTransactions, linkOccurrence } = await import("./recurrences.ts");
+    const { recordTransaction, removeTransaction } = await import("./transactions.ts");
+    const alvo = await ambiente();
+    const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
+    const outra = await createAccount(alvo.userId, { name: "Outra", kind: "checking", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
+    const { user } = await signUp({ email: "outro@teste.app", password: "senha-de-teste-123", displayName: "Outro" });
+    const contaAlheia = await createAccount(user.id, { name: "Alheia", kind: "checking", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
+    for (const scenario of [
+      { state: "planned" as const }, { kind: "expense" as const }, { accountId: outra }, { userId: user.id, accountId: contaAlheia }, { deleted: true },
+    ]) {
+      const { ids } = await recordTransaction(scenario.userId ?? alvo.userId, { kind: "income", state: "confirmed", description: "Não disponível", amount: cents(620000),
+        occurredOn: localDate("2026-08-05"), accountId: alvo.contaId, ...scenario }, AGORA);
+      if (scenario.deleted) await removeTransaction(alvo.userId, ids[0]);
+      await assert.rejects(() => linkOccurrence(alvo.userId, regra, competence("2026-08"), ids[0], AGORA), /disponível/);
+    }
+    assert.deepEqual(await occurrenceTransactions(alvo.userId, regra, competence("2026-08"), AGORA), []);
+    await assert.rejects(() => occurrenceTransactions(user.id, regra, competence("2026-08"), AGORA), /Recorrência/);
+  });
+
+  it("um movimento não pode quitar duas ocorrências e uma ocorrência não pode receber dois movimentos", async () => {
+    const { recordTransaction } = await import("./transactions.ts");
+    const { linkOccurrence, occurrenceTransactions } = await import("./recurrences.ts");
+    const alvo = await ambiente();
+    const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
+    const criar = () => recordTransaction(alvo.userId, { kind: "income", state: "confirmed", description: "Recebido", amount: cents(620000), occurredOn: localDate("2026-08-05"), accountId: alvo.contaId }, AGORA);
+    const a = await criar(), b = await criar();
+    await linkOccurrence(alvo.userId, regra, competence("2026-08"), a.ids[0], AGORA);
+    await assert.rejects(() => linkOccurrence(alvo.userId, regra, competence("2026-08"), b.ids[0], AGORA), /já está vinculada/);
+    await assert.rejects(() => linkOccurrence(alvo.userId, regra, competence("2026-07"), a.ids[0], AGORA), /disponível/);
+    assert.deepEqual((await occurrenceTransactions(alvo.userId, regra, competence("2026-07"), AGORA)).map((t) => t.id), b.ids);
+  });
+
+  it("editar mantém a baixa; excluir o fato devolve a previsão e permite vincular novamente", async () => {
+    const { recordTransaction, removeTransaction } = await import("./transactions.ts");
+    const { linkOccurrence } = await import("./recurrences.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const alvo = await ambiente();
+    const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
+    const criar = (id?: string) => recordTransaction(alvo.userId, { id, kind: "income", state: "confirmed", description: "Recebido", amount: cents(620000), occurredOn: localDate("2026-08-05"), accountId: alvo.contaId }, AGORA);
+    const a = await criar();
+    await linkOccurrence(alvo.userId, regra, competence("2026-08"), a.ids[0], AGORA);
+    await criar(a.ids[0]);
+    assert.equal((await buildPlanningView(alvo.userId, AGORA)).recurrences.find((r) => r.id === regra)?.pending, null);
+    await removeTransaction(alvo.userId, a.ids[0]);
+    assert.ok((await buildPlanningView(alvo.userId, AGORA)).recurrences.find((r) => r.id === regra)?.pending);
+    const b = await criar();
+    await linkOccurrence(alvo.userId, regra, competence("2026-08"), b.ids[0], AGORA);
+    assert.equal((await buildPlanningView(alvo.userId, AGORA)).recurrences.find((r) => r.id === regra)?.pending, null);
   });
 });

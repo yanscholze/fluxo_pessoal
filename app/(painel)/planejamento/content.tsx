@@ -193,6 +193,8 @@ export default async function Planejamento() {
                       recurrenceId={item.id}
                       competence={item.pending.competence}
                       amountCents={item.pending.amountCents}
+                      description={item.description}
+                      scheduledFor={item.pending.date}
                     />
                   </div>
                 </li>

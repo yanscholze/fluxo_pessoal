@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fluxo",
     "slug": "fluxo-pessoal",
-    "version": "0.6.5",
+    "version": "0.6.6",
     "owner": "yan.scholze",
     "scheme": "fluxo",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.fluxo.pessoal",
-      "versionCode": 31,
+      "versionCode": 32,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f4f6ff",

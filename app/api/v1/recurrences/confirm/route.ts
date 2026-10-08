@@ -8,9 +8,19 @@
 import { requireUser } from "../../../../../server/auth/session.ts";
 import { read } from "../../../../../server/http/input.ts";
 import { handle, json, readJson } from "../../../../../server/http/respond.ts";
-import { confirmOccurrence } from "../../../../../server/services/recurrences.ts";
+import { confirmOccurrence, linkOccurrence, occurrenceTransactions } from "../../../../../server/services/recurrences.ts";
 
 export const dynamic = "force-dynamic";
+
+export const GET = handle(async (request: Request) => {
+  const user = await requireUser(request);
+  const query = new URL(request.url).searchParams;
+  const input = read({ recurrenceId: query.get("recurrenceId"), competence: query.get("competence") });
+  const recurrenceId = input.reference("recurrenceId");
+  const competence = input.competence("competence");
+  input.done();
+  return json({ data: { transactions: await occurrenceTransactions(user.id, recurrenceId, competence) } });
+});
 
 export const POST = handle(async (request: Request) => {
   const user = await requireUser(request);
@@ -20,9 +30,12 @@ export const POST = handle(async (request: Request) => {
   const competence = input.competence("competence");
   const amount = input.optionalMoney("amount");
   const occurredOn = input.optionalDate("occurredOn");
+  const transactionId = input.optionalReference("transactionId");
 
   input.done();
 
-  const result = await confirmOccurrence(user.id, recurrenceId, competence, { amount, occurredOn });
+  const result = transactionId
+    ? await linkOccurrence(user.id, recurrenceId, competence, transactionId)
+    : await confirmOccurrence(user.id, recurrenceId, competence, { amount, occurredOn });
   return json({ data: result }, { status: result.alreadyConfirmed ? 200 : 201 });
 });
