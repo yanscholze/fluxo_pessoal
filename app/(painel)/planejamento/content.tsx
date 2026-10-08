@@ -154,8 +154,8 @@ export default async function Planejamento() {
                   Aguardando confirmação
                 </h2>
                 <p className="mt-1 max-w-measure text-caption text-ink-muted">
-                  Ocorrências de {competenceLong(view.competence)} que ainda não viraram lançamento.
-                  Confirmar transforma a projeção em fato — e só então o saldo muda.
+                  Ocorrências de {competenceLong(view.competence)} que ainda aguardam baixa.
+                  Vincule a um lançamento já registrado ou crie o movimento que ainda falta.
                 </p>
               </div>
               <p className="shrink-0 text-caption text-ink-muted">

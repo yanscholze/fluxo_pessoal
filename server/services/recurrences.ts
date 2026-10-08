@@ -23,7 +23,7 @@ import type { Cents } from "../../core/kernel/money.ts";
 import type { Competence } from "../../core/time/competence.ts";
 import { type LocalDate, localDate, todayIn } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
-import { projectPayments, recurrenceRuns, recurrences, transactions } from "../db/schema/index.ts";
+import { accounts, cards, projectPayments, recurrenceRuns, recurrences, transactions } from "../db/schema/index.ts";
 import { findAccount, findCard, listCategories } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
 import { transactionSaveStatements } from "../repositories/ledger.ts";
@@ -34,6 +34,7 @@ export type OccurrenceTransaction = {
   description: string;
   occurredOn: LocalDate;
   amountCents: number;
+  originName: string;
 };
 
 async function occurrenceRule(userId: string, recurrenceId: string, competence: Competence) {
@@ -43,15 +44,13 @@ async function occurrenceRule(userId: string, recurrenceId: string, competence: 
   return rule;
 }
 
-/** Somente movimentos reais, da mesma natureza e conta/cartão da previsão. */
+/** O fato pode ter ocorrido em outra conta; o vínculo nunca troca sua origem. */
 function availableTransaction(userId: string, rule: Recurrence, now: Date) {
   const database = getDatabase();
   return and(eq(transactions.userId, userId), eq(transactions.kind, rule.kind),
     eq(transactions.state, "confirmed"), isNull(transactions.deletedAt),
     isNull(transactions.recurrenceId), isNull(transactions.installmentPlanId),
     lte(transactions.occurredOn, todayIn(now)),
-    rule.cardId ? eq(transactions.originCardId, rule.cardId) : eq(transactions.originAccountId, rule.accountId!),
-    rule.kind === "transfer" ? eq(transactions.destinationAccountId, rule.destinationAccountId!) : undefined,
     notExists(database.select({ id: recurrenceRuns.id }).from(recurrenceRuns)
       .where(eq(recurrenceRuns.transactionId, transactions.id))),
     notExists(database.select({ id: projectPayments.id }).from(projectPayments)
@@ -61,10 +60,14 @@ function availableTransaction(userId: string, rule: Recurrence, now: Date) {
 export async function occurrenceTransactions(userId: string, recurrenceId: string, competence: Competence, now = new Date()): Promise<OccurrenceTransaction[]> {
   const rule = await occurrenceRule(userId, recurrenceId, competence);
   const rows = await getDatabase().select({ id: transactions.id, description: transactions.description,
-    occurredOn: transactions.occurredOn, amountCents: transactions.amountCents })
-    .from(transactions).where(availableTransaction(userId, rule, now))
-    .orderBy(sql`abs(${transactions.amountCents} - ${occurrenceAmount(rule, competence)})`,
-      sql`abs(julianday(${transactions.occurredOn}) - julianday(${occurrenceDate(rule, competence)}))`).limit(100);
+    occurredOn: transactions.occurredOn, amountCents: transactions.amountCents,
+    originName: sql<string>`coalesce(${cards.name}, ${accounts.name}, 'Origem removida')` })
+    .from(transactions)
+    .leftJoin(accounts, and(eq(accounts.id, transactions.originAccountId), eq(accounts.userId, userId)))
+    .leftJoin(cards, and(eq(cards.id, transactions.originCardId), eq(cards.userId, userId)))
+    .where(availableTransaction(userId, rule, now))
+    .orderBy(sql`abs(julianday(${transactions.occurredOn}) - julianday(${occurrenceDate(rule, competence)}))`,
+      sql`abs(${transactions.amountCents} - ${occurrenceAmount(rule, competence)})`).limit(100);
   return rows.map((row) => ({ ...row, occurredOn: localDate(row.occurredOn) }));
 }
 
@@ -99,7 +102,7 @@ export async function linkOccurrence(userId: string, recurrenceId: string, compe
         sql`EXISTS (SELECT 1 FROM recurrence_runs WHERE id = ${runId} AND transaction_id = ${transactionId})`)),
   ] as never);
   const linked = await confirmedOccurrence(userId, recurrenceId, competence);
-  if (!linked || linked.transactionId !== transactionId) throw conflict("O lançamento não está disponível para este compromisso. Atualize a lista e escolha um movimento confirmado da mesma conta ou cartão.");
+  if (!linked || linked.transactionId !== transactionId) throw conflict("O lançamento não está disponível para este compromisso. Atualize a lista e escolha um movimento confirmado da mesma natureza, ainda sem vínculo.");
   return { ...linked, alreadyConfirmed: false };
 }
 

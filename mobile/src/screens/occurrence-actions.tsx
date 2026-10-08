@@ -9,7 +9,7 @@ import { money, relativeDate } from "../ui/format.ts";
 import { Body, Button, Card, Notice, Small } from "../ui/primitives.tsx";
 import { space } from "../ui/theme.ts";
 
-type Movement = { id: string; description: string; occurredOn: string; amountCents: number };
+type Movement = { id: string; description: string; occurredOn: string; amountCents: number; originName: string };
 
 /** Reconhece um movimento já registrado, sem criar uma segunda entrada/saída. */
 export function OccurrenceActions({ rule, onDone }: { rule: RecurrenceView; onDone: () => void }) {
@@ -70,9 +70,9 @@ export function OccurrenceActions({ rule, onDone }: { rule: RecurrenceView; onDo
               <Button label="Já está no extrato" variant={mode === "link" ? "primary" : "secondary"} disabled={busy} onPress={() => { setMode("link"); setError(null); }} />
               <Button label="Ainda não foi lançado" variant={mode === "create" ? "primary" : "secondary"} disabled={busy} onPress={() => { setMode("create"); setError(null); }} />
               {mode === "link" ? <>
-                <Small>Movimentos confirmados da mesma conta ou cartão, ainda sem vínculo.</Small>
+                <Small>Movimentos confirmados da mesma natureza, ainda sem vínculo. A conta ou cartão real será preservado.</Small>
                 {loading ? <Small>Carregando…</Small> : movements.map((item) => <Button key={item.id}
-                  label={`${item.description} · ${money(cents(item.amountCents))} · ${relativeDate(item.occurredOn as never)}`}
+                  label={`${item.description} · ${item.originName} · ${money(cents(item.amountCents))} · ${relativeDate(item.occurredOn as never)}`}
                   variant={selected === item.id ? "primary" : "secondary"} disabled={busy} onPress={() => setSelected(item.id)} />)}
                 {!loading && !movements.length && !error ? <Small>Nenhum lançamento disponível. Escolha criar somente se ainda não estiver no extrato.</Small> : null}
                 {selected ? <Small>Será usado o valor real do lançamento. Seu saldo será preservado.</Small> : null}

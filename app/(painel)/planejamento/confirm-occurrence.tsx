@@ -97,10 +97,10 @@ export function ConfirmOccurrence({ recurrenceId, competence, amountCents, descr
           </label>
         </fieldset>
         {modo === "vincular" ? <>
-          <Field label="Lançamento existente" htmlFor={`vinculo-${recurrenceId}`} hint="Movimentos confirmados da mesma conta ou cartão, ainda sem vínculo.">
+          <Field label="Lançamento existente" htmlFor={`vinculo-${recurrenceId}`} hint="Movimentos confirmados da mesma natureza, ainda sem vínculo. A conta ou cartão real será preservado.">
             <Select id={`vinculo-${recurrenceId}`} value={transactionId} onChange={(event) => setTransactionId(event.target.value)} disabled={carregando || enviando}>
               <option value="">{carregando ? "Carregando…" : "Selecione o lançamento"}</option>
-              {lancamentos.map((item) => <option key={item.id} value={item.id}>{dateShort(item.occurredOn)} · {item.description} · {money(item.amountCents)}</option>)}
+              {lancamentos.map((item) => <option key={item.id} value={item.id}>{dateShort(item.occurredOn)} · {item.description} · {item.originName} · {money(item.amountCents)}</option>)}
             </Select>
           </Field>
           {!carregando && !lancamentos.length && !erro ? <Notice tone="info">Nenhum movimento disponível. Se ainda não está no extrato, escolha “Ainda não foi lançado”.</Notice> : null}

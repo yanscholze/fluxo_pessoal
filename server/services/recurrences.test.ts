@@ -213,8 +213,9 @@ describe("recorrência", () => {
   });
 
   it("vincula receita existente com valor real sem duplicar saldo, alterar o razão ou perder a deduplicação da importação", async () => {
+    const { createAccount } = await import("./catalog.ts");
     const { recordTransaction } = await import("./transactions.ts");
-    const { linkOccurrence, confirmOccurrence } = await import("./recurrences.ts");
+    const { linkOccurrence, confirmOccurrence, occurrenceTransactions } = await import("./recurrences.ts");
     const { loadLedger, findTransaction, transactionSaveStatements, listTransactions } = await import("../repositories/ledger.ts");
     const { getDatabase } = await import("../db/client.ts");
     const { transactions } = await import("../db/schema/index.ts");
@@ -222,8 +223,10 @@ describe("recorrência", () => {
     const { buildPlanningView } = await import("./planning.ts");
     const alvo = await ambiente();
     const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
+    const contaReal = await createAccount(alvo.userId, { name: "Conta do recebimento", kind: "savings", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
     const { ids } = await recordTransaction(alvo.userId, { kind: "income", state: "confirmed", source: "import", description: "Depósito real",
-      amount: cents(599_999), occurredOn: localDate("2026-08-06"), accountId: alvo.contaId, notes: "Extrato original" }, AGORA);
+      amount: cents(599_999), occurredOn: localDate("2026-08-06"), accountId: contaReal, notes: "Extrato original" }, AGORA);
+    assert.equal((await occurrenceTransactions(alvo.userId, regra, competence("2026-08"), AGORA))[0]?.originName, "Conta do recebimento");
     const tx = (await findTransaction(alvo.userId, ids[0]))!;
     await getDatabase().batch(transactionSaveStatements(tx, { fingerprint: "ofx:deposito-original" }) as never);
     const ledgerAntes = await loadLedger(alvo.userId);
@@ -236,6 +239,7 @@ describe("recorrência", () => {
     assert.equal(linha.source, "import");
     assert.equal(linha.description, "Depósito real");
     assert.equal(linha.notes, "Extrato original");
+    assert.equal(linha.originAccountId, contaReal);
     assert.equal(linha.version, 2);
     assert.equal((await linkOccurrence(alvo.userId, regra, competence("2026-08"), ids[0], AGORA)).alreadyConfirmed, true);
     assert.equal((await confirmOccurrence(alvo.userId, regra, competence("2026-08"), {}, AGORA)).transactionId, ids[0]);
@@ -261,18 +265,17 @@ describe("recorrência", () => {
     }
   });
 
-  it("não oferece nem vincula previstos, excluídos, outra natureza, outra conta ou outro usuário", async () => {
+  it("não oferece nem vincula previstos, excluídos, outra natureza ou outro usuário", async () => {
     const { createAccount } = await import("./catalog.ts");
     const { signUp } = await import("./auth.ts");
     const { occurrenceTransactions, linkOccurrence } = await import("./recurrences.ts");
     const { recordTransaction, removeTransaction } = await import("./transactions.ts");
     const alvo = await ambiente();
     const regra = await salarioMensal(alvo.userId, alvo.contaId, alvo.categoriaId);
-    const outra = await createAccount(alvo.userId, { name: "Outra", kind: "checking", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
     const { user } = await signUp({ email: "outro@teste.app", password: "senha-de-teste-123", displayName: "Outro" });
     const contaAlheia = await createAccount(user.id, { name: "Alheia", kind: "checking", openingBalance: cents(0), openedOn: localDate("2026-01-01") });
     for (const scenario of [
-      { state: "planned" as const }, { kind: "expense" as const }, { accountId: outra }, { userId: user.id, accountId: contaAlheia }, { deleted: true },
+      { state: "planned" as const }, { kind: "expense" as const }, { userId: user.id, accountId: contaAlheia }, { deleted: true },
     ]) {
       const { ids } = await recordTransaction(scenario.userId ?? alvo.userId, { kind: "income", state: "confirmed", description: "Não disponível", amount: cents(620000),
         occurredOn: localDate("2026-08-05"), accountId: alvo.contaId, ...scenario }, AGORA);
