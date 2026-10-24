@@ -55,6 +55,22 @@ describe("pendências no painel", () => {
     assert.equal(painel.openTasks.length, 0);
   });
 
+  it("retira entregues do resumo sem apagar suas pendências nem ocupar a vaga dos projetos em andamento", async () => {
+    const { createProject, createTask, updateProjectStatus } = await import("./work.ts");
+    const { buildDashboard } = await import("./dashboard.ts");
+    const alvo = await ambiente();
+    const entregue = await createProject(alvo.userId, { name: "Projeto entregue" }, AGORA);
+    await createTask(alvo.userId, { projectId: entregue, title: "Acompanhamento pendente" }, AGORA);
+    await updateProjectStatus(alvo.userId, entregue, "delivered", AGORA);
+    for (let numero = 1; numero <= 6; numero += 1) {
+      await createProject(alvo.userId, { name: `Em andamento ${numero}` }, AGORA);
+    }
+    const painel = await buildDashboard(alvo.userId, AGORA);
+    assert.equal(painel.openProjects.length, 6);
+    assert.equal(painel.openProjects.some((p) => p.id === entregue), false);
+    assert.deepEqual(painel.openTasks.map((t) => t.title), ["Acompanhamento pendente"]);
+  });
+
   it("não perde a pendência do sétimo projeto, que não cabe na lista de projetos", async () => {
     const { createProject, createTask } = await import("./work.ts");
     const { buildDashboard } = await import("./dashboard.ts");
