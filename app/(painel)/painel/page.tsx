@@ -1,4 +1,5 @@
 import { buildDashboard } from "../../../server/services/dashboard.ts";
+import { buildHealthView } from "../../../server/services/health.ts";
 import { currentUser } from "../../auth-context.ts";
 import { LinkButton } from "../../ui/controls.tsx";
 import { AccountsPanel } from "../../ui/dashboard/accounts-panel.tsx";
@@ -36,7 +37,10 @@ export default async function Painel() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const dashboard = await buildDashboard(user.id);
+  const [dashboard, health] = await Promise.all([
+    buildDashboard(user.id),
+    buildHealthView(user.id),
+  ]);
   const primeiroNome = user.displayName.trim().split(/\s+/)[0];
   const hora = Number(
     new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(
@@ -58,21 +62,22 @@ export default async function Painel() {
           <div className="min-w-0">
             <CashflowPanel points={dashboard.cashflow} />
           </div>
-          <CategoryPanel categories={dashboard.categorySpend} />
+          <CategoryPanel categories={dashboard.categorySpend} reserve={health.reserve} />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
-          <FreeToSpend
-            data={dashboard.freeToSpend}
-            benefit={dashboard.benefitFreeToSpend}
-            today={dashboard.today}
-          />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <CardsPanel cards={dashboard.cards} today={dashboard.today} />
-          <ProjectsPanel projects={dashboard.openProjects} />
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 content-start gap-4">
+            <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
+            <CardsPanel cards={dashboard.cards} today={dashboard.today} />
+          </div>
+          <div className="order-first grid min-w-0 content-start gap-4 lg:order-none">
+            <FreeToSpend
+              data={dashboard.freeToSpend}
+              benefit={dashboard.benefitFreeToSpend}
+              today={dashboard.today}
+            />
+            <ProjectsPanel projects={dashboard.openProjects} />
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">

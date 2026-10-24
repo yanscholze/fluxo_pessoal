@@ -10,12 +10,14 @@
  */
 
 import type { Dashboard } from "../../../server/services/dashboard.ts";
+import type { HealthView } from "../../../server/services/health.ts";
+import { EmergencyReserve } from "./emergency-reserve.tsx";
 import { DonutChart, VIZ } from "../charts.tsx";
 import { money, percent } from "../format.ts";
 import { PieChart } from "../icons.tsx";
 import { Empty, Panel, PanelHeader } from "../primitives.tsx";
 
-export function CategoryPanel({ categories }: { categories: Dashboard["categorySpend"] }) {
+export function CategoryPanel({ categories, reserve }: { categories: Dashboard["categorySpend"]; reserve?: HealthView["reserve"] }) {
   const total = categories.reduce((soma, item) => soma + item.amountCents, 0);
 
   return (
@@ -63,6 +65,7 @@ export function CategoryPanel({ categories }: { categories: Dashboard["categoryS
       ) : (
         <Empty icon={PieChart} title="Nenhum gasto nesta competência" compact />
       )}
+      {reserve ? <EmergencyReserve reserve={reserve} /> : null}
     </Panel>
   );
 }

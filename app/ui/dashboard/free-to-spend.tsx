@@ -31,6 +31,9 @@ export function FreeToSpend({
   today: Dashboard["today"];
 }) {
   const negativo = data.amountCents < 0;
+  const vale = benefit?.amountCents ?? 0;
+  // Apenas detalha o total existente; não altera a projeção financeira.
+  const livreDoSalario = data.amountCents - vale;
 
   const totalDoCiclo = Math.max(1, daysBetween(data.windowStart, data.windowEnd) + 1);
   const decorridos = Math.min(totalDoCiclo, Math.max(0, daysBetween(data.windowStart, today) + 1));
@@ -42,7 +45,7 @@ export function FreeToSpend({
 
   return (
     <section
-      className={`reveal @container relative overflow-hidden rounded-panel border p-5 sm:p-7 ${
+      className={`reveal @container relative overflow-hidden rounded-panel border p-5 ${
         negativo ? "border-negative/30 bg-negative-wash" : "border-line-strong bg-surface"
       }`}
     >
@@ -54,7 +57,7 @@ export function FreeToSpend({
         }`}
       />
 
-      <div className="relative flex flex-col gap-6 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-10">
+      <div className="relative">
         <div className={`min-w-0 flex-1 border-l-2 pl-4 ${negativo ? "border-negative" : "border-accent"}`}>
           <Label>Livre para gastar</Label>
 
@@ -64,13 +67,14 @@ export function FreeToSpend({
 
           {/* O vale já integra a conta do ciclo e aparece detalhado para não
               esconder a parcela que só pode ser usada em alimentação. */}
-          {benefit ? (
-            <p className="mt-2 flex items-baseline gap-2 text-body-sm text-ink-muted">
-              <span>inclui</span>
-              <span className="tabular font-medium text-ink">{money(benefit.amountCents)}</span>
-              <span>em vale-alimentação no fim do ciclo</span>
-            </p>
-          ) : null}
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-body-sm text-ink-muted">
+            <span className="tabular font-medium text-ink">{money(vale)}</span>
+            <span>em V.A no fim do ciclo</span>
+          </p>
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-body-sm text-ink-muted">
+            <span className={`tabular font-medium ${livreDoSalario < 0 ? "text-negative" : "text-ink"}`}>{money(livreDoSalario)}</span>
+            <span>livre do salário</span>
+          </p>
 
           <p className="mt-3 flex items-start gap-2 text-body-sm text-ink-muted">
             {negativo ? (
@@ -85,8 +89,8 @@ export function FreeToSpend({
             </span>
           </p>
 
-          <div className="mt-5 max-w-md">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption text-ink-subtle">
+          <div className="mt-3">
+            <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-caption text-ink-subtle">
               <span>
                 Ciclo de {date(data.windowStart)} a {date(data.windowEnd)}
               </span>
@@ -109,21 +113,23 @@ export function FreeToSpend({
           </div>
         </div>
 
-        <div className="w-full shrink-0 border-t border-line pt-4 @2xl:w-72 @2xl:border-t-0 @2xl:pt-0">
-          <Label className="mb-3">Conta do ciclo</Label>
-          <Breakdown
-            parts={[
-              { label: "Saldo hoje", cents: data.liquidBalanceCents, sign: "+" },
-              { label: "A receber", cents: data.pendingIncomeCents, sign: "+" },
-              { label: "Faturas em aberto", cents: data.openInvoicesCents, sign: "−" },
-              { label: "Contas previstas", cents: data.otherCommitmentsCents, sign: "−" },
-            ]}
-          />
-          <p className="mt-3 border-t border-line pt-3 text-caption text-ink-subtle">
-            Saldo disponível + entradas previstas − faturas em aberto − contas
-            previstas. Categorias marcadas para não pesar ficam fora da conta.
-          </p>
-        </div>
+        <details className="mt-4 border-t border-line pt-3">
+          <summary className="cursor-pointer rounded text-body-sm font-medium text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Conferir conta do ciclo</summary>
+          <div className="mt-3">
+            <Breakdown
+              parts={[
+                { label: "Saldo hoje", cents: data.liquidBalanceCents, sign: "+" },
+                { label: "A receber", cents: data.pendingIncomeCents, sign: "+" },
+                { label: "Faturas em aberto", cents: data.openInvoicesCents, sign: "−" },
+                { label: "Contas previstas", cents: data.otherCommitmentsCents, sign: "−" },
+              ]}
+            />
+            <p className="mt-3 border-t border-line pt-3 text-caption text-ink-subtle">
+              Saldo disponível + entradas previstas − faturas em aberto − contas
+              previstas. Categorias marcadas para não pesar ficam fora da conta.
+            </p>
+          </div>
+        </details>
       </div>
     </section>
   );
