@@ -61,7 +61,10 @@ export function FreeToSpend({
         <div className={`min-w-0 flex-1 border-l-2 pl-4 ${negativo ? "border-negative" : "border-accent"}`}>
           <Label>Livre para gastar</Label>
 
-          <p className={`tabular mt-2 text-display ${negativo ? "text-negative" : "text-ink"}`}>
+          <p
+            className={`tabular mt-2 break-words text-display ${negativo ? "text-negative" : "text-ink"}`}
+            style={{ fontSize: "clamp(1.75rem, 11cqi, var(--text-display))" }}
+          >
             {money(data.amountCents)}
           </p>
 
