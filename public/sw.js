@@ -15,10 +15,10 @@
  * falha, e só para o que é estático.
  */
 
-const VERSAO = "fluxo-v1";
+const VERSAO = "fluxo-v2-icons-20261024";
 
 /** O mínimo para a janela abrir dizendo alguma coisa. */
-const CASCO = ["/offline.html", "/icons/icone-192.png", "/manifest.webmanifest"];
+const CASCO = ["/offline.html", "/icons/icone-192.png?v=20261024", "/manifest.webmanifest?v=20261024"];
 
 self.addEventListener("install", (evento) => {
   evento.waitUntil(

@@ -14,15 +14,17 @@ export const metadata: Metadata = {
    * O registro precisa ser do layout, e não do painel: o Chrome decide se
    * oferece a instalação na **primeira** página que carrega, que é a de login.
    */
-  manifest: "/manifest.webmanifest",
+  manifest: "/manifest.webmanifest?v=20261024",
   applicationName: "Fluxo",
   appleWebApp: { capable: true, title: "Fluxo", statusBarStyle: "black-translucent" },
   icons: {
     icon: [
-      { url: "/icons/icone-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icone-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/fluxo-favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/fluxo-favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.svg?v=20261024", sizes: "any", type: "image/svg+xml" },
     ],
-    apple: [{ url: "/icons/icone-192.png", sizes: "192x192", type: "image/png" }],
+    shortcut: "/favicon.ico?v=20261024",
+    apple: [{ url: "/icons/icone-192.png?v=20261024", sizes: "192x192", type: "image/png" }],
   },
 };
 
