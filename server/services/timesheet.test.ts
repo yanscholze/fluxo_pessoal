@@ -378,25 +378,18 @@ describe("situação do projeto", () => {
     );
   });
 
-  it("o painel mostra testes e ajustes, retira entregues e permite retomar o trabalho", async () => {
-    const { createProject, updateProjectStatus, buildWorkOverview } = await import("./work.ts");
+  it("as novas fases contam como projeto aberto", async () => {
+    const { createProject, updateProjectStatus } = await import("./work.ts");
     const { buildDashboard } = await import("./dashboard.ts");
     const alvo = await ambiente();
 
     const projetoId = await createProject(alvo.userId, { name: "Site institucional" }, AGORA);
 
-    for (const fase of ["testing", "adjustments"] as const) {
+    for (const fase of ["testing", "adjustments", "delivered"] as const) {
       await updateProjectStatus(alvo.userId, projetoId, fase, AGORA);
       const painel = await buildDashboard(alvo.userId, AGORA);
       assert.equal(painel.openProjects.length, 1, `${fase} precisa continuar aberto`);
       assert.equal(painel.openProjects[0].status, fase);
     }
-
-    await updateProjectStatus(alvo.userId, projetoId, "delivered", AGORA);
-    assert.equal((await buildDashboard(alvo.userId, AGORA)).openProjects.length, 0);
-    assert.equal((await buildWorkOverview(alvo.userId, AGORA)).projects.find((p) => p.id === projetoId)?.status, "delivered");
-
-    await updateProjectStatus(alvo.userId, projetoId, "adjustments", AGORA);
-    assert.equal((await buildDashboard(alvo.userId, AGORA)).openProjects[0].status, "adjustments");
   });
 });

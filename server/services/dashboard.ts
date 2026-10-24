@@ -192,7 +192,7 @@ export type Dashboard = {
     kind: string;
     categoryId: string | null;
   }[];
-  /** Projetos ainda em andamento; entregues, concluídos e cancelados ficam fora do resumo. */
+  /** Só os projetos abertos. Os encerrados são histórico, e histórico não é painel. */
   readonly openProjects: readonly OpenProject[];
   /**
    * As tarefas que ainda não foram feitas, de todos os projetos abertos.
@@ -260,8 +260,8 @@ const OPEN_PROJECTS_LIMIT = 6;
  *
  * Atrasado primeiro, depois o que vence perto, depois o resto — a mesma ordem
  * da tela de projetos, porque duas ordens diferentes para a mesma lista fazem o
- * usuário desconfiar das duas. Entregues, encerrados e cancelados não aparecem
- * no resumo de trabalho em andamento.
+ * usuário desconfiar das duas. Encerrado e cancelado não aparecem: histórico
+ * não é painel.
  */
 async function loadWork(
   userId: string,
@@ -287,9 +287,7 @@ async function loadWork(
   const abertos = projetos.filter((projeto) => isOpenStatus(projeto.status));
   const porId = new Map(abertos.map((projeto) => [projeto.id, projeto]));
 
-  // Entrega sai do resumo, sem ocultar eventuais tarefas pendentes do projeto.
   const projects = abertos
-    .filter((projeto) => projeto.status !== "delivered")
     .map((projeto) => {
       const doProjeto = parcelas.filter((parcela) => parcela.projectId === projeto.id);
       const recebido = doProjeto
