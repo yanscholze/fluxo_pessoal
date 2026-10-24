@@ -38,8 +38,8 @@ export function RecentPanel({ transactions }: { transactions: Dashboard["recentT
           caption="Últimos lançamentos confirmados"
           columns={[
             { key: "descricao", header: "Lançamento", flexible: true },
-            { key: "tipo", header: "Natureza", hideBelow: "sm" },
-            { key: "data", header: "Data", align: "right" },
+            { key: "tipo", header: "Natureza", hideBelow: "lg" },
+            { key: "data", header: "Data", align: "right", hideBelow: "sm" },
             { key: "valor", header: "Valor", align: "right" },
           ]}
         >
@@ -59,17 +59,22 @@ export function RecentPanel({ transactions }: { transactions: Dashboard["recentT
                     >
                       <Icone size={14} strokeWidth={1.5} aria-hidden />
                     </span>
-                    <span className="truncate text-body text-ink">{transaction.description}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-body text-ink">{transaction.description}</span>
+                      <span className="mt-0.5 block truncate text-caption text-ink-subtle @2xl:hidden">
+                        {natureza.label}<span className="@sm:hidden"> · {dateShort(transaction.occurredOn)}</span>
+                      </span>
+                    </span>
                   </span>
                 </Td>
-                <Td hideBelow="sm">
+                <Td hideBelow="lg">
                   <Badge tone={natureza.tone}>{natureza.label}</Badge>
                 </Td>
-                <Td align="right" className="tabular whitespace-nowrap text-caption text-ink-subtle">
+                <Td align="right" hideBelow="sm" className="tabular whitespace-nowrap text-caption text-ink-subtle">
                   {dateShort(transaction.occurredOn)}
                 </Td>
                 <Td align="right">
-                  <span className={`tabular text-body font-medium ${entrada ? "text-positive" : "text-ink"}`}>
+                  <span className={`tabular whitespace-nowrap text-body font-medium ${entrada ? "text-positive" : "text-ink"}`}>
                     {entrada ? "+ " : "− "}
                     {money(transaction.amountCents)}
                   </span>

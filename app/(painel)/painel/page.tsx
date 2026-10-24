@@ -69,6 +69,7 @@ export default async function Painel() {
           <div className="grid min-w-0 content-start gap-4">
             <UpcomingPanel items={dashboard.upcoming} today={dashboard.today} />
             <CardsPanel cards={dashboard.cards} today={dashboard.today} />
+            <RecentPanel transactions={dashboard.recentTransactions} />
           </div>
           <div className="order-first grid min-w-0 content-start gap-4 lg:order-none">
             <FreeToSpend
@@ -77,14 +78,8 @@ export default async function Painel() {
               today={dashboard.today}
             />
             <ProjectsPanel projects={dashboard.openProjects} />
+            <AccountsPanel accounts={dashboard.accounts} />
           </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="min-w-0 lg:col-span-2">
-            <RecentPanel transactions={dashboard.recentTransactions} />
-          </div>
-          <AccountsPanel accounts={dashboard.accounts} />
         </div>
       </Stack>
     </Page>
