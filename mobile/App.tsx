@@ -15,6 +15,7 @@ import { ConectarScreen } from "./src/screens/conectar.tsx";
 import { useTipografia } from "./src/ui/fonts.ts";
 import { Shell } from "./src/shell.tsx";
 import { LedgerProvider } from "./src/state/ledger.tsx";
+import { AvisosProvider } from "./src/state/avisos.tsx";
 import { SessionProvider, useSession } from "./src/state/session.tsx";
 import { AppearanceProvider, useIsDark, usePalette } from "./src/ui/theme.ts";
 
@@ -68,7 +69,7 @@ function Raiz() {
   return (
     <LedgerProvider>
       <StatusBar style={isDark ? "light" : "dark"} />
-      <Shell />
+      <AvisosProvider><Shell /></AvisosProvider>
     </LedgerProvider>
   );
 }

@@ -13,11 +13,12 @@ import { todayIn } from "../../../core/time/local-date.ts";
 import { getDatabase } from "../../db/client.ts";
 import { aiUsage } from "../../db/schema/index.ts";
 
-export type AiFeature = "advice" | "receipt";
+export type AiFeature = "advice" | "receipt" | "analysis";
 
 export const DAILY_LIMIT: Record<AiFeature, number> = {
   advice: 60,
   receipt: 30,
+  analysis: 4,
 };
 
 export type QuotaStatus = {
@@ -53,28 +54,26 @@ export async function quotaStatus(
  * sequência de cobranças.
  */
 export async function consume(userId: string, feature: AiFeature, now: Date = new Date()): Promise<QuotaStatus> {
-  const status = await quotaStatus(userId, feature, now);
-  if (status.remaining <= 0) {
+  const database = getDatabase();
+  const dia = todayIn(now);
+  const limite = DAILY_LIMIT[feature];
+  const [consumed] = await database.insert(aiUsage)
+    .values({ id: newId(now.getTime()), userId, feature, usageDay: dia, requestCount: 1 })
+    .onConflictDoUpdate({
+      target: [aiUsage.userId, aiUsage.feature, aiUsage.usageDay],
+      set: { requestCount: sql`${aiUsage.requestCount} + 1`, updatedAt: now.toISOString() },
+      setWhere: sql`${aiUsage.requestCount} < ${limite}`,
+    }).returning({ used: aiUsage.requestCount });
+  if (!consumed) {
     const amanha = new Date(now);
     amanha.setUTCHours(27, 0, 0, 0); // meia-noite em Brasília
     throw rateLimited(
       feature === "advice"
         ? "Você atingiu o limite de consultas ao assistente por hoje."
-        : "Você atingiu o limite de leituras de cupom por hoje.",
+        : feature === "receipt" ? "Você atingiu o limite de leituras de cupom por hoje." : "O limite de análises automáticas de hoje foi atingido.",
       Math.max(60, Math.round((amanha.getTime() - now.getTime()) / 1000)),
     );
   }
 
-  const database = getDatabase();
-  const dia = todayIn(now);
-
-  await database
-    .insert(aiUsage)
-    .values({ id: newId(now.getTime()), userId, feature, usageDay: dia, requestCount: 1 })
-    .onConflictDoUpdate({
-      target: [aiUsage.userId, aiUsage.feature, aiUsage.usageDay],
-      set: { requestCount: sql`${aiUsage.requestCount} + 1`, updatedAt: now.toISOString() },
-    });
-
-  return { used: status.used + 1, limit: status.limit, remaining: status.remaining - 1 };
+  return { used: consumed.used, limit: limite, remaining: limite - consumed.used };
 }

@@ -915,15 +915,6 @@
   box-shadow: 0 30px 70px -28px color-mix(in oklab, var(--color-accent) 40%, transparent);
 }
 
-.tars-core {
-  display: grid;
-  place-items: center;
-  width: 8rem;
-  height: 8rem;
-  border: 1px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
-  border-radius: 999px;
-  box-shadow: 0 0 70px color-mix(in oklab, var(--color-accent) 22%, transparent);
-}
 /* UI_UX_Fluxo: the prototype's layout and design tokens, shared by every page. */
 @font-face {
   font-family: "Fluxo Inter";

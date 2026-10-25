@@ -7,22 +7,23 @@
  */
 
 import { DomainError, rateLimited } from "../../../core/kernel/errors.ts";
+import { env } from "cloudflare:workers";
 import { integrationStatus, integrationToken } from "../integration-credentials.ts";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
-const GEMINI_MODEL = "gemini-3.6-flash";
-const GEMINI_FALLBACK_MODEL = "gemini-3.8-flash";
-const TIMEOUT_MS = 45_000;
+const GEMINI_MODEL = "gemini-3.8-flash";
+const GEMINI_FALLBACK_MODEL = "gemini-3.6-flash";
+const TIMEOUT_MS = 30_000;
 
 const OPENAI_MODEL = "gpt-5-mini";
 
 export async function activeProvider(userId: string): Promise<"Gemini" | "OpenAI" | null> {
   const provider = (await integrationStatus(userId)).activeAiProvider;
-  return provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : null;
+  return provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : scopedEnvironmentToken(userId) ? "Gemini" : null;
 }
 
 export async function isConfigured(userId: string): Promise<boolean> {
-  return (await integrationStatus(userId)).activeAiProvider !== null;
+  return (await activeProvider(userId)) !== null;
 }
 
 /**
@@ -48,6 +49,21 @@ export type AskInput = {
   readonly content: readonly ContentPart[];
   readonly schemaName: string;
   readonly schema: Record<string, unknown>;
+  readonly history?: readonly { readonly role: "user" | "assistant"; readonly content: string }[];
+};
+
+/** An environment credential belongs to exactly one account; never a tenant-wide fallback. */
+function scopedEnvironmentToken(userId: string): string | null {
+  return env.GEMINI_USER_ID === userId && typeof env.GEMINI_API_KEY === "string" && env.GEMINI_API_KEY.trim()
+    ? env.GEMINI_API_KEY.trim() : null;
+}
+
+export interface AIProvider {
+  generate<T>(input: AskInput, token: string): Promise<T>;
+}
+const providers: Record<"gemini" | "openai", AIProvider> = {
+  gemini: { generate: askGemini },
+  openai: { generate: askOpenAI },
 };
 
 type ResponsesBody = {
@@ -67,13 +83,14 @@ type GeminiBody = {
  * Erros do provedor viram `DomainError` com código estável para a borda HTTP.
  */
 export async function ask<T>(userId: string, input: AskInput): Promise<T> {
-  const provider = (await integrationStatus(userId)).activeAiProvider;
+  const selected = (await integrationStatus(userId)).activeAiProvider;
+  const provider = selected ?? (scopedEnvironmentToken(userId) ? "gemini" : null);
   if (!provider) {
     throw new DomainError("conflict", "Configure sua chave de IA em Configurações → Integrações.");
   }
-  const token = await integrationToken(userId, provider);
+  const token = selected ? await integrationToken(userId, provider) : scopedEnvironmentToken(userId);
   if (!token) throw new DomainError("conflict", "A chave de IA selecionada não está disponível.");
-  return provider === "gemini" ? askGemini<T>(input, token) : askOpenAI<T>(input, token);
+  return providers[provider].generate<T>(input, token);
 }
 
 async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
@@ -89,7 +106,7 @@ async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
       body: JSON.stringify({
         model: OPENAI_MODEL,
         instructions: input.instructions,
-        input: [{ role: "user", content: input.content }],
+        input: [...(input.history ?? []).slice(-12).map((message) => ({ role: message.role, content: message.content.slice(0, 6000) })), { role: "user", content: input.content }],
         store: false,
         text: {
           format: {
@@ -114,46 +131,50 @@ async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
   }
 
   if (!resposta.ok) {
-    const corpo = (await resposta.json().catch(() => ({}))) as ResponsesBody;
-    console.error("Falha na API da OpenAI", resposta.status, corpo.error?.message);
+    console.error("Falha na API da OpenAI", resposta.status);
     throw new DomainError("conflict", "Não foi possível falar com o assistente agora.");
   }
 
-  const corpo = (await resposta.json()) as ResponsesBody;
+  const corpo = await providerJson<ResponsesBody>(resposta);
   const texto = corpo.output_text ?? extractText(corpo);
   return parseStructured<T>(texto);
 }
 
 async function askGemini<T>(input: AskInput, token: string): Promise<T> {
-  let resposta = await requestGemini(GEMINI_MODEL, input, token);
+  const signal = AbortSignal.timeout(TIMEOUT_MS);
+  const configuredModel = typeof env.GEMINI_MODEL === "string" && /^[a-z0-9][a-z0-9._-]{1,80}$/.test(env.GEMINI_MODEL) ? env.GEMINI_MODEL : GEMINI_MODEL;
+  let resposta = await requestGemini(configuredModel, input, token, signal);
   // O provedor recomenda recuar progressivamente quando retorna 503. A chave
   // pode estar correta e o modelo indisponível; repetir imediatamente a mesma
   // chamada só aumenta a fila. Depois tentamos outro modelo da mesma conta.
   if (resposta.status === 503) {
     await delay(1_000);
-    resposta = await requestGemini(GEMINI_MODEL, input, token);
+    resposta = await requestGemini(configuredModel, input, token, signal);
   }
   if (resposta.status === 503) {
     await delay(2_000);
-    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token);
+    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token, signal);
+  }
+  if (resposta.status === 404 && configuredModel !== GEMINI_FALLBACK_MODEL) {
+    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token, signal);
   }
 
   if (resposta.status === 429) {
     throw rateLimited("O provedor está sobrecarregado. Tente daqui a pouco.", 30);
   }
   if (!resposta.ok) {
-    const corpo = (await resposta.json().catch(() => ({}))) as { error?: { status?: string } };
-    console.error("Falha na API do Gemini", resposta.status, corpo.error?.status);
+    console.error("Falha na API do Gemini", resposta.status);
     if (resposta.status === 503) {
       throw new DomainError("conflict", "O Gemini está temporariamente indisponível. Sua chave está cadastrada; tente novamente em alguns minutos.");
     }
     if (resposta.status === 401 || resposta.status === 403) {
       throw new DomainError("conflict", "A chave Gemini não tem acesso ao modelo. Confira a chave em Configurações → Integrações.");
     }
+    if (resposta.status === 404) throw new DomainError("conflict", "O modelo Gemini não está disponível para esta chave. Confira a configuração GEMINI_MODEL do servidor.");
     throw new DomainError("conflict", "Não foi possível falar com o assistente agora.");
   }
 
-  const corpo = (await resposta.json()) as GeminiBody;
+  const corpo = await providerJson<GeminiBody>(resposta);
   const texto = corpo.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? null;
   return parseStructured<T>(texto);
 }
@@ -162,7 +183,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function requestGemini(model: string, input: AskInput, token: string): Promise<Response> {
+async function requestGemini(model: string, input: AskInput, token: string, signal: AbortSignal): Promise<Response> {
   let resposta: Response;
   try {
     resposta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -171,10 +192,10 @@ async function requestGemini(model: string, input: AskInput, token: string): Pro
         "x-goog-api-key": token,
         "content-type": "application/json",
       },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: input.instructions }] },
-        contents: [{ role: "user", parts: input.content.map(geminiPart) }],
+        contents: [...(input.history ?? []).slice(-12).map((message) => ({ role: message.role === "assistant" ? "model" : "user", parts: [{ text: message.content.slice(0, 6000) }] })), { role: "user", parts: input.content.map(geminiPart) }],
         generationConfig: {
           responseMimeType: "application/json",
           responseJsonSchema: input.schema,
@@ -205,6 +226,11 @@ function parseStructured<T>(texto: string | null): T {
   } catch (causa) {
     throw new DomainError("conflict", "O assistente devolveu uma resposta ilegível.", { cause: causa });
   }
+}
+
+async function providerJson<T>(response: Response): Promise<T> {
+  try { return await response.json() as T; }
+  catch { throw new DomainError("conflict", "A IA devolveu uma resposta ilegível. Tente novamente."); }
 }
 
 /** Alguns formatos de resposta trazem o texto aninhado em vez de `output_text`. */

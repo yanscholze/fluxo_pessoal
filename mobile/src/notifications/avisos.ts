@@ -7,10 +7,11 @@
  * que o Fluxo já pagou caro para corrigir no livre para gastar.
  *
  * A memória do que já foi notificado é a peça que separa "avisar" de
- * "perseguir": cada alerta tem uma chave, e uma chave já notificada não volta.
- * Quem decide a cadência é o servidor, pelo discriminador que põe na chave —
- * a fatura carrega o vencimento, o comprometimento carrega a competência, a
- * captura carrega o dia. Este módulo não interpreta nenhum deles; só lembra.
+ * "perseguir": a entrega lembra o identificador e a revisão de cada aviso,
+ * isolados por usuário e servidor. O backend controla a identidade do evento
+ * e incrementa a revisão na escalada. Capturas usam o episódio pendente, sem
+ * criar uma nova chave a cada dia. A leitura é persistida no servidor e não
+ * se confunde com esta memória local de entrega.
  */
 
 import * as Notifications from "expo-notifications";
@@ -18,18 +19,28 @@ import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 import { call } from "../net/client.ts";
+import type { Credentials } from "../session/credentials.ts";
+import { deliveryKey, notificationScope, pendingDeliveries } from "./notification-state.ts";
 
 export type Aviso = {
+  readonly id: string;
   readonly key: string;
+  readonly revision: number;
   readonly severity: "urgente" | "atencao" | "informativo";
   readonly title: string;
   readonly body: string;
   readonly screen: string;
+  readonly category: "critical" | "attention" | "insight" | "opportunity" | "reminder";
+  readonly priority: number;
+  readonly href: string;
+  readonly askPrompt: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly readAt: string | null;
+  readonly resolvedAt: string | null;
 };
 
-type Resposta = { readonly today: string; readonly alerts: readonly Aviso[] };
-
-const CHAVES_NOTIFICADAS = "fluxo.avisos.notificados";
+export type CentralDeAvisos = { readonly today: string; readonly alerts: readonly Aviso[]; readonly history: readonly Aviso[]; readonly unreadCount: number };
 
 /** Canal Android dos avisos. Precisa existir antes da primeira notificação. */
 const CANAL = "avisos";
@@ -51,36 +62,37 @@ Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: false,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
   }),
 });
 
 /**
- * Quantas chaves lembrar.
- *
- * O `SecureStore` do Android guarda até cerca de 2 KB por valor, e a chave mais
- * longa em uso — `capturas-pendentes-2026-09-08` — ocupa uns 33 bytes dentro do
- * JSON. Quarenta cabem com folga; sessenta encostariam no teto, e estourar
- * significa perder a memória inteira e reavisar tudo de uma vez.
- *
- * Quarenta cobre mais de um mês de alertas distintos. As mais antigas caem
- * primeiro, e reavisar algo de dois meses atrás é um custo aceitável.
+ * Memória pequena de entregas recentes, por usuário e servidor. Identificador
+ * ULID + revisão mantém este valor compacto no SecureStore. As chaves mais
+ * antigas saem primeiro; avisos lidos ou resolvidos continuam sendo filtrados
+ * pelo estado persistente recebido da API, mesmo após essa rotação local.
  */
 const MEMORIA = 40;
-
-/** O que interrompe. Informativo espera o usuário abrir o aplicativo. */
-const INTERROMPE = new Set(["urgente", "atencao"]);
 
 export async function buscarAvisos(credenciais: {
   baseUrl: string;
   token: string;
 }): Promise<readonly Aviso[]> {
-  const resposta = await call<Resposta>("/api/v1/alerts", credenciais);
+  const resposta = await buscarCentral(credenciais);
   return resposta.alerts;
 }
 
-async function lidas(): Promise<string[]> {
-  const cru = await SecureStore.getItemAsync(CHAVES_NOTIFICADAS);
+export async function buscarCentral(credenciais: { baseUrl: string; token: string }): Promise<CentralDeAvisos> {
+  const response = await call<CentralDeAvisos>("/api/v1/alerts", credenciais);
+  return { ...response, history: response.history ?? [], unreadCount: response.unreadCount ?? response.alerts.filter((item) => !item.readAt && !item.resolvedAt).length };
+}
+
+export async function marcarAvisosLidos(credentials: { baseUrl: string; token: string }, ids: readonly string[] | "all"): Promise<CentralDeAvisos> {
+  return call<CentralDeAvisos>("/api/v1/alerts", { ...credentials, method: "PATCH", body: ids === "all" ? { all: true } : { ids } });
+}
+
+async function chavesEntregues(credentials: Credentials): Promise<string[]> {
+  const cru = await SecureStore.getItemAsync(notificationScope(credentials));
   if (!cru) return [];
   try {
     const valor: unknown = JSON.parse(cru);
@@ -125,18 +137,17 @@ async function garantirCanal(): Promise<void> {
 /**
  * Entrega os avisos novos ao sistema e devolve quantos foram.
  *
- * Dispara imediatamente (`trigger: null`): o alerta já é sobre agora, e agendar
+ * Dispara imediatamente, no canal explícito do Android: o alerta já é sobre agora, e agendar
  * para depois criaria uma fila que sobrevive ao problema que a originou.
  */
-export async function notificarNovos(avisos: readonly Aviso[]): Promise<number> {
-  const novos = avisos.filter((aviso) => INTERROMPE.has(aviso.severity));
-  if (novos.length === 0) return 0;
-
-  const jaVistos = new Set(await lidas());
-  const pendentes = novos.filter((aviso) => !jaVistos.has(aviso.key));
+export async function notificarNovos(avisos: readonly Aviso[], credentials: Credentials, isActive: () => boolean = () => true): Promise<number> {
+  if (!isActive()) return 0;
+  const jaVistos = new Set(await chavesEntregues(credentials));
+  const pendentes = pendingDeliveries(avisos, [...jaVistos]);
   if (pendentes.length === 0) return 0;
 
   if (!(await pedirPermissao())) return 0;
+  if (!isActive()) return 0;
   await garantirCanal();
 
   /*
@@ -148,32 +159,41 @@ export async function notificarNovos(avisos: readonly Aviso[]): Promise<number> 
    */
   const entregues: string[] = [];
   for (const aviso of pendentes) {
+    if (!isActive()) break;
     try {
-      await Notifications.scheduleNotificationAsync({
+      const identifier = await Notifications.scheduleNotificationAsync({
+        identifier: deliveryKey(aviso),
         content: {
           title: aviso.title,
           body: aviso.body,
-          data: { screen: aviso.screen },
-          ...(Platform.OS === "android" ? { channelId: CANAL } : {}),
+          data: { screen: aviso.screen, notificationId: aviso.id, userId: credentials.user.id, baseUrl: credentials.baseUrl },
         },
-        trigger: null,
+        trigger: Platform.OS === "android" ? { channelId: CANAL } : null,
       });
-      entregues.push(aviso.key);
+      if (!isActive()) {
+        await Notifications.dismissNotificationAsync(identifier).catch(() => undefined);
+        break;
+      }
+      entregues.push(deliveryKey(aviso));
     } catch {
       // Segue para os próximos: um aviso que falhou tenta de novo na próxima
       // abertura, e não leva os outros junto.
     }
   }
 
-  if (entregues.length === 0) return 0;
+  if (entregues.length === 0 || !isActive()) return 0;
 
   const memoria = [...jaVistos, ...entregues].slice(-MEMORIA);
-  await SecureStore.setItemAsync(CHAVES_NOTIFICADAS, JSON.stringify(memoria));
+  await SecureStore.setItemAsync(notificationScope(credentials), JSON.stringify(memoria));
 
   return entregues.length;
 }
 
 /** Esquece o que já foi notificado. Usado ao desconectar o aparelho. */
-export async function limparMemoria(): Promise<void> {
-  await SecureStore.deleteItemAsync(CHAVES_NOTIFICADAS);
+export async function limparMemoria(credentials: Credentials): Promise<void> {
+  await SecureStore.deleteItemAsync(notificationScope(credentials));
+  await Promise.all([
+    Notifications.dismissAllNotificationsAsync().catch(() => undefined),
+    Notifications.setBadgeCountAsync(0).catch(() => undefined),
+  ]);
 }

@@ -503,6 +503,23 @@ export const fetchAssinaturas = (c: Credenciais) => buscar<AssinaturasView>("/ap
 
 // --- assistente --------------------------------------------------------------
 
+export type MensagemDoAssistente = {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly content: string;
+  readonly createdAt: string;
+  readonly advice?: Pick<RespostaDoAssistente, "summary" | "actions" | "warnings">;
+};
+
+export type InsightFinanceiro = {
+  readonly key: string;
+  readonly title: string;
+  readonly body: string;
+  readonly question: string;
+  readonly href: string;
+  readonly category: "critical" | "attention" | "insight" | "opportunity" | "reminder";
+};
+
 export type RespostaDoAssistente = {
   readonly answer: string;
   readonly summary: string;
@@ -513,9 +530,15 @@ export type RespostaDoAssistente = {
   }[];
   readonly warnings: readonly string[];
   readonly remaining?: number;
+  readonly conversationId?: string;
 };
 
 export type EstadoDoAssistente = {
+  readonly suggestions?: readonly string[];
+  readonly insights?: readonly InsightFinanceiro[];
+  readonly conversations?: readonly { id: string; title: string; updatedAt: string }[];
+  readonly conversation?: { id: string; messages: readonly MensagemDoAssistente[] } | null;
+  readonly notificationPrompt?: string;
   readonly configured: boolean;
   readonly advice: { readonly remaining: number; readonly limit: number };
   readonly receipt: { readonly remaining: number; readonly limit: number };

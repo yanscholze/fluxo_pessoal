@@ -1,6 +1,8 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { ensureMigrated } from "../server/db/migrator.ts";
+import { runScheduledFinancialAnalyses } from "../server/services/ai/analysis.ts";
 
 interface Env {
   ASSETS: Fetcher;
@@ -26,6 +28,18 @@ interface ExecutionContext {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
+  async scheduled(_controller: { scheduledTime: number }, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      try {
+        await ensureMigrated();
+        await runScheduledFinancialAnalyses(new Date());
+      } catch (error) {
+        // No provider payloads or credentials: failure here is migration/account selection.
+        console.error("Fluxo: falha ao iniciar análise agendada", error instanceof Error ? error.message : "Erro desconhecido");
+        throw error;
+      }
+    })());
+  },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 

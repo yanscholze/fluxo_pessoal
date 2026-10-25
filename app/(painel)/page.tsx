@@ -1,41 +1,38 @@
-import { isConfigured } from "../../server/services/ai/client.ts";
-import { quotaStatus } from "../../server/services/ai/quota.ts";
-import { buildDashboard } from "../../server/services/dashboard.ts";
-import { buildGoalsView } from "../../server/services/goals.ts";
-import { readTarsPendingCounts } from "../../server/services/tars.ts";
+import Link from "next/link";
+import { buildAssistantState } from "../../server/services/ai/assistant-state.ts";
 import { currentUser } from "../auth-context.ts";
-import { Page } from "../ui/page-frame.tsx";
-import { AssistantTools } from "../ui/tars/assistant-tools.tsx";
-import { TarsOverview } from "../ui/tars/tars-overview.tsx";
-import styles from "../ui/tars/tars.module.css";
+import { Page, PageHeader } from "../ui/page-frame.tsx";
+import { Panel } from "../ui/primitives.tsx";
+import { Camera } from "../ui/icons.tsx";
+import { AssistantChat } from "./assistente/assistant-chat.tsx";
+import { ReceiptReader } from "./assistente/receipt-reader.tsx";
 
-/** A home sempre pertence à identidade da requisição. */
 export const dynamic = "force-dynamic";
 
-export default async function Tars() {
+type Params = { notificationId?: string; conversationId?: string };
+
+export default async function FluxoAi({ searchParams }: { searchParams?: Promise<Params> }) {
   const user = await currentUser();
   if (!user) return null;
-
-  const now = new Date();
-  const assistantReady = await isConfigured(user.id);
-  const [dashboard, goals, pending, advice, receipt] = await Promise.all([
-    buildDashboard(user.id, now),
-    buildGoalsView(user.id, now),
-    readTarsPendingCounts(user.id),
-    assistantReady ? quotaStatus(user.id, "advice") : null,
-    assistantReady ? quotaStatus(user.id, "receipt") : null,
-  ]);
+  const params = await searchParams;
+  const state = await buildAssistantState(user.id, params ?? {});
 
   return (
-    <Page width="wide" className={styles.page}>
-      <TarsOverview
-        firstName={user.displayName.trim().split(/\s+/)[0]}
-        dashboard={dashboard}
-        goals={goals}
-        pending={pending}
-        assistantReady={assistantReady}
-      />
-      <AssistantTools advice={advice} receipt={receipt} />
+    <Page>
+      <PageHeader title="Fluxo IA" description={`Olá, ${user.displayName.trim().split(/\s+/)[0]}. Vamos entender seus números e planejar os próximos passos.`} />
+      <AssistantChat key={`${params?.notificationId ?? ""}:${params?.conversationId ?? ""}`} initialState={state} notificationId={params?.notificationId} conversationId={params?.conversationId} />
+      <Panel className="mt-5" padding="none">
+        <details className="group p-5">
+          <summary className="flex min-h-11 cursor-pointer items-center gap-3 text-body-sm font-semibold text-ink marker:text-accent">
+            <Camera size={19} className="text-accent" aria-hidden />Ler um cupom ou comprovante
+            <span className="ml-auto text-caption font-normal text-ink-subtle">Ferramenta</span>
+          </summary>
+          <div className="mt-3 max-w-measure-lg">
+            <p className="mb-4 text-body-sm text-ink-muted">Extraia os dados de uma foto e confira antes de registrar. Nada é lançado automaticamente.</p>
+            {state.configured ? <ReceiptReader remaining={state.receipt.remaining} /> : <p className="text-body-sm text-ink-muted">Configure seu provedor em <Link className="text-accent underline" href="/configuracoes?aba=integracoes">Configurações → Integrações</Link>.</p>}
+          </div>
+        </details>
+      </Panel>
     </Page>
   );
 }
