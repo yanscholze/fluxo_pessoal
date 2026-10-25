@@ -1,0 +1,36 @@
+name: Relatar erro
+description: Comportamento incorreto ou regressão no Fluxo
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 'Não publique tokens, extratos reais, senhas ou dados financeiros pessoais. Para vulnerabilidades ou credenciais reais, siga SECURITY.md.'
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataforma
+      options: [Web, Fedora/RPM, Android/APK, Backend/API]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problema e resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Como reproduzir
+      description: Passos e exemplo com dados fictícios.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão, commit ou URL do deploy
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências sem dados sensíveis

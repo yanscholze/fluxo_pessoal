@@ -1,0 +1,22 @@
+name: Propor evolução
+description: Nova etapa ou funcionalidade do Fluxo
+title: '[Evolução] '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema que esta evolução resolve
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo e critérios de conclusão
+      description: Inclua plataformas, regras que devem ser preservadas e como validar.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Restrições, dependências e o que fica fora desta etapa

@@ -229,6 +229,13 @@ describe("sugestões e simulações determinísticas", () => {
 
   it("remove identificadores e segredos acidentais em nomes de categorias", () => {
     assert.equal(financialLabel("Contato pessoa@example.com 123.456.789-00"), "Contato [email omitido] [documento omitido]");
-    assert.ok(!financialLabel("Token AIzaabcdefghijklmnopqrstuvwxyz123456789").includes("AIza"));
+    // Build provider-shaped examples at runtime: no complete credential-like
+    // literal belongs in the repository, even when the value is fictitious.
+    const examples = [
+      ["AI", "za", "x".repeat(35)].join(""),
+      ["gh", "p_", "x".repeat(36)].join(""),
+      ["sk", "-", "x".repeat(40)].join(""),
+    ];
+    for (const example of examples) assert.equal(financialLabel(`Token ${example}`), "Token [segredo omitido]");
   });
 });
