@@ -10,7 +10,7 @@ import { Body, Card, Label, Small, Texto } from "../ui/primitives.tsx";
 import { space, type, usePalette } from "../ui/theme.ts";
 
 const DESTINOS: readonly { label: string; detail: string; tela: Tela; icon: typeof Robot }[] = [
-  { label: "TARS", detail: "Seu panorama financeiro", tela: "assistente", icon: Robot },
+  { label: "Fluxo IA", detail: "Converse sobre suas finanças", tela: "assistente", icon: Robot },
   { label: "Contas", detail: "Saldos e movimentações", tela: "contas", icon: Wallet },
   { label: "Compromissos", detail: "Recorrências e assinaturas", tela: "recorrencias", icon: CirclesFour },
   { label: "Orçamentos", detail: "Limites e categorias", tela: "orcamentos", icon: ChartBar },

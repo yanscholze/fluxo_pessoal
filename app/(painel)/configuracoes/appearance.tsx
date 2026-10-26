@@ -144,7 +144,7 @@ export function Appearance() {
       <div>
         <Label>Cor de destaque</Label>
         <p className="mt-1 text-caption text-ink-subtle">
-          Personalize botões, navegação e o TARS. Receitas e despesas mantêm suas cores de identificação.
+          Personalize botões, navegação e o Fluxo IA. Receitas e despesas mantêm suas cores de identificação.
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ACENTOS.map(([valor, cor, rotulo]) => {

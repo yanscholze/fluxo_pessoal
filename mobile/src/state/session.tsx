@@ -24,6 +24,7 @@ import {
   writeCredentials,
 } from "../session/credentials.ts";
 import { publishCredentials, revokeCredentials } from "../notifications/bridge.ts";
+import { limparMemoria } from "../notifications/avisos.ts";
 
 export type SessionState =
   | { readonly status: "carregando" }
@@ -74,9 +75,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await revokeCredentials();
     await clearCredentials();
     await wipeUserData();
+    if (state.status === "conectado") await limparMemoria(state.credentials);
     const identificador = await loadDeviceId();
     setState({ status: "desconectado", deviceId: identificador });
-  }, []);
+  }, [state]);
 
   const value = useMemo(() => ({ state, connect, disconnect }), [state, connect, disconnect]);
 

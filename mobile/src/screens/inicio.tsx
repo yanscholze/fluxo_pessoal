@@ -42,6 +42,7 @@ import { fetchDashboard } from "../net/views.ts";
 import { useLedger } from "../state/ledger.tsx";
 import { useRemoto } from "../state/remote.tsx";
 import { useConnectedSession } from "../state/session.tsx";
+import { useAvisos } from "../state/avisos.tsx";
 import type { LocalTransaction } from "../storage/model.ts";
 import { GraficoDeLinha } from "../ui/charts.tsx";
 import { money, relativeDate } from "../ui/format.ts";
@@ -61,6 +62,7 @@ export function InicioScreen({
 }) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
+  const { unreadCount, refresh: atualizarAvisos } = useAvisos();
   const { transactions, categories, sync, synchronize } = useLedger();
   const painel = useRemoto(fetchDashboard);
   const [aba, setAba] = useState<AbaInicio>("transacoes");
@@ -112,6 +114,7 @@ export function InicioScreen({
   const atualizar = () => {
     void synchronize();
     painel.recarregar();
+    void atualizarAvisos();
   };
 
   return (
@@ -143,7 +146,7 @@ export function InicioScreen({
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Avisos"
+            accessibilityLabel={`Notificações, ${unreadCount} não lida(s)`}
             onPress={() => onNavigate("avisos")}
             style={({ pressed }) => ({
               width: 44,
@@ -154,18 +157,21 @@ export function InicioScreen({
             })}
           >
             <BellSimple size={22} color={palette.inkSubtle} />
-            {pendencias.length > 0 ? (
+            {unreadCount > 0 ? (
               <View
                 style={{
                   position: "absolute",
-                  top: 10,
-                  right: 10,
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: palette.accent,
+                  top: 1,
+                  right: -1,
+                  minWidth: 20,
+                  height: 20,
+                  paddingHorizontal: 4,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 10,
+                  backgroundColor: palette.negative,
                 }}
-              />
+              ><Small tone="inverse" style={{ fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Small></View>
             ) : null}
           </Pressable>
           <ProfileButton onPress={() => onNavigate("configuracoes")} name={nomeCompleto} />

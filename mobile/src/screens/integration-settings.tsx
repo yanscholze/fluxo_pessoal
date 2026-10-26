@@ -9,8 +9,8 @@ import { radius, space, usePalette } from "../ui/theme.ts";
 type Provider = "gemini" | "openai" | "github";
 type Status = { activeAiProvider: "gemini" | "openai" | null; saved: Record<Provider, boolean> };
 const providers: readonly { id: Provider; name: string; detail: string }[] = [
-  { id: "gemini", name: "Google Gemini", detail: "TARS e comprovantes" },
-  { id: "openai", name: "OpenAI", detail: "Alternativa para TARS e comprovantes" },
+  { id: "gemini", name: "Google Gemini", detail: "Fluxo IA e comprovantes" },
+  { id: "openai", name: "OpenAI", detail: "Alternativa para Fluxo IA e comprovantes" },
   { id: "github", name: "GitHub", detail: "Repositórios, commits, PRs e issues" },
 ];
 
@@ -70,7 +70,7 @@ export function IntegrationSettings({ baseUrl, token }: { baseUrl: string; token
               style={{ minHeight: 48, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, paddingHorizontal: space.md, color: palette.ink, backgroundColor: palette.surfaceSunken }}
             />
             <Button label={saved ? "Substituir chave" : "Salvar chave"} disabled={values[provider.id].trim().length < 8} busy={busy !== null} onPress={() => void update("POST", provider.id)} />
-            {saved && provider.id !== "github" && !selected ? <Button label="Usar para TARS" variant="secondary" busy={busy !== null} onPress={() => void update("PATCH", provider.id)} /> : null}
+            {saved && provider.id !== "github" && !selected ? <Button label="Usar para Fluxo IA" variant="secondary" busy={busy !== null} onPress={() => void update("PATCH", provider.id)} /> : null}
             {saved ? <Button label="Excluir chave" variant="danger" busy={busy !== null} onPress={() => void update("DELETE", provider.id)} /> : null}
             {message?.provider === provider.id ? <Small tone={message.error ? "negative" : "positive"}>{message.text}</Small> : null}
           </View>

@@ -18,6 +18,8 @@ export * from "./imports.ts";
 export * from "./planning.ts";
 export * from "./rewards.ts";
 export * from "./ai.ts";
+export * from "./ai-conversations.ts";
+export * from "./notifications.ts";
 export * from "./capture.ts";
 export * from "./sync.ts";
 export * from "./pairing.ts";

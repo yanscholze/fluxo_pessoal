@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { NotificationCenter } from "./ai/notification-center.tsx";
 import { BottomNav } from "./bottom-nav.tsx";
 import { InstallApp } from "./install-app.tsx";
 import { Dialog } from "./dialog.tsx";
 import { Input } from "./controls.tsx";
 import { gravarPreferencia, usePreferencia } from "./browser-preference.ts";
 import {
-  ArrowRight, BarChart3, Bell, Bot, Briefcase, CreditCard, Landmark,
+  ArrowRight, BarChart3, Bot, Briefcase, CreditCard, Landmark,
   LayoutDashboard, type LucideIcon, Menu, Moon, Plane, Receipt, Repeat,
   Search, Settings, Sun, Wallet, X, Zap,
 } from "./icons.tsx";
@@ -20,7 +21,7 @@ export type NavGroup = { readonly title: string; readonly items: readonly NavIte
 
 export const NAV: readonly NavGroup[] = [
   { title: "Seu espaço", items: [
-    { href: "/", label: "TARS", icon: Bot },
+    { href: "/", label: "Fluxo IA", icon: Bot },
     { href: "/painel", label: "Painel", icon: LayoutDashboard },
   ] },
   { title: "Financeiro", items: [
@@ -145,7 +146,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => { setConsulta(""); setBuscaAberta(true); }} className="fluxo-search flex h-11 items-center gap-2 border border-line px-3 text-caption text-ink-muted transition-colors hover:border-accent-edge hover:text-ink" aria-label="Buscar uma área do app"><Search size={17} aria-hidden /><span className="hidden sm:inline">Pesquisar...</span><kbd className="ml-auto hidden text-label text-ink-subtle lg:inline">⌘ K</kbd></button>
-            <Link href="/#pendencias" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent" aria-label="Ver pendências no TARS"><Bell size={18} aria-hidden /></Link>
+            <NotificationCenter />
             <InstallApp className="fluxo-top-icon hidden h-11 items-center px-3 lg:inline-flex" />
             <Link href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
             <BotaoDeTema />

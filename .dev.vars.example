@@ -4,5 +4,10 @@
 # Este arquivo é apenas um modelo. Copie para `.dev.vars`, ignorado pelo Git.
 INTEGRATION_ENCRYPTION_KEY=
 
-# As chaves de Gemini, OpenAI e GitHub são cadastradas por cada pessoa na aba
-# Configurações → Integrações da aplicação, nunca neste arquivo.
+# Recomendado: cada conta cadastra suas chaves em Configurações → Integrações.
+# Opcional: chave Gemini do servidor, EXCLUSIVA do usuário indicado por ID.
+# Sem GEMINI_USER_ID a chave abaixo não é usada; nunca é compartilhada entre contas.
+# Em produção use secrets do Worker existente. Nunca use prefixos VITE_/NEXT_PUBLIC_.
+GEMINI_API_KEY=
+GEMINI_USER_ID=
+GEMINI_MODEL=gemini-3.8-flash

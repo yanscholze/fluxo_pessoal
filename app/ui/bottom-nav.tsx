@@ -25,7 +25,7 @@ import { Bot, CreditCard, Menu, Plus, Receipt } from "./icons.tsx";
 import { join } from "./primitives.tsx";
 
 const DESTINOS = [
-  { href: "/", label: "TARS", icon: Bot },
+  { href: "/", label: "Fluxo IA", icon: Bot },
   { href: "/lancamentos", label: "Lançamentos", icon: Receipt },
   { href: "/cartoes", label: "Cartões", icon: CreditCard },
 ] as const;

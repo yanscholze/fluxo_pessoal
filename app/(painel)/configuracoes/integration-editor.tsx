@@ -15,8 +15,8 @@ const PROVIDERS: readonly {
   keyUrl: string;
   keyLabel: string;
 }[] = [
-  { id: "gemini", title: "Google Gemini", hint: "TARS e leitura de comprovantes", keyUrl: "https://aistudio.google.com/app/apikey", keyLabel: "Criar chave no Google AI Studio" },
-  { id: "openai", title: "OpenAI", hint: "Provedor alternativo para TARS e comprovantes", keyUrl: "https://platform.openai.com/api-keys", keyLabel: "Criar chave na OpenAI" },
+  { id: "gemini", title: "Google Gemini", hint: "Fluxo IA e leitura de comprovantes", keyUrl: "https://aistudio.google.com/app/apikey", keyLabel: "Criar chave no Google AI Studio" },
+  { id: "openai", title: "OpenAI", hint: "Provedor alternativo para Fluxo IA e comprovantes", keyUrl: "https://platform.openai.com/api-keys", keyLabel: "Criar chave na OpenAI" },
   { id: "github", title: "GitHub", hint: "Repositórios, commits, pull requests e issues dos projetos", keyUrl: "https://github.com/settings/personal-access-tokens/new", keyLabel: "Criar token de acesso no GitHub" },
 ];
 
@@ -77,9 +77,9 @@ export function IntegrationEditor({ initialStatus }: { initialStatus: Integratio
                   className="w-full min-w-0 rounded-md border border-line-strong bg-surface px-3 py-2 text-body-sm text-ink outline-none focus:border-accent" />
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="submit" variant="primary" busy={busy !== null} disabled={tokens[provider.id].trim().length < 8}>{saved ? "Substituir" : "Salvar chave"}</Button>
-                  {saved && provider.id !== "github" && !selected ? <Button busy={busy !== null} onClick={() => void update("PATCH", provider.id as AiProvider)}>Usar para TARS</Button> : null}
+                  {saved && provider.id !== "github" && !selected ? <Button busy={busy !== null} onClick={() => void update("PATCH", provider.id as AiProvider)}>Usar para Fluxo IA</Button> : null}
                   {saved ? <Button variant="danger" busy={busy !== null} onClick={() => void update("DELETE", provider.id)}>Excluir chave</Button> : null}
-                  {selected ? <Badge tone="accent">Provedor ativo do TARS</Badge> : null}
+                  {selected ? <Badge tone="accent">Provedor ativo do Fluxo IA</Badge> : null}
                 </div>
               </form>
               <a href={provider.keyUrl} target="_blank" rel="noreferrer noopener" className="mt-4 inline-block text-body-sm text-accent hover:underline">{provider.keyLabel} ↗</a>

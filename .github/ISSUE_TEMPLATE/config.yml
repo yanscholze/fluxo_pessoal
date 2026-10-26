@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar vulnerabilidade privadamente
+    url: https://github.com/yanscholze/fluxo_pessoal/security/advisories/new
+    about: Não publique credenciais ou detalhes exploráveis em uma issue pública.

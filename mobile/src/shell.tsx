@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { CreditCard, House, Plus, Receipt, SquaresFour } from "phosphor-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
@@ -31,6 +31,7 @@ import { PlanejamentoScreen } from "./screens/planejamento.tsx";
 import { RelatoriosScreen } from "./screens/relatorios.tsx";
 import { SaudeScreen } from "./screens/saude.tsx";
 import { TrabalhoScreen } from "./screens/trabalho.tsx";
+import { useAvisosNavigation } from "./state/avisos.tsx";
 import { useLedger } from "./state/ledger.tsx";
 import { Texto } from "./ui/primitives.tsx";
 import { elevation, radius, type, usePalette } from "./ui/theme.ts";
@@ -98,6 +99,14 @@ export function Shell() {
   const insets = useSafeAreaInsets();
   const { transactions, sync } = useLedger();
   const [tela, setTela] = useState<Tela>("painel");
+  const [notificationId, setNotificationId] = useState<string | undefined>();
+  const openNotification = useCallback((screen: string, id?: string) => {
+    const destinations: Record<string, Tela> = { assistente: "assistente", painel: "painel", faturas: "cartoes", cartoes: "cartoes", capturas: "capturas", saude: "saude", parcelamentos: "parcelamentos", planejamento: "recorrencias", recorrencias: "recorrencias", orcamentos: "orcamentos", metas: "patrimonio", projetos: "trabalho", lancamentos: "lancamentos", contas: "contas", automaticos: "automacoes" };
+    const destination = destinations[screen] ?? "avisos";
+    setNotificationId(destination === "assistente" ? id : undefined);
+    setTela(destination);
+  }, []);
+  useAvisosNavigation(openNotification);
   const [editando, setEditando] = useState<string | null>(null);
   const [folhaAberta, setFolhaAberta] = useState(false);
   const escalaFab = useSharedValue(1);
@@ -119,7 +128,7 @@ export function Shell() {
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
       <Animated.View key={tela} entering={FadeInRight.duration(250)} exiting={FadeOutLeft.duration(140)} style={{ flex: 1 }}>
-        <Conteudo tela={tela} onAbrirLancamento={abrirLancamento} onIrPara={setTela} />
+        <Conteudo tela={tela} notificationId={notificationId} onAbrirLancamento={abrirLancamento} onIrPara={(destination) => { setNotificationId(undefined); setTela(destination); }} onOpenNotification={openNotification} />
       </Animated.View>
 
       {!esconderAbas ? <View
@@ -191,13 +200,13 @@ export function Shell() {
   );
 }
 
-function Conteudo({ tela, onAbrirLancamento, onIrPara }: { tela: Tela; onAbrirLancamento: (id: string | null) => void; onIrPara: (tela: Tela) => void }) {
+function Conteudo({ tela, notificationId, onAbrirLancamento, onIrPara, onOpenNotification }: { tela: Tela; notificationId?: string; onAbrirLancamento: (id: string | null) => void; onIrPara: (tela: Tela) => void; onOpenNotification: (screen: string, notificationId?: string) => void }) {
   switch (tela) {
     case "painel": return <InicioScreen onOpenTransaction={onAbrirLancamento} onNavigate={onIrPara} />;
     case "mais": return <MaisScreen onNavigate={onIrPara} />;
-    case "avisos": return <AvisosScreen onVoltar={() => onIrPara("painel")} />;
+    case "avisos": return <AvisosScreen onVoltar={() => onIrPara("painel")} onIrPara={onOpenNotification} />;
     case "assinaturas": return <AssinaturasScreen onVoltar={() => onIrPara("recorrencias")} />;
-    case "assistente": return <AssistenteScreen onVoltar={() => onIrPara("painel")} />;
+    case "assistente": return <AssistenteScreen onVoltar={() => onIrPara("painel")} notificationId={notificationId} onConfigurar={() => onIrPara("configuracoes")} />;
     case "saude": return <SaudeScreen />;
     case "relatorios": return <RelatoriosScreen />;
     case "lancamentos": return <ExtratoScreen onOpenTransaction={onAbrirLancamento} onAjustes={() => onIrPara("configuracoes")} />;

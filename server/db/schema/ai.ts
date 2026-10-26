@@ -18,7 +18,7 @@ export const aiUsage = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    feature: text("feature", { enum: ["advice", "receipt"] }).notNull(),
+    feature: text("feature", { enum: ["advice", "receipt", "analysis"] }).notNull(),
     /** Dia da contagem, `YYYY-MM-DD` no fuso de Brasília. */
     usageDay: text("usage_day").notNull(),
     requestCount: integer("request_count").notNull().default(0),

@@ -110,7 +110,7 @@ módulo nativo. É preciso um build de desenvolvimento, local ou pela EAS.
 npm test
 ```
 
-Roda os testes de domínio e os do aplicativo. Com o servidor no ar:
+Roda os testes de domínio, servidor, aplicativo e proteção contra segredos no fonte. Com o servidor no ar:
 
 ```bash
 npm run smoke
@@ -122,12 +122,14 @@ certa; este prova que ela chega até a tela.
 
 | Comando | O que faz |
 | --- | --- |
-| `npm test` | domínio + aplicativo |
+| `npm test` | domínio + servidor + aplicativo + checagem de segredos |
 | `npm run test:core` | só o domínio |
 | `npm run test:server` | só os serviços |
 | `npm run test:mobile` | só o aplicativo |
 | `npm run smoke` | ponta a ponta contra o servidor rodando |
 | `npm run lint` | ESLint |
+| `npm run check:secrets` | formatos de credenciais no fonte, sem exibir valores |
+| `npm run validate:ai-scheduled` | Worker agendado com banco descartável, sem IA real |
 | `npm run build` | typecheck, build e validação do artefato |
 | `npm run db:generate` | gera migração após mudar o schema |
 
@@ -135,25 +137,20 @@ certa; este prova que ela chega até a tela.
 
 ## Versão
 
-**0.5.0.** A numeração continua a linha anterior, que parou em 0.4.5, mas o
-código não: esta é uma reconstrução do zero. O 0.4.5 sobrevive no branch `main`
-publicado e serviu como referência de requisitos, de regras de negócio e de
-problemas a não repetir — não como base de código.
+A versão web declarada no pacote é **0.5.0**. Android e RPM possuem manifests e numerações próprios; uma release deve registrar as versões efetivamente geradas. O legado anterior permanece identificado pela tag `v0.4.5-legado`.
 
-Não é 1.0 de propósito. Falta o que está listado abaixo.
+A `main` é a linha estável. A evolução de IA está na etapa `ai_service`, até sua integração por PR. As regras de branches, issues, CI, releases e deploy estão em [CONTRIBUTING.md](CONTRIBUTING.md); orientações para credenciais e vulnerabilidades em [SECURITY.md](SECURITY.md).
 
-### O que ainda falta
+### Fluxo IA e notificações
 
-- **Migração dos dados da primeira implementação.** As tabelas antigas estão
-  preservadas como `legacy_*`. Subir agora abre um aplicativo vazio.
-- **Execução do aplicativo em aparelho.** Ele compila, empacota e gera bundle,
-  mas nunca rodou num Android de verdade. Três coisas seguem sem confirmação:
-  se o listener de notificação recebe, se a interface está bem proporcionada na
-  tela real, e se o pareamento fecha o ciclo.
-- **Busca global e notificações no site.** O lugar está reservado na casca; não
-  foram implementadas, e um campo de busca que não busca é pior que ausência.
-- **Widgets do Android.** Saíram junto com os componentes de que dependiam,
-  em vez de ficarem apontando para o vazio.
+Chat contextual e histórico por conta, contexto financeiro determinístico, insights com cache e central web/mobile com leitura persistente estão implementados. Configure o provedor em **Configurações → Integrações**. Detalhes de configuração, privacidade, validação e limitações estão em [docs/FLUXO-IA.md](docs/FLUXO-IA.md).
+
+### Limites que exigem validação específica
+
+- Testes e export Android não substituem a verificação em aparelho da versão efetivamente instalada.
+- Avisos nativos atualizam no primeiro plano/retorno ao aplicativo; não há promessa de push remoto com o app fechado.
+- Migrações/importações de dados reais exigem os procedimentos próprios e não são executadas pelo CI.
+- Widgets Android seguem como evolução separada.
 
 ---
 

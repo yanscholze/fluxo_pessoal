@@ -1,283 +1,159 @@
-/**
- * O assistente.
- *
- * Uma pergunta em português sobre o próprio dinheiro, respondida com os números
- * reais do razão. A tela é uma caixa de texto e uma resposta — sem histórico de
- * conversa, e isso é decisão, não falta: conversa convida a perguntar de novo
- * em vez de agir, e o que esta tela precisa entregar é **o que fazer**.
- *
- * Por isso a resposta vem em três partes, na ordem em que servem: o resumo de
- * uma linha, as ações concretas, e os avisos. Quem lê só a primeira linha já
- * sai com algo; quem lê tudo sai com um plano.
- *
- * A cota aparece antes de perguntar, não depois. Descobrir que acabou **depois**
- * de escrever a pergunta é a pior ordem possível.
- */
-
-import { useState } from "react";
-import { Pressable, ScrollView, TextInput, View } from "react-native";
-import { CaretLeft } from "phosphor-react-native";
+/** Fluxo IA: context is prepared and conversation history is stored by the server. */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, FlatList, TextInput, View } from "react-native";
+import { CaretLeft, ClockCounterClockwise, Plus, Sparkle, Trash } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { cents } from "@fluxo/core/kernel/money.ts";
 import { call } from "../net/client.ts";
+import type { EstadoDoAssistente, MensagemDoAssistente, RespostaDoAssistente } from "../net/views.ts";
 import { useConnectedSession } from "../state/session.tsx";
-import { useRemoto } from "../state/remote.tsx";
-import { fetchAssistente, fetchDashboard, type DashboardView, type RespostaDoAssistente } from "../net/views.ts";
 import { familiaDoPeso } from "../ui/fonts.ts";
-import { money } from "../ui/format.ts";
 import { ScreenGlow } from "../ui/mockup.tsx";
-import { Body, Button, Card, Empty, Label, Notice, Small, Texto } from "../ui/primitives.tsx";
+import { Body, Button, Card, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
-const PRIORIDADE: Record<string, { rotulo: string; tom: "negative" | "caution" | "muted" }> = {
-  alta: { rotulo: "Agora", tom: "negative" },
-  media: { rotulo: "Em breve", tom: "caution" },
-  baixa: { rotulo: "Quando der", tom: "muted" },
-};
+type Props = { onVoltar?: () => void; notificationId?: string; onConfigurar?: () => void };
 
-/** Perguntas que valem a primeira cota de quem nunca usou. */
-const SUGESTOES = [
-  "Posso gastar R$ 300 este mês sem apertar?",
-  "Onde estou gastando mais do que percebo?",
-  "Como faço para quitar a fatura mais rápido?",
-];
-
-export function AssistenteScreen({ onVoltar }: { onVoltar?: () => void }) {
+export function AssistenteScreen({ onVoltar, notificationId, onConfigurar }: Props) {
   const palette = usePalette();
   const { credentials } = useConnectedSession();
-  const estado = useRemoto(fetchAssistente);
-  const painel = useRemoto(fetchDashboard);
+  const [status, setStatus] = useState<EstadoDoAssistente | null>(null);
+  const [messages, setMessages] = useState<readonly MensagemDoAssistente[]>([]);
+  const [conversationId, setConversationId] = useState<string | undefined>();
+  const [question, setQuestion] = useState("");
+  const [contextNotificationId, setContextNotificationId] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const requestEpoch = useRef(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scroll = useRef<FlatList<MensagemDoAssistente>>(null);
+  const input = useRef<TextInput>(null);
 
-  const [pergunta, setPergunta] = useState("");
-  const [resposta, setResposta] = useState<RespostaDoAssistente | null>(null);
-  const [perguntando, setPerguntando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function perguntar() {
-    if (pergunta.trim().length < 3) {
-      setErro("Escreva a pergunta inteira — três letras não dão contexto.");
-      return;
-    }
-
-    setPerguntando(true);
-    setErro(null);
+  const load = useCallback(async (id?: string, notice?: string, signal?: AbortSignal) => {
+    const epoch = ++requestEpoch.current;
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams();
+    if (id) params.set("conversationId", id);
+    if (notice) params.set("notificationId", notice);
     try {
-      const dados = await call<RespostaDoAssistente>("/api/v1/assistant", {
-        baseUrl: credentials.baseUrl,
-        token: credentials.token,
-        method: "POST",
-        body: { question: pergunta.trim() },
+      const data = await call<EstadoDoAssistente>(`/api/v1/assistant${params.size ? `?${params}` : ""}`, { ...credentials, signal, timeoutMs: 50_000 });
+      if (signal?.aborted || epoch !== requestEpoch.current) return;
+      setStatus(data);
+      setMessages(data.conversation?.messages ?? []);
+      setConversationId(data.conversation?.id);
+      setQuestion(data.notificationPrompt ?? "");
+      setContextNotificationId(notice);
+      setHistoryOpen(false);
+    } catch (problem) {
+      if (!signal?.aborted) setError(problem instanceof Error ? problem.message : "Não foi possível abrir sua conversa.");
+    } finally { setLoading(false); }
+  }, [credentials]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(undefined, notificationId, controller.signal);
+    return () => controller.abort();
+  }, [load, notificationId]);
+
+  async function ask() {
+    const text = question.trim();
+    if (text.length < 3 || busy || loading) return;
+    const epoch = ++requestEpoch.current;
+    setBusy(true);
+    setError(null);
+    try {
+      const reply = await call<RespostaDoAssistente>("/api/v1/assistant", {
+        ...credentials, method: "POST", timeoutMs: 50_000,
+        body: { question: text, ...(conversationId ? { conversationId } : {}), ...(contextNotificationId ? { notificationId: contextNotificationId } : {}) },
       });
-      setResposta(dados);
-      // A cota consumida precisa aparecer: o contador some do estado se não
-      // for recarregado, e o próximo "restam N" seria o de antes da pergunta.
-      estado.recarregar();
-    } catch (problema) {
-      setErro(problema instanceof Error ? problema.message : "Não foi possível perguntar agora.");
-    } finally {
-      setPerguntando(false);
-    }
+      const stamp = new Date().toISOString();
+      setMessages((old) => [...old,
+        { id: `${stamp}-user`, role: "user", content: text, createdAt: stamp },
+        { id: `${stamp}-assistant`, role: "assistant", content: reply.answer, createdAt: stamp, advice: reply },
+      ]);
+      setConversationId(reply.conversationId);
+      setQuestion("");
+      if (reply.remaining !== undefined) setStatus((old) => old ? { ...old, advice: { ...old.advice, remaining: reply.remaining! } } : old);
+      call<EstadoDoAssistente>("/api/v1/assistant", { ...credentials, timeoutMs: 50_000 }).then((data) => { if (epoch === requestEpoch.current) setStatus(data); }).catch(() => undefined);
+      requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
+    } catch (problem) {
+      setError(`${problem instanceof Error ? problem.message : "Não foi possível conversar agora."} Sua pergunta foi mantida.`);
+    } finally { setBusy(false); }
   }
 
-  const configurado = estado.dados?.configured ?? true;
-  const restantes = estado.dados?.advice.remaining ?? null;
+  async function removeConversation() {
+    if (!conversationId || busy || loading) return;
+    const id = conversationId;
+    const epoch = ++requestEpoch.current;
+    setDeleting(true);
+    setBusy(true);
+    setError(null);
+    try {
+      await call("/api/v1/assistant", { ...credentials, method: "DELETE", body: { conversationId: id } });
+      setStatus((old) => old ? { ...old, conversation: null, conversations: old.conversations?.filter((item) => item.id !== id) } : old);
+      setMessages([]);
+      setConversationId(undefined);
+      setQuestion("");
+      setContextNotificationId(undefined);
+      setHistoryOpen(false);
+      call<EstadoDoAssistente>("/api/v1/assistant", { ...credentials, timeoutMs: 50_000 }).then((data) => { if (epoch === requestEpoch.current) setStatus(data); }).catch(() => undefined);
+    } catch (problem) {
+      setError(`${problem instanceof Error ? problem.message : "Não foi possível apagar a conversa."} O histórico foi mantido.`);
+    } finally { setDeleting(false); setBusy(false); }
+  }
 
+  function confirmRemoval() {
+    Alert.alert("Excluir esta conversa?", "Todas as mensagens desta conversa serão apagadas da sua conta. Seus dados financeiros permanecem intactos. Esta ação não pode ser desfeita.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir conversa", style: "destructive", onPress: () => void removeConversation() },
+    ]);
+  }
+
+  const disabled = !status?.configured || (status?.advice.remaining ?? 0) <= 0;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }} edges={["top"]}>
-      <ScreenGlow height={420} />
-      <ScrollView
-        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xxl }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          {onVoltar ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onVoltar} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: palette.line, backgroundColor: pressed ? palette.surfaceRaised : palette.surface })}><CaretLeft size={20} color={palette.ink} /></Pressable> : null}
-          <View style={{ flex: 1 }}><Texto style={[type.label, { color: palette.accent, letterSpacing: 1.8 }]}>TARS // SISTEMA FINANCEIRO</Texto><Texto style={[type.title, { fontFamily: familiaDoPeso(type.title.fontWeight), color: palette.ink, marginTop: 6 }]}>Status do Fluxo</Texto><Small style={{ marginTop: 3 }}>Visão imediata do ciclo e comando do assistente.</Small></View>
+      <ScreenGlow height={260} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, gap: 12 }}>
+          {onVoltar ? <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onVoltar} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? palette.surfaceRaised : palette.surface, borderWidth: 1, borderColor: palette.line })}><CaretLeft size={20} color={palette.ink} /></Pressable> : null}
+          <View style={{ flex: 1 }}><Texto style={[type.heading, { color: palette.ink }]}>Fluxo IA</Texto><Small>Seus números, com mais clareza.</Small></View>
+          {conversationId ? <Pressable accessibilityRole="button" accessibilityLabel="Excluir conversa atual" disabled={busy || loading} onPress={confirmRemoval} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: busy || loading ? .5 : 1 }}><Trash size={21} color={palette.inkMuted} /></Pressable> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Nova conversa" disabled={busy || loading} onPress={() => void load()} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: busy || loading ? .5 : 1 }}><Plus size={22} color={palette.accent} /></Pressable>
         </View>
 
-        <NucleoTars dados={painel.dados} />
+        <FlatList ref={scroll} data={messages} keyExtractor={messageKey} renderItem={renderMessage} ItemSeparatorComponent={MessageGap} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 14 }} ListHeaderComponent={<>
+          {!status?.configured && !loading ? <Card><Body>Conecte seu provedor para conversar sobre suas finanças. Os avisos essenciais e o restante do Fluxo continuam disponíveis.</Body>{onConfigurar ? <Button label="Configurar integração" variant="secondary" onPress={onConfigurar} style={{ marginTop: space.sm }} /> : <Small style={{ marginTop: space.sm }}>Acesse Configurações → Integrações.</Small>}</Card> : null}
+          {status?.conversations?.length ? <View><Pressable accessibilityRole="button" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen(!historyOpen)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><ClockCounterClockwise size={18} color={palette.inkSubtle} /><Body muted>Conversas anteriores</Body></Pressable>{historyOpen ? <Card style={{ padding: 8 }}>{status.conversations.map((conversation) => <Pressable key={conversation.id} accessibilityRole="button" accessibilityState={{ selected: conversation.id === conversationId }} disabled={busy || loading} onPress={() => void load(conversation.id)} style={{ minHeight: 48, padding: 12, borderRadius: radius.md, backgroundColor: conversation.id === conversationId ? palette.accentWash : "transparent" }}><Body numberOfLines={2}>{conversation.title}</Body></Pressable>)}</Card> : null}</View> : null}
+          {loading ? <Small>Carregando sua conversa…</Small> : null}
+          {!messages.length && !loading ? <>
+            {status?.insights?.slice(0, 2).map((insight) => <Card key={insight.key} style={{ padding: 14 }}><Body strong>{insight.title}</Body><Small style={{ marginTop: 5 }}>{insight.body}</Small><Button label="Conversar sobre isso" disabled={disabled || busy} variant="ghost" onPress={() => { setQuestion(insight.question); input.current?.focus(); }} style={{ marginTop: 6, alignSelf: "flex-start", paddingHorizontal: 0 }} /></Card>)}
+            <View style={{ paddingVertical: 18, gap: 10 }}><Sparkle size={30} color={palette.accent} /><Texto style={[type.heading, { color: palette.ink }]}>O que gostaria de entender?</Texto><Body muted>Posso explicar seus gastos e compromissos e ajudar a planejar uma reserva com os dados registrados no Fluxo.</Body></View>
+            {status?.suggestions?.map((suggestion) => <Pressable key={suggestion} accessibilityRole="button" disabled={disabled || busy} onPress={() => { setQuestion(suggestion); input.current?.focus(); }} style={({ pressed }) => ({ minHeight: 48, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, padding: 12, backgroundColor: pressed ? palette.accentWash : palette.surface, opacity: disabled ? .5 : 1 })}><Body>{suggestion}</Body></Pressable>)}
+          </> : null}
+        </>} ListFooterComponent={busy ? <Small tone="muted">{deleting ? "Apagando conversa…" : "Analisando seu contexto financeiro…"}</Small> : null} />
 
-        {!configurado ? (
-          <Notice tone="caution">
-            O assistente não está ligado nesta instalação: falta a chave da OpenAI nos segredos do
-            servidor. O resto do aplicativo funciona normalmente.
-          </Notice>
-        ) : null}
-
-        <Card>
-          <Label style={{ marginBottom: space.xs }}>Sua pergunta</Label>
-          <TextInput
-            value={pergunta}
-            onChangeText={setPergunta}
-            multiline
-            editable={configurado}
-            placeholder="Posso gastar R$ 300 este mês sem apertar?"
-            placeholderTextColor={palette.inkSubtle}
-            style={[
-              type.body,
-              {
-                fontFamily: familiaDoPeso(type.body.fontWeight),
-                color: palette.ink,
-                backgroundColor: palette.surfaceInset,
-                borderRadius: radius.md,
-                paddingHorizontal: space.sm,
-                paddingVertical: 10,
-                minHeight: 84,
-                textAlignVertical: "top",
-              },
-            ]}
-          />
-
-          {restantes !== null ? (
-            <Small style={{ marginTop: space.xs }}>
-              {restantes > 0
-                ? `${restantes} pergunta${restantes === 1 ? "" : "s"} hoje`
-                : "Cota de hoje esgotada — volta amanhã."}
-            </Small>
-          ) : null}
-
-          <View style={{ marginTop: space.md }}>
-            <Button
-              label={perguntando ? "Pensando…" : "Perguntar"}
-              onPress={() => void perguntar()}
-              disabled={perguntando || !configurado || restantes === 0}
-              busy={perguntando}
-            />
-          </View>
-        </Card>
-
-        {!resposta && configurado ? (
-          <Card>
-            <Label style={{ marginBottom: space.xs }}>Para começar</Label>
-            {/*
-              A sugestão preenche o campo em vez de perguntar direto: a cota é
-              curta, e mandar uma pergunta que o usuário não escreveu gastaria
-              uma delas numa dúvida que talvez não fosse a dele.
-            */}
-            {SUGESTOES.map((item) => (
-              <Pressable
-                key={item}
-                accessibilityRole="button"
-                onPress={() => setPergunta(item)}
-                style={{ paddingVertical: space.xs }}
-              >
-                <Body muted>{item}</Body>
-              </Pressable>
-            ))}
-          </Card>
-        ) : null}
-
-        {erro ? <Notice tone="negative">{erro}</Notice> : null}
-
-        {resposta ? (
-          <>
-            <Card>
-              <Label style={{ marginBottom: space.xs }}>Resposta</Label>
-              <Body strong>{resposta.summary}</Body>
-              <Body muted style={{ marginTop: space.sm }}>
-                {resposta.answer}
-              </Body>
-            </Card>
-
-            {resposta.actions.length > 0 ? (
-              <Card>
-                <Label style={{ marginBottom: space.xs }}>O que fazer</Label>
-                {resposta.actions.map((acao, indice) => {
-                  const nivel = PRIORIDADE[acao.priority] ?? PRIORIDADE.baixa;
-                  return (
-                    <View
-                      key={`${acao.label}-${indice}`}
-                      style={{
-                        paddingVertical: space.sm,
-                        borderBottomWidth: indice === resposta.actions.length - 1 ? 0 : 1,
-                        borderBottomColor: palette.line,
-                      }}
-                    >
-                      <Body>{acao.label}</Body>
-                      <Small tone={nivel.tom} style={{ marginTop: 2 }}>
-                        {nivel.rotulo} · {acao.reason}
-                      </Small>
-                    </View>
-                  );
-                })}
-              </Card>
-            ) : null}
-
-            {resposta.warnings.length > 0 ? (
-              <Card>
-                <Label style={{ marginBottom: space.xs }}>Atenção</Label>
-                {resposta.warnings.map((aviso, indice) => (
-                  <Small key={indice} tone="caution" style={{ paddingVertical: 3 }}>
-                    {aviso}
-                  </Small>
-                ))}
-              </Card>
-            ) : null}
-          </>
-        ) : null}
-
-        {estado.erro && !resposta ? (
-          <Card>
-            <Empty title="Não deu para saber a cota" hint={estado.erro} />
-          </Card>
-        ) : null}
-      </ScrollView>
+        <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.surface }}>
+          {error ? <View style={{ marginBottom: 8 }}><Notice tone="negative">{error}</Notice>{!status ? <Button label="Tentar novamente" variant="ghost" onPress={() => void load(undefined, notificationId)} /> : null}</View> : null}
+          {contextNotificationId && !messages.length ? <Small style={{ marginBottom: 8 }}>Pergunta preparada pela notificação. Revise antes de enviar.</Small> : null}
+          <Small style={{ marginBottom: 6 }}>Sua mensagem</Small>
+          <TextInput ref={input} accessibilityLabel="Sua mensagem para Fluxo IA" value={question} onChangeText={setQuestion} multiline maxLength={500} editable={!disabled && !busy && !loading} placeholder="Pergunte sobre suas finanças…" placeholderTextColor={palette.inkSubtle} style={[type.body, { color: palette.ink, fontFamily: familiaDoPeso(type.body.fontWeight), minHeight: 64, maxHeight: 136, textAlignVertical: "top", borderRadius: radius.md, borderWidth: 1, borderColor: palette.lineStrong, backgroundColor: palette.surfaceSunken, padding: 12 }]} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 }}><Small style={{ flex: 1 }}>{status?.advice.remaining === 0 ? "Cota esgotada. Volta amanhã." : `${status?.advice.remaining ?? "—"} consultas hoje`}</Small><Button label="Enviar" busy={busy} disabled={disabled || loading || question.trim().length < 3} onPress={() => void ask()} /></View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function NucleoTars({ dados }: { dados: DashboardView | null }) {
+function Message({ message }: { message: MensagemDoAssistente }) {
   const palette = usePalette();
-  const alertas = dados
-    ? [
-        ...(dados.cards ?? []).filter((item) => (item.currentInvoice?.outstandingCents ?? 0) > 0).slice(0, 2).map((item) => `${item.name}: ${money(cents(item.currentInvoice?.outstandingCents ?? 0))}`),
-        ...(dados.openTasks ?? []).slice(0, 2).map((item) => item.title),
-      ]
-    : [];
-
-  return (
-    <View style={{ borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surfaceSunken, padding: 12, overflow: "hidden" }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Texto style={[type.label, { color: palette.inkSubtle }]}>NÚCLEO // ONLINE</Texto>
-        <Texto style={[type.label, { color: palette.accent }]}>CICLO ATIVO</Texto>
-      </View>
-
-      <View style={{ height: 276, alignItems: "center", justifyContent: "center" }}>
-        <View style={{ position: "absolute", width: 250, height: 250, borderRadius: 125, borderWidth: 1, borderColor: palette.accentEdge }} />
-        <View style={{ position: "absolute", width: 204, height: 204, borderRadius: 102, borderWidth: 1, borderColor: palette.lineStrong }} />
-        <View style={{ position: "absolute", width: 142, height: 142, borderRadius: 71, borderWidth: 1, borderColor: palette.accentEdge }} />
-        <View style={{ position: "absolute", width: 86, height: 86, borderRadius: 43, borderWidth: 2, borderColor: palette.accent }} />
-        <View style={{ position: "absolute", left: 30, right: 30, height: 1, backgroundColor: palette.accentEdge, opacity: 0.45 }} />
-        <View style={{ position: "absolute", top: 18, bottom: 18, width: 1, backgroundColor: palette.accentEdge, opacity: 0.45 }} />
-        <View style={{ zIndex: 2, width: 190, alignItems: "center" }}>
-          <Texto style={[type.label, { color: palette.inkSubtle }]}>LIVRE PARA GASTAR</Texto>
-          <Texto style={{ color: dados && dados.freeToSpend.amountCents < 0 ? palette.negative : palette.accent, fontSize: 27, lineHeight: 32, fontWeight: "500", letterSpacing: -0.8, marginTop: 6 }}>
-            {dados ? money(cents(dados.freeToSpend.amountCents)) : "—"}
-          </Texto>
-          <Small style={{ textAlign: "center", marginTop: 4 }}>projeção do ciclo</Small>
-        </View>
-      </View>
-
-      <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.line, borderBottomWidth: 1, borderBottomColor: palette.line }}>
-        <PainelTars label="Em conta" value={dados ? money(cents(dados.freeToSpend.liquidBalanceCents)) : "—"} />
-        <View style={{ width: 1, backgroundColor: palette.line }} />
-        <PainelTars label="Faturas" value={dados ? money(cents(dados.freeToSpend.openInvoicesCents)) : "—"} />
-      </View>
-
-      <View style={{ marginTop: 12 }}>
-        <Texto style={[type.label, { color: palette.inkSubtle }]}>SINAIS PRIORITÁRIOS</Texto>
-        {alertas.length ? alertas.map((alerta, indice) => (
-          <View key={`${alerta}-${indice}`} style={{ flexDirection: "row", gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.line }}>
-            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.accent, marginTop: 7 }} />
-            <Small tone="muted" style={{ flex: 1 }}>{alerta}</Small>
-          </View>
-        )) : <Small style={{ marginTop: 8 }}>Nenhuma pendência crítica detectada.</Small>}
-      </View>
-    </View>
-  );
+  const user = message.role === "user";
+  return <Card style={{ alignSelf: user ? "flex-end" : "flex-start", maxWidth: "96%", padding: 15, backgroundColor: user ? palette.accentWash : palette.surface, borderColor: user ? palette.accentEdge : palette.line }}><Small style={{ marginBottom: 7 }}>{user ? "Você" : "Fluxo IA"}</Small><Body>{message.content}</Body>{message.advice?.actions.map((action) => <View key={action.label} style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 10 }}><Body strong>{action.label}</Body><Small tone={action.priority === "alta" ? "negative" : "muted"} style={{ marginTop: 3 }}>{action.reason}</Small></View>)}{message.advice?.warnings.map((warning) => <Small key={warning} tone="caution" style={{ marginTop: 8 }}>{warning}</Small>)}</Card>;
 }
 
-function PainelTars({ label, value }: { label: string; value: string }) {
-  const palette = usePalette();
-  return <View style={{ flex: 1, paddingVertical: 11, paddingHorizontal: 8 }}><Texto style={[type.label, { color: palette.inkSubtle }]}>{label.toUpperCase()}</Texto><Texto style={[type.bodyStrong, { color: palette.ink, marginTop: 4 }]}>{value}</Texto></View>;
-}
+function MessageGap() { return <View style={{ height: 14 }} />; }
+
+function messageKey(message: MensagemDoAssistente) { return message.id; }
+function renderMessage({ item }: { item: MensagemDoAssistente }) { return <Message message={item} />; }

@@ -50,6 +50,8 @@ export type RequestOptions = {
   readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly body?: unknown;
   readonly signal?: AbortSignal;
+  /** Only slow read-only AI operations opt in; normal API calls keep their deadline. */
+  readonly timeoutMs?: number;
 };
 
 /**
@@ -60,7 +62,7 @@ export type RequestOptions = {
  */
 export async function call<T>(path: string, options: RequestOptions): Promise<T> {
   const controlador = new AbortController();
-  const prazo = setTimeout(() => controlador.abort(), TIMEOUT_MS);
+  const prazo = setTimeout(() => controlador.abort(), Math.min(60_000, Math.max(1000, options.timeoutMs ?? TIMEOUT_MS)));
 
   const cancelamentoExterno = () => controlador.abort();
   options.signal?.addEventListener("abort", cancelamentoExterno);
