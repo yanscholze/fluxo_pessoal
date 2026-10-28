@@ -232,9 +232,14 @@ describe("central de notificações persistente", () => {
     assert.equal(rows[0].source, "analysis");
   });
 
-  it("central completa funciona sem chamar o provedor e não altera lançamentos", async () => {
+  it("leitura da central usa somente avisos persistidos sem recalcular ou alterar lançamentos", async () => {
     const target = await ambiente();
     await purchase(target.userId, target.cartaoId);
+    assert.equal((await buildNotificationsView(target.userId, NOW)).alerts.length, 0, "abrir a central não gera novos documentos");
+    await syncEssentialNotifications(target.userId, NOW);
+    await syncNotificationInsights(target.userId, [{ key: "saved-insight", category: "insight", priority: 1,
+      title: "Análise salva", body: "O último resultado permanece disponível.", href: "/relatorios", question: "Explique", facts: {} }], NOW);
+    const saved = await readNotifications(target.userId);
     const { listTransactions, loadLedger } = await import("../repositories/ledger.ts");
     const transactions = await listTransactions(target.userId);
     const ledger = await loadLedger(target.userId);
@@ -242,14 +247,51 @@ describe("central de notificações persistente", () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error("Provedor indisponível"); };
     try {
-      const result = await buildNotificationsView(target.userId, NOW);
-      const repeated = await buildNotificationsView(target.userId, NOW);
+      const { withRequestMetrics, metricsSnapshot } = await import("../observability/request-metrics.ts");
+      const { result, queries } = await withRequestMetrics(async () => {
+        const result = await buildNotificationsView(target.userId, NOW);
+        return { result, queries: metricsSnapshot()?.queries };
+      });
+      assert.equal(queries, 2, "apenas os documentos e a contagem de não lidas são consultados");
+      const repeated = await buildNotificationsView(target.userId, at(25));
       assert.ok(result.alerts.some((item) => item.screen === "faturas"));
+      assert.ok(result.alerts.some((item) => item.title === "Análise salva"));
       assert.equal(result.unreadCount, repeated.unreadCount);
+      assert.deepEqual(result.alerts, repeated.alerts, "a passagem do tempo não reconcilia regras durante GET");
+      assert.deepEqual(await readNotifications(target.userId), saved, "polling não reescreve nem resolve avisos");
       assert.ok(result.alerts.every((item) => item.readAt === null));
       assert.equal(requests, 0);
       assert.deepEqual(await listTransactions(target.userId), transactions);
       assert.deepEqual(await loadLedger(target.userId), ledger);
     } finally { globalThis.fetch = previousFetch; }
+  });
+
+  it("GET e PATCH preservam a central salva sem executar novamente o motor financeiro", async () => {
+    const target = await ambiente();
+    const { getDatabase } = await import("../db/client.ts");
+    const { sql } = await import("drizzle-orm");
+    const { migrationCount } = await import("../db/migrator.ts");
+    // O cenário aplica SQL diretamente; a borda HTTP lê o diário de migrations.
+    await getDatabase().run(sql`CREATE TABLE _migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    for (let i = 0; i < migrationCount(); i++) await getDatabase().run(sql`INSERT INTO _migrations(id,name) VALUES (${i},'test')`);
+    const { issueSession } = await import("../auth/session.ts");
+    const { GET, PATCH } = await import("../../app/api/v1/alerts/route.ts");
+    const session = await issueSession({ userId: target.userId, kind: "device" });
+    await reconcileNotifications(target.userId, "rule", [draft()], NOW);
+    const saved = (await readNotifications(target.userId)).rows[0];
+    const headers = { authorization: `Bearer ${session.token}`, "content-type": "application/json" };
+    const get = await GET(new Request("http://fluxo.test/api/v1/alerts", { headers }));
+    assert.equal(get.status, 200);
+    const initial = (await get.json()).data;
+    assert.equal(initial.alerts[0].id, saved.id);
+    assert.equal(initial.alerts[0].resolvedAt, null, "o motor resolveria este documento sintético se fosse executado na leitura");
+    const response = await PATCH(new Request("http://fluxo.test/api/v1/alerts", { method: "PATCH", headers, body: JSON.stringify({ ids: [saved.id] }) }));
+    assert.equal(response.status, 200);
+    const updated = (await response.json()).data;
+    assert.equal(updated.unreadCount, 0);
+    assert.equal(updated.alerts[0].id, saved.id);
+    assert.ok(updated.alerts[0].readAt);
+    assert.equal(updated.alerts[0].resolvedAt, null);
+    assert.equal((await readNotifications(target.userId)).rows[0].updatedAt, saved.updatedAt, "marcar leitura não regenera o documento");
   });
 });

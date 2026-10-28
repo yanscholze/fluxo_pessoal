@@ -16,6 +16,7 @@ import { buildHealthView } from "../health.ts";
 import { buildInstallmentsView } from "../installments.ts";
 import { buildReport } from "../reports.ts";
 import { buildFinancialInsights, financialSuggestions } from "./insights.ts";
+import { withFinancialReadScope } from "../financial-read-scope.ts";
 
 export type FinancialInsight = {
   key: string;
@@ -186,11 +187,12 @@ export async function financialFingerprint(context: FinancialContext): Promise<s
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function buildFinancialIntelligence(userId: string, now: Date = new Date(), options: { question?: string; previousQuestions?: readonly string[] } = {}): Promise<FinancialIntelligence> {
+export async function buildFinancialIntelligence(userId: string, now: Date = new Date(), options: { question?: string; previousQuestions?: readonly string[]; skipFingerprint?: boolean } = {}): Promise<FinancialIntelligence> {
+  return withFinancialReadScope(async () => {
   const today = todayIn(now);
   const competence = competenceOf(today);
   const [dashboard, health, report, goals, installments, accounts, cards, categories, entries, index, rules, confirmedKeys, storedInvoices] = await Promise.all([
-    buildDashboard(userId, now), buildHealthView(userId, now), buildReport(userId, "6m", now),
+    buildDashboard(userId, now, { financialOnly: true }), buildHealthView(userId, now), buildReport(userId, "6m", now),
     buildGoalsView(userId, now), buildInstallmentsView(userId, now), listAccounts(userId), listCards(userId),
     listCategories(userId), loadLedger(userId), transactionIndex(userId), listRecurrences(userId, true), confirmedOccurrenceKeys(userId), listInvoices(userId),
   ]);
@@ -276,7 +278,8 @@ export async function buildFinancialIntelligence(userId: string, now: Date = new
       .map((entry) => ({ date: entry.effectiveOn, amountCents: Math.abs(entry.amount), kind: entry.kind, category: categoryNames.get(index.get(entry.transactionId)?.categoryId ?? "") ?? "Sem categoria", origin: entry.party.kind }));
   }
   const insights = buildFinancialInsights(context);
-  return { context, insights, suggestions: financialSuggestions(context, insights), fingerprint: await financialFingerprint(context) };
+  return { context, insights, suggestions: financialSuggestions(context, insights), fingerprint: options.skipFingerprint ? "" : await financialFingerprint(context) };
+  });
 }
 
 function categoryTrends(entries: readonly LedgerEntry[], index: Awaited<ReturnType<typeof transactionIndex>>, names: ReadonlyMap<string, string>, liquidIds: ReadonlySet<string>, competence: ReturnType<typeof competenceOf>): FinancialContext["categoryTrends"] {

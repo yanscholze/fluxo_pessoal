@@ -50,12 +50,21 @@ export type AskInput = {
   readonly schemaName: string;
   readonly schema: Record<string, unknown>;
   readonly history?: readonly { readonly role: "user" | "assistant"; readonly content: string }[];
+  readonly onMetadata?: (metadata: ProviderMetadata) => void;
 };
 
 /** An environment credential belongs to exactly one account; never a tenant-wide fallback. */
 function scopedEnvironmentToken(userId: string): string | null {
   return env.GEMINI_USER_ID === userId && typeof env.GEMINI_API_KEY === "string" && env.GEMINI_API_KEY.trim()
     ? env.GEMINI_API_KEY.trim() : null;
+}
+
+export type ProviderMetadata = { provider: "gemini" | "openai"; model: string };
+export async function askWithMetadata<T>(userId: string, input: AskInput): Promise<{ value: T; metadata: ProviderMetadata }> {
+  let metadata: ProviderMetadata | undefined;
+  const value = await ask<T>(userId, { ...input, onMetadata: (used) => { metadata = used; } });
+  if (!metadata) throw new DomainError("conflict", "A IA não informou o modelo utilizado.");
+  return { value, metadata };
 }
 
 export interface AIProvider {
@@ -137,13 +146,16 @@ async function askOpenAI<T>(input: AskInput, token: string): Promise<T> {
 
   const corpo = await providerJson<ResponsesBody>(resposta);
   const texto = corpo.output_text ?? extractText(corpo);
-  return parseStructured<T>(texto);
+  const result = parseStructured<T>(texto);
+  input.onMetadata?.({ provider: "openai", model: OPENAI_MODEL });
+  return result;
 }
 
 async function askGemini<T>(input: AskInput, token: string): Promise<T> {
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   const configuredModel = typeof env.GEMINI_MODEL === "string" && /^[a-z0-9][a-z0-9._-]{1,80}$/.test(env.GEMINI_MODEL) ? env.GEMINI_MODEL : GEMINI_MODEL;
-  let resposta = await requestGemini(configuredModel, input, token, signal);
+  let usedModel = configuredModel;
+  let resposta = await requestGemini(usedModel, input, token, signal);
   // O provedor recomenda recuar progressivamente quando retorna 503. A chave
   // pode estar correta e o modelo indisponível; repetir imediatamente a mesma
   // chamada só aumenta a fila. Depois tentamos outro modelo da mesma conta.
@@ -153,10 +165,12 @@ async function askGemini<T>(input: AskInput, token: string): Promise<T> {
   }
   if (resposta.status === 503) {
     await delay(2_000);
-    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token, signal);
+    usedModel = GEMINI_FALLBACK_MODEL;
+    resposta = await requestGemini(usedModel, input, token, signal);
   }
   if (resposta.status === 404 && configuredModel !== GEMINI_FALLBACK_MODEL) {
-    resposta = await requestGemini(GEMINI_FALLBACK_MODEL, input, token, signal);
+    usedModel = GEMINI_FALLBACK_MODEL;
+    resposta = await requestGemini(usedModel, input, token, signal);
   }
 
   if (resposta.status === 429) {
@@ -176,7 +190,9 @@ async function askGemini<T>(input: AskInput, token: string): Promise<T> {
 
   const corpo = await providerJson<GeminiBody>(resposta);
   const texto = corpo.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? null;
-  return parseStructured<T>(texto);
+  const result = parseStructured<T>(texto);
+  input.onMetadata?.({ provider: "gemini", model: usedModel });
+  return result;
 }
 
 function delay(ms: number): Promise<void> {

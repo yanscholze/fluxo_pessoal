@@ -3,6 +3,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { ensureMigrated } from "../server/db/migrator.ts";
 import { runScheduledFinancialAnalyses } from "../server/services/ai/analysis.ts";
+import { attachRequestMetrics, logRequestMetrics, withRequestMetrics } from "../server/observability/request-metrics.ts";
 
 interface Env {
   ASSETS: Fetcher;
@@ -32,11 +33,12 @@ const worker = {
     ctx.waitUntil((async () => {
       try {
         await ensureMigrated();
-        await runScheduledFinancialAnalyses(new Date());
-      } catch (error) {
+        const outcome = await runScheduledFinancialAnalyses(new Date());
+        if (outcome.failed) console.warn("Fluxo scheduled", { processed: outcome.processed, failed: outcome.failed });
+      } catch {
         // No provider payloads or credentials: failure here is migration/account selection.
-        console.error("Fluxo: falha ao iniciar análise agendada", error instanceof Error ? error.message : "Erro desconhecido");
-        throw error;
+        console.error("Fluxo: falha ao iniciar análise agendada", { code: "scheduled_failed" });
+        throw new Error("Fluxo scheduled_failed");
       }
     })());
   },
@@ -54,7 +56,11 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    return withRequestMetrics(async () => {
+      const response = await handler.fetch(request, env, ctx);
+      logRequestMetrics(response.status);
+      return attachRequestMetrics(response);
+    }, request);
   },
 };
 

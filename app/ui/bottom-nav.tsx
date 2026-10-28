@@ -48,7 +48,7 @@ export function BottomNav({ onMenuOpen, menuOpen }: { onMenuOpen: () => void; me
         <li className="flex items-center px-1">
           {/* A ação primária no meio, elevada: é o único elemento da barra que
               não é navegação, e precisa se distinguir sem legenda. */}
-          <Link
+          <Link prefetch={false}
             href="/lancamentos?novo=1"
             aria-label="Novo lançamento"
             className="flex size-12 -translate-y-3 items-center justify-center rounded-full bg-accent text-accent-ink shadow-float transition-transform active:scale-95"
@@ -78,7 +78,7 @@ function ItemInferior({
 
   return (
     <li className="flex-1">
-      <Link
+      <Link prefetch={false}
         href={destino.href}
         aria-current={ativo ? "page" : undefined}
         className={join(

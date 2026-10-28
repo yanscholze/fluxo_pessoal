@@ -30,7 +30,7 @@ export function WorkNav() {
         const ativo = pathname === aba.href;
 
         return (
-          <Link
+          <Link prefetch={false}
             key={aba.href}
             href={aba.href}
             aria-current={ativo ? "page" : undefined}

@@ -25,3 +25,5 @@ export * from "./sync.ts";
 export * from "./pairing.ts";
 export * from "./dev.ts";
 export * from "./integrations.ts";
+
+export * from "./notification-checkpoints.ts";

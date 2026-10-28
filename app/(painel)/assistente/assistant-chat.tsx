@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "../../ui/dialog.tsx";
 import { Button, LinkButton } from "../../ui/controls.tsx";
-import { Clock, Plus, Send, Sparkles, Trash2 } from "../../ui/icons.tsx";
+import { Clock, Plus, RefreshCw, Send, Sparkles, Trash2 } from "../../ui/icons.tsx";
 import { Badge, Panel } from "../../ui/primitives.tsx";
-import type { AiAdvice, AiMessage, AssistantState, FinancialInsight } from "../../ui/ai/contracts.ts";
+import type { AiAdvice, AiMessage, AssistantState, FinancialAnalysis, FinancialInsight } from "../../ui/ai/contracts.ts";
 
 type Reply = AiAdvice & { remaining: number; conversationId: string };
 const PRIORITY = { alta: "negative", media: "caution", baixa: "neutral" } as const;
@@ -22,6 +22,66 @@ async function stateRequest(conversationId?: string, notificationId?: string, si
 }
 
 type ChatProps = { initialState: AssistantState; notificationId?: string; conversationId?: string };
+
+/** Reading/polling never requests a generation. Only this explicit button POST does. */
+function useAnalysis(state: AssistantState, setState: Dispatch<SetStateAction<AssistantState>>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const running = useRef(false);
+  const reading = useRef(false);
+  const version = useRef(0);
+  const retryAt = state.analysis?.lastError && state.analysis.retryAfter ? Date.parse(state.analysis.retryAfter) : 0;
+  const cooldown = Number.isFinite(retryAt) && retryAt > now;
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(retryAt - Date.now() + 100, 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [cooldown, retryAt]);
+
+  const readSaved = useCallback(async (signal: AbortSignal) => {
+    if (reading.current || document.visibilityState !== "visible") return;
+    reading.current = true;
+    const current = version.current;
+    try {
+      const response = await fetch("/api/v1/assistant/analysis", { signal, cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json();
+      if (signal.aborted || current !== version.current) return;
+      const { insights, suggestions, ...analysis } = body.data as FinancialAnalysis;
+      setState((previous) => ({ ...previous, insights, suggestions, analysis }));
+    } catch { /* A failed poll keeps the last saved result. */ }
+    finally { reading.current = false; }
+  }, [setState]);
+
+  useEffect(() => {
+    if (!state.analysis?.updating && !state.analysis?.stale) return;
+    const controller = new AbortController();
+    const timer = window.setInterval(() => void readSaved(controller.signal), state.analysis?.updating ? 15_000 : 60_000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [state.analysis?.updating, state.analysis?.stale, readSaved]);
+
+  async function refresh() {
+    if (running.current || state.analysis?.updating || cooldown) return;
+    running.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/v1/assistant/analysis", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error("Não foi possível atualizar a análise. O último resultado foi mantido.");
+      const { insights, suggestions, ...analysis } = body.data as FinancialAnalysis;
+      version.current++;
+      setState((previous) => ({ ...previous, insights, suggestions, analysis }));
+      setNow(Date.now());
+    } catch {
+      setError("Não foi possível atualizar a análise. O último resultado foi mantido. Tente novamente em instantes.");
+    } finally { running.current = false; setBusy(false); }
+  }
+
+  return { busy, error, cooldown, refresh };
+}
 
 /** Conversation state is independent of the visual layout. Only the server owns history. */
 function useConversation({ initialState, notificationId }: ChatProps) {
@@ -40,6 +100,7 @@ function useConversation({ initialState, notificationId }: ChatProps) {
   const requestEpoch = useRef(0);
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const analysis = useAnalysis(state, setState);
 
   useEffect(() => { if (messages.length) end.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }); }, [messages.length]);
 
@@ -84,7 +145,6 @@ function useConversation({ initialState, notificationId }: ChatProps) {
       setQuestion("");
       // Refresh metadata only after an explicit message, never call the model on render.
       stateRequest().then((data) => { if (epoch === requestEpoch.current) setState(data); }).catch(() => undefined);
-      window.dispatchEvent(new Event("fluxo:notifications-refresh"));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Confira sua conexão e tente novamente. Sua pergunta foi mantida.");
     } finally { setBusy(false); requestAnimationFrame(() => input.current?.focus()); }
@@ -122,15 +182,22 @@ function useConversation({ initialState, notificationId }: ChatProps) {
   const submitDisabled = interactionDisabled || question.trim().length < 3;
   const hasNotificationContext = Boolean(contextNotificationId) && messages.length === 0;
   const quotaCopy = state.advice.remaining <= 0 ? "Você usou as consultas de hoje. A cota volta amanhã." : "As sugestões usam os registros atuais. Dados ausentes ou estimativas devem aparecer identificados.";
-  return { state, messages, currentId, question, busy, loading, error, end, input, setQuestion, selectConversation, ask, navDisabled, interactionDisabled, submitDisabled, hasNotificationContext, quotaCopy, confirmDelete, deleting, deleteError, setConfirmDelete, openDelete, removeConversation };
+  return { state, analysis, messages, currentId, question, busy, loading, error, end, input, setQuestion, selectConversation, ask, navDisabled, interactionDisabled, submitDisabled, hasNotificationContext, quotaCopy, confirmDelete, deleting, deleteError, setConfirmDelete, openDelete, removeConversation };
 }
 
 export function AssistantChat(props: ChatProps) {
-  const { state, messages, currentId, question, busy, loading, error, end, input, setQuestion, selectConversation, ask, navDisabled, interactionDisabled, submitDisabled, hasNotificationContext, quotaCopy, confirmDelete, deleting, deleteError, setConfirmDelete, openDelete, removeConversation } = useConversation(props);
+  const { state, analysis, messages, currentId, question, busy, loading, error, end, input, setQuestion, selectConversation, ask, navDisabled, interactionDisabled, submitDisabled, hasNotificationContext, quotaCopy, confirmDelete, deleting, deleteError, setConfirmDelete, openDelete, removeConversation } = useConversation(props);
   return (
     <div className="space-y-4">
       {!state.configured ? <Panel variant="inset"><p className="text-body-sm text-ink-muted">Conecte seu provedor de IA para conversar sobre suas finanças. O restante do Fluxo e os avisos essenciais continuam disponíveis.</p><LinkButton className="mt-3" href="/configuracoes?aba=integracoes">Configurar integração</LinkButton></Panel> : null}
-      <Insights insights={state.insights ?? []} disabled={interactionDisabled} onPick={(text) => { setQuestion(text); input.current?.focus(); }} />
+      <section aria-label="Análise financeira" aria-busy={analysis.busy || state.analysis?.updating || false} className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-body font-semibold text-ink">Análise financeira</h2><p role="status" className="mt-1 text-caption text-ink-subtle">{analysisStatus(state, analysis.busy, analysis.cooldown)}</p></div>
+          <Button icon={RefreshCw} busy={analysis.busy} disabled={analysis.busy || state.analysis?.updating || analysis.cooldown} onClick={() => void analysis.refresh()}>Atualizar análise</Button>
+        </div>
+        {analysis.error ? <p role="alert" className="rounded-md bg-caution-wash p-3 text-body-sm text-caution">{analysis.error}</p> : null}
+        <Insights insights={state.insights ?? []} disabled={interactionDisabled} onPick={(text) => { setQuestion(text); input.current?.focus(); }} />
+      </section>
       <Panel padding="none">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4 sm:px-5">
           <div><h2 className="flex items-center gap-2 text-heading font-semibold text-ink"><Sparkles size={18} className="text-accent" aria-hidden />Sua conversa</h2><p className="mt-1 text-caption text-ink-subtle">Contexto dos seus dados • sem alterar lançamentos</p></div>
@@ -152,6 +219,18 @@ export function AssistantChat(props: ChatProps) {
       <ConfirmDialog open={confirmDelete} onClose={() => { if (!deleting) setConfirmDelete(false); }} onConfirm={() => void removeConversation()} title="Excluir esta conversa?" consequence="Todas as mensagens desta conversa serão apagadas do histórico da sua conta. Seus dados financeiros permanecem intactos. Esta ação não pode ser desfeita." confirmLabel="Excluir conversa" busy={deleting} error={deleteError} />
     </div>
   );
+}
+
+function analysisStatus(state: AssistantState, busy: boolean, cooldown: boolean): string {
+  if (busy || state.analysis?.updating) return "Atualizando análise… O último resultado continua disponível.";
+  if (!state.insights?.length && !state.analysis?.generatedAt) return state.analysis?.lastError ? "Análise financeira ainda não disponível. Tente atualizar mais tarde." : "Análise financeira ainda não disponível.";
+  if (state.analysis?.lastError) return cooldown ? "A atualização encontrou um problema. O último resultado foi mantido; tente novamente mais tarde." : "A atualização encontrou um problema. O último resultado foi mantido.";
+  if (state.analysis?.stale) return "Atualização pendente. Estes são os últimos insights disponíveis.";
+  if (state.analysis?.generatedAt) {
+    const date = new Date(state.analysis.generatedAt);
+    if (!Number.isNaN(date.getTime())) return `Atualizado em ${date.toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}.`;
+  }
+  return state.insights?.length ? "Insights salvos a partir dos seus registros." : "Análise financeira ainda não disponível.";
 }
 
 function ChatMessage({ message }: { message: AiMessage }) {

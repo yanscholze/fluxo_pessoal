@@ -11,6 +11,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Account } from "../../core/domain/account/types.ts";
 import type { PositionCard } from "../../core/domain/position/financial-position.ts";
 import { getDatabase } from "../db/client.ts";
+import { memoFinancialRead } from "../services/financial-read-scope.ts";
 import { accounts, cards, categories } from "../db/schema/index.ts";
 import { toAccount, toPositionCard } from "./mappers.ts";
 
@@ -46,18 +47,20 @@ export type CardRecord = PositionCard & {
 };
 
 export async function listAccounts(userId: string, options: { includeArchived?: boolean } = {}): Promise<Account[]> {
-  const database = getDatabase();
-  const rows = await database
-    .select()
-    .from(accounts)
-    .where(
-      options.includeArchived
-        ? eq(accounts.userId, userId)
-        : and(eq(accounts.userId, userId), isNull(accounts.archivedAt)),
-    )
-    .orderBy(asc(accounts.sortOrder), asc(accounts.name));
+  return memoFinancialRead(JSON.stringify(["accounts", userId, Boolean(options.includeArchived)]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select()
+      .from(accounts)
+      .where(
+        options.includeArchived
+          ? eq(accounts.userId, userId)
+          : and(eq(accounts.userId, userId), isNull(accounts.archivedAt)),
+      )
+      .orderBy(asc(accounts.sortOrder), asc(accounts.name));
 
-  return rows.map(toAccount);
+    return rows.map(toAccount);
+  });
 }
 
 export async function findAccount(userId: string, accountId: string): Promise<Account | null> {
@@ -72,52 +75,56 @@ export async function findAccount(userId: string, accountId: string): Promise<Ac
 }
 
 export async function listCategories(userId: string): Promise<CategoryRecord[]> {
-  const database = getDatabase();
-  const rows = await database
-    .select()
-    .from(categories)
-    .where(and(eq(categories.userId, userId), isNull(categories.archivedAt)))
-    .orderBy(asc(categories.kind), asc(categories.sortOrder), asc(categories.name));
+  return memoFinancialRead(JSON.stringify(["categories", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select()
+      .from(categories)
+      .where(and(eq(categories.userId, userId), isNull(categories.archivedAt)))
+      .orderBy(asc(categories.kind), asc(categories.sortOrder), asc(categories.name));
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    kind: row.kind,
-    parentId: row.parentId,
-    color: row.color,
-    icon: row.icon,
-    isEssential: row.isEssential,
-    excludeFromFreeToSpend: row.excludeFromFreeToSpend,
-    sortOrder: row.sortOrder,
-  }));
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      parentId: row.parentId,
+      color: row.color,
+      icon: row.icon,
+      isEssential: row.isEssential,
+      excludeFromFreeToSpend: row.excludeFromFreeToSpend,
+      sortOrder: row.sortOrder,
+    }));
+  });
 }
 
 export async function listCards(userId: string): Promise<CardRecord[]> {
-  const database = getDatabase();
-  const rows = await database
-    .select()
-    .from(cards)
-    .where(and(eq(cards.userId, userId), isNull(cards.archivedAt)))
-    .orderBy(asc(cards.sortOrder), asc(cards.name));
+  return memoFinancialRead(JSON.stringify(["cards", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select()
+      .from(cards)
+      .where(and(eq(cards.userId, userId), isNull(cards.archivedAt)))
+      .orderBy(asc(cards.sortOrder), asc(cards.name));
 
-  return rows.map((row) => ({
-    ...toPositionCard(row),
-    userId: row.userId,
-    name: row.name,
-    paymentAccountId: row.paymentAccountId,
-    brand: row.brand,
-    tier: row.tier,
-    last4: row.last4,
-    limitCents: row.limitCents,
-    rewardMode: row.rewardMode,
-    pointsPerDollarMilli: row.pointsPerDollarMilli,
-    cashbackBasisPoints: row.cashbackBasisPoints,
-    pointsGoal: row.pointsGoal,
-    pointsOpeningMilli: row.pointsOpeningMilli,
-    manualUsdRateMicros: row.manualUsdRateMicros,
-    color: row.color,
-    imageUrl: row.imageUrl,
-  }));
+    return rows.map((row) => ({
+      ...toPositionCard(row),
+      userId: row.userId,
+      name: row.name,
+      paymentAccountId: row.paymentAccountId,
+      brand: row.brand,
+      tier: row.tier,
+      last4: row.last4,
+      limitCents: row.limitCents,
+      rewardMode: row.rewardMode,
+      pointsPerDollarMilli: row.pointsPerDollarMilli,
+      cashbackBasisPoints: row.cashbackBasisPoints,
+      pointsGoal: row.pointsGoal,
+      pointsOpeningMilli: row.pointsOpeningMilli,
+      manualUsdRateMicros: row.manualUsdRateMicros,
+      color: row.color,
+      imageUrl: row.imageUrl,
+    }));
+  });
 }
 
 export async function findCard(userId: string, cardId: string): Promise<CardRecord | null> {
@@ -151,11 +158,13 @@ export async function findCard(userId: string, cardId: string): Promise<CardReco
 
 /** Categorias que não devem pesar no "livre para gastar". */
 export async function freeToSpendExclusions(userId: string): Promise<Set<string>> {
-  const database = getDatabase();
-  const rows = await database
-    .select({ id: categories.id })
-    .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.excludeFromFreeToSpend, true)));
+  return memoFinancialRead(JSON.stringify(["free-to-spend-exclusions", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.userId, userId), eq(categories.excludeFromFreeToSpend, true)));
 
-  return new Set(rows.map((row) => row.id));
+    return new Set(rows.map((row) => row.id));
+  });
 }

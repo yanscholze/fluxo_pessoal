@@ -21,6 +21,19 @@ export type FinancialInsight = {
   href: string;
   question: string;
 };
+export type AnalysisMetadata = {
+  state: "ready" | "fallback" | "rules";
+  generatedAt: string | null;
+  status: "ready" | "stale" | "updating" | "empty" | "error";
+  stale: boolean;
+  updating: boolean;
+  lastError: string | null;
+  retryAfter: string | null;
+};
+export type FinancialAnalysis = AnalysisMetadata & {
+  insights: readonly FinancialInsight[];
+  suggestions: readonly string[];
+};
 export type AssistantState = {
   configured: boolean;
   advice: { remaining: number; limit: number };
@@ -30,6 +43,7 @@ export type AssistantState = {
   conversations?: readonly { id: string; title: string; updatedAt: string }[];
   conversation?: { id: string; messages: readonly AiMessage[] } | null;
   notificationPrompt?: string;
+  analysis?: AnalysisMetadata;
 };
 export type NotificationItem = {
   id: string;

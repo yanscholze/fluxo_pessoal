@@ -193,7 +193,7 @@ export default async function RelatorioDeHoras({
                     <Tr key={linha.projectId}>
                       <Td truncate>
                         <span className="flex flex-wrap items-center gap-1.5">
-                          <Link
+                          <Link prefetch={false}
                             href={`/projetos/${linha.projectId}`}
                             className="truncate text-body text-ink hover:underline"
                           >
@@ -314,7 +314,7 @@ function FiltroDeProjeto({
   rotulo: string;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       aria-current={ativo ? "page" : undefined}
       className={`inline-flex h-8 max-w-[14rem] shrink-0 items-center truncate rounded-md border px-3 text-body-sm font-medium transition-colors ${

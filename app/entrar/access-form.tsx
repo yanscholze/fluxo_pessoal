@@ -64,7 +64,6 @@ export function AccessForm() {
 
     startTransition(() => {
       router.replace("/");
-      router.refresh();
     });
   }
 
@@ -77,7 +76,7 @@ export function AccessForm() {
         {cadastrando ? "Leva menos de um minuto." : "Bem-vindo de volta."}
       </p>
 
-      <form onSubmit={enviar} className="mt-7 space-y-4" noValidate>
+      <form method="post" onSubmit={enviar} className="mt-7 space-y-4" noValidate>
         {cadastrando ? (
           <Campo
             nome="displayName"

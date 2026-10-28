@@ -33,7 +33,7 @@ export function ReportNav() {
         const href = periodo ? `${relatorio.href}?periodo=${periodo}` : relatorio.href;
 
         return (
-          <Link
+          <Link prefetch={false}
             key={relatorio.href}
             href={href}
             aria-current={ativo ? "page" : undefined}

@@ -67,7 +67,7 @@ export function CardsCarousel({
     <div className="space-y-5">
       {hideFaces ? null : <nav aria-label="Seus cartões" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:mx-0 sm:px-0">
         {cards.map((card) => (
-          <Link
+          <Link prefetch={false}
             key={card.id}
             href={cardUrl(card)}
             scroll={false}
@@ -86,7 +86,7 @@ export function CardsCarousel({
             { id: "faturas", label: "Faturas e limite", icon: CreditCard },
             { id: "recompensas", label: "Recompensas", icon: Gift },
           ] as const).map((tab) => (
-            <Link
+            <Link prefetch={false}
               key={tab.id}
               href={cardUrl(selecionado, tab.id)}
               scroll={false}

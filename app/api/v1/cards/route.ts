@@ -20,7 +20,7 @@ export const GET = handle(async (request: Request) => {
   // limite comprometido são calculados só sobre o que existe — ver
   // `EntryFilter.includeProjected`. É o que faz esta rota e a tela `/cartoes`
   // responderem o mesmo número.
-  const dashboard = await buildDashboard(user.id);
+  const dashboard = await buildDashboard(user.id, new Date(), { financialOnly: true });
   return json({ data: dashboard.cards });
 });
 

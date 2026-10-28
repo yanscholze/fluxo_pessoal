@@ -1,5 +1,6 @@
 import { buildDashboard } from "../../../server/services/dashboard.ts";
 import { buildHealthView } from "../../../server/services/health.ts";
+import { withFinancialReadScope } from "../../../server/services/financial-read-scope.ts";
 import { currentUser } from "../../auth-context.ts";
 import { LinkButton } from "../../ui/controls.tsx";
 import { AccountsPanel } from "../../ui/dashboard/accounts-panel.tsx";
@@ -37,10 +38,11 @@ export default async function Painel() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
-  const [dashboard, health] = await Promise.all([
-    buildDashboard(user.id),
-    buildHealthView(user.id),
-  ]);
+  const now = new Date();
+  const [dashboard, health] = await withFinancialReadScope(() => Promise.all([
+    buildDashboard(user.id, now),
+    buildHealthView(user.id, now),
+  ]));
   const primeiroNome = user.displayName.trim().split(/\s+/)[0];
   const hora = Number(
     new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(

@@ -54,7 +54,7 @@ export function ProjectsPanel({ projects }: { projects: readonly OpenProject[] }
               : undefined
         }
         action={
-          <Link
+          <Link prefetch={false}
             href="/projetos"
             className="inline-flex items-center gap-0.5 text-caption text-accent hover:underline"
           >
@@ -70,7 +70,7 @@ export function ProjectsPanel({ projects }: { projects: readonly OpenProject[] }
 
             return (
               <li key={projeto.id}>
-                <Link
+                <Link prefetch={false}
                   href={`/projetos/${projeto.id}`}
                   className="-mx-2 block rounded-md px-2 py-2.5 transition-colors hover:bg-surface-inset"
                 >

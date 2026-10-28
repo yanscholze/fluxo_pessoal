@@ -44,3 +44,4 @@ jobs:
       - run: npm run typecheck --workspace mobile
       - run: npm run build
       - run: npm run validate:ai-scheduled
+      - run: npm run validate:ai-critical-path

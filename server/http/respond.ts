@@ -7,6 +7,7 @@
  */
 
 import { DomainError, type DomainErrorCode, isDomainError } from "../../core/kernel/errors.ts";
+import { measureSync } from "../observability/request-metrics.ts";
 
 const STATUS_BY_CODE: Record<DomainErrorCode, number> = {
   validation: 400,
@@ -32,7 +33,7 @@ export function json(body: unknown, init: ResponseInit = {}): Response {
   headers.set("content-type", "application/json; charset=utf-8");
   // Dado financeiro nunca deve ser guardado por intermediário.
   headers.set("cache-control", "no-store");
-  return new Response(JSON.stringify(body), { ...init, headers });
+  return new Response(measureSync("serialization", () => JSON.stringify(body)), { ...init, headers });
 }
 
 export function noContent(init: ResponseInit = {}): Response {
@@ -61,7 +62,8 @@ export function errorResponse(error: unknown): Response {
 
   // Erro não previsto: o cliente recebe uma mensagem genérica; o detalhe fica
   // no log, nunca na resposta.
-  console.error("Erro não tratado na borda HTTP", error);
+  // Driver/provider errors may embed SQL bindings, URLs or private payloads.
+  console.error("Erro não tratado na borda HTTP", { code: "internal" });
   const body: ErrorBody = {
     error: { code: "internal", message: "Não foi possível concluir a operação. Tente novamente." },
   };

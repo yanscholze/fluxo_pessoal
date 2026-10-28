@@ -22,6 +22,7 @@
     "test:mobile": "node --experimental-strip-types --test \"mobile/tests/*.test.ts\"",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "validate:ai-scheduled": "node scripts/validate-ai-scheduled.mjs",
+    "validate:ai-critical-path": "node scripts/validate-ai-critical-path.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .claude/worktrees",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
     "seed:demo": "node scripts/seed-demo.mjs",

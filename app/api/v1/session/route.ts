@@ -11,6 +11,7 @@ import { optionalUser, requireUser, sessionCookie, clearedSessionCookie } from "
 import { read } from "../../../../server/http/input.ts";
 import { handle, json, noContent, readJson } from "../../../../server/http/respond.ts";
 import { signIn, signUp } from "../../../../server/services/auth.ts";
+import { measureStage } from "../../../../server/observability/request-metrics.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export const POST = handle(async (request: Request) => {
 
   input.done();
 
-  const result =
+  const result = await measureStage("auth", async () =>
     action === "signup"
       ? await signUp(
           { email, password, displayName: displayName ?? "" },
@@ -53,7 +54,7 @@ export const POST = handle(async (request: Request) => {
             platform,
             origin: request.headers.get("cf-connecting-ip"),
           },
-        );
+        ));
 
   const headers = new Headers();
   // O token só volta no corpo para o aparelho, que não tem cookie. Na web ele

@@ -189,7 +189,7 @@ function SetaDeCartao({
   const Icone = lado === "esquerda" ? ChevronLeft : ChevronRight;
 
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       aria-label={`Ver ${rotulo}`}
       className={join(

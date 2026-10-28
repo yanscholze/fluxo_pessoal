@@ -1,5 +1,7 @@
 # Fluxo IA — implementação e validação
 
+Atualização de arquitetura em 27/10/2026: veja [auditoria de CPU e IA persistida](CPU-IA-AUDITORIA.md) para medições, novas migrations, cache semântico, caminho crítico e validação local. As evidências de entrega inicial abaixo são históricas.
+
 Esta entrega substitui a interface TARS dentro do Fluxo por uma conversa financeira integrada. O projeto independente TARS não é alterado. Nenhuma regra do Livre para gastar foi substituída. Não foram feitos commit, push ou deploy nesta tarefa.
 
 ## 1. Arquitetura encontrada
@@ -84,9 +86,9 @@ A memória é da conversa, não uma promessa de lembrança ilimitada entre conve
 
 O motor determinístico identifica riscos de ciclo, atrasos, próximos vencimentos, crescimento/redução de categoria, margem de reserva e déficit futuro. Faturas usam a data congelada já registrada, mesmo após mudanças na configuração do cartão. Sugestões derivam desses fatos. O Gemini pode acrescentar uma explicação qualitativa para até três evidências existentes; não pode criar valores/eventos, mudar prioridades ou remover alertas urgentes. Explicações com números, links ou referências a segredos são recusadas; os valores continuam no texto calculado pelo sistema.
 
-O Worker existente possui handler `scheduled` e cron `17 * * * *`: a cada hora, até cinco contas são processadas em rotação pela análise mais antiga. O lote é limitado para respeitar o custo de consultas D1. Instalações maiores precisam de paginação/fila antes de ampliar esse lote.
+O Worker existente possui handler `scheduled` e cron `*/5 * * * *`: uma conta por execução, em rotação pela verificação mais antiga. A revisão de dados indica necessidade de verificar; o fingerprint semântico decide se realmente é necessária outra inferência. Um resultado pronto não expira por TTL. Instalações maiores precisam rever o tempo de rotação antes de ampliar esse lote.
 
-Abrir o chat, a central ou atualizar componentes **não chama o modelo**. Esses caminhos recalculam fatos e usam cache válido. Análises pagas vêm do cron; o chat chama o modelo somente após envio explícito. O cron é configuração local nesta entrega: sua execução em produção só estará ativa depois de uma publicação autorizada.
+Abrir o chat, a central ou atualizar componentes **não chama o modelo nem reconstrói fatos financeiros**. Esses caminhos leem resultados persistidos. Análises pagas vêm do cron ou da ação explícita “Atualizar análise”; o chat chama o modelo somente após envio de pergunta. Falhas mantêm o último resultado válido. A mudança de cron e as migrations desta revisão só chegam à produção após publicação autorizada.
 
 ## 9. Nova central de notificações
 
@@ -104,7 +106,7 @@ GET, abertura da central e refresh não leem avisos. PATCH marca IDs específico
 - Escala aproximada 7/3/1 dias aumenta prioridade/revisão; só uma prioridade maior reabre leitura. Mudança diária de texto/valor não dispara novo aviso.
 - Capturas usam episódio pendente, sem chave nova a cada dia.
 - Entrega Android separada por usuário e servidor, lembrando ID+revisão; leitura continua sendo autoridade do backend.
-- Fingerprint SHA-256 dos fatos por conta, cache de análise por seis horas e recuo de uma hora após falha ou mudanças muito próximas.
+- Fingerprint SHA-256 semântico por conta, resultado pronto sem expiração por TTL e recuo de uma hora após falha. Revisão/dia indicam verificação pendente, preservando o resultado anterior.
 - Lease no banco evita concorrência entre isolates; cache e histórico são relidos após obter o lease.
 - Quota atômica diária separada: 60 conversas, 30 leituras de cupom e quatro análises automáticas por conta. Erros de provedor contam para evitar ciclos caros; ausência de chave não consome cota.
 - Snapshots antigos não sobrescrevem notificações com fatos mais recentes.

@@ -364,7 +364,12 @@ const UPCOMING_INVOICES = 3;
 /** Horizonte de projeção das recorrências. Cobre o gráfico de fluxo futuro. */
 const PROJECTION_MONTHS = 12;
 
-export async function buildDashboard(userId: string, now: Date = new Date()): Promise<Dashboard> {
+/** Internal financial consumers do not need the recent feed or project details. */
+export async function buildDashboard(
+  userId: string,
+  now: Date = new Date(),
+  options: { financialOnly?: boolean } = {},
+): Promise<Dashboard> {
   const today = todayIn(now);
 
   const [accounts, cards, categories, storedEntries, excludedCategoryIds, index, recent, rules, confirmedKeys] =
@@ -377,13 +382,13 @@ export async function buildDashboard(userId: string, now: Date = new Date()): Pr
       transactionIndex(userId),
       // "Últimos" é o que já aconteceu. Sem o corte por data, as parcelas
       // futuras — que têm data lá na frente — ocupavam a lista inteira.
-      listTransactions(userId, { limit: 10, to: today, states: ["confirmed"] }),
+      options.financialOnly ? Promise.resolve([]) : listTransactions(userId, { limit: 10, to: today, states: ["confirmed"] }),
       listRecurrences(userId, true),
       confirmedOccurrenceKeys(userId),
     ]);
 
   const competence = competenceOf(today);
-  const trabalho = await loadWork(userId, today);
+  const trabalho = options.financialOnly ? { projects: [], tasks: [] } : await loadWork(userId, today);
 
   /**
    * As recorrências entram como lançamentos virtuais, calculados agora a

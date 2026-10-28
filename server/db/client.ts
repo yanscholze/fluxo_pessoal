@@ -9,6 +9,7 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 
 import * as schema from "./schema/index.ts";
+import { instrumentDatabase } from "../observability/request-metrics.ts";
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -24,7 +25,7 @@ export function getDatabase(): Database {
     );
   }
 
-  cached = drizzle(env.DB, { schema });
+  cached = drizzle(instrumentDatabase(env.DB), { schema });
   return cached;
 }
 
