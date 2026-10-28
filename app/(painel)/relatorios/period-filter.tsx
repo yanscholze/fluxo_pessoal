@@ -28,7 +28,7 @@ export function PeriodFilter({ base, atual }: { base: string; atual: ReportPerio
   return (
     <Toolbar>
       {PERIODOS.map(([chave, rotulo]) => (
-        <Link
+        <Link prefetch={false}
           key={chave}
           href={`${base}?periodo=${chave}`}
           aria-current={atual === chave ? "page" : undefined}

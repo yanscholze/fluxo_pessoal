@@ -5,7 +5,7 @@ O fluxo é simples: issue quando há trabalho a rastrear, branch com escopo defi
 ## Branches e etapas
 
 - `main`: linha estável; recebe alterações por PR com CI aprovado. Não é uma cópia antiga do produto.
-- `ai_service`: etapa atual de integração de IA. Os commits desta etapa continuam aqui até sua integração à `main` ser aprovada. Publicar esta branch exige pedido explícito e registro do commit publicado.
+- `ai_service`: etapa de integração de IA já incorporada à `main` pela PR #3. Correções posteriores partem da `main` atual em branch própria; não reutilizar a etapa concluída para mudanças independentes.
 - Evoluções grandes: abrir uma issue com escopo/critérios e uma branch `codex/feature-<tema>`, com PR em rascunho desde o início.
 - Correções: abrir issue `bug` e branch `codex/fix-<numero>-<tema>`. Se uma correção pertence a uma etapa ainda não integrada, corrigir nessa etapa e referenciar a issue.
 - Manutenção: `codex/chore-<tema>`. Uma alteração pequena também usa PR; não precisa de uma branch permanente adicional.
@@ -30,9 +30,12 @@ npm run lint
 npm run typecheck --workspace mobile
 npm run build
 npm run validate:ai-scheduled
+npm run validate:ai-critical-path
 ```
 
 O CI executa os mesmos checks sem chave Gemini real, sem secrets de produção e sem publicar automaticamente. Os jobs **Segredos** e **Qualidade** são as verificações exigidas para integrar à `main`. A revisão não exige aprovação de outra pessoa, pois este projeto pode ser mantido por um único autor; as verificações e o PR continuam obrigatórios.
+
+O CI roda em PRs e em pushes na `main`. Branches de trabalho abrem PR cedo para receber os checks. Isso evita duas execuções com os mesmos nomes no mesmo commit, cujo cancelamento deixaria um check obrigatório bloqueando o merge apesar de a outra execução passar.
 
 Antes de criar um commit, confira também o que está efetivamente no índice:
 

@@ -16,7 +16,7 @@ export function EmergencyReserve({ reserve }: { reserve: HealthView["reserve"] }
         <h3 className="flex items-center gap-2 text-body-sm font-medium text-ink">
           <PiggyBank className="size-4 text-accent" aria-hidden /> Reserva de emergência
         </h3>
-        <Link href="/patrimonio?aba=saude" className="text-caption text-accent hover:underline">Ver detalhes</Link>
+        <Link prefetch={false} href="/patrimonio?aba=saude" className="text-caption text-accent hover:underline">Ver detalhes</Link>
       </div>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
         <p className="tabular text-figure-sm text-ink">{money(reserve.currentCents)}</p>

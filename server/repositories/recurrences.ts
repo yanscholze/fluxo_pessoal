@@ -14,6 +14,7 @@ import { cents } from "../../core/kernel/money.ts";
 import type { Competence } from "../../core/time/competence.ts";
 import { localDate } from "../../core/time/local-date.ts";
 import { getDatabase } from "../db/client.ts";
+import { memoFinancialRead } from "../services/financial-read-scope.ts";
 import { recurrenceRuns, recurrences, transactions } from "../db/schema/index.ts";
 
 function toRecurrence(row: typeof recurrences.$inferSelect): Recurrence {
@@ -42,13 +43,15 @@ function toRecurrence(row: typeof recurrences.$inferSelect): Recurrence {
 }
 
 export async function listRecurrences(userId: string, onlyActive = false): Promise<Recurrence[]> {
-  const database = getDatabase();
-  const rows = await database
-    .select()
-    .from(recurrences)
-    .where(onlyActive ? and(eq(recurrences.userId, userId), eq(recurrences.isActive, true)) : eq(recurrences.userId, userId));
+  return memoFinancialRead(JSON.stringify(["recurrences", userId, onlyActive]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select()
+      .from(recurrences)
+      .where(onlyActive ? and(eq(recurrences.userId, userId), eq(recurrences.isActive, true)) : eq(recurrences.userId, userId));
 
-  return rows.map(toRecurrence);
+    return rows.map(toRecurrence);
+  });
 }
 
 export async function findRecurrence(userId: string, id: string): Promise<Recurrence | null> {
@@ -69,26 +72,28 @@ export async function findRecurrence(userId: string, id: string): Promise<Recurr
  * impede o salário confirmado de aparecer também como projeção.
  */
 export async function confirmedOccurrenceKeys(userId: string): Promise<Set<string>> {
-  const database = getDatabase();
-  const rows = await database
-    .select({ fingerprint: transactions.fingerprint })
-    .from(transactions)
-    .where(and(eq(transactions.userId, userId), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
+  return memoFinancialRead(JSON.stringify(["confirmed-occurrence-keys", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select({ fingerprint: transactions.fingerprint })
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
 
-  // Um movimento importado mantém sua impressão digital. A confirmação pode
-  // vir do vínculo, sem regravar o razão nem perder a deduplicação do extrato.
-  const linked = await database
-    .select({ recurrenceId: recurrenceRuns.recurrenceId, competence: recurrenceRuns.competence })
-    .from(recurrenceRuns)
-    .innerJoin(transactions, eq(transactions.id, recurrenceRuns.transactionId))
-    .where(and(eq(recurrenceRuns.userId, userId), eq(transactions.userId, userId),
-      eq(recurrenceRuns.outcome, "confirmed"), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
+    // Um movimento importado mantém sua impressão digital. A confirmação pode
+    // vir do vínculo, sem regravar o razão nem perder a deduplicação do extrato.
+    const linked = await database
+      .select({ recurrenceId: recurrenceRuns.recurrenceId, competence: recurrenceRuns.competence })
+      .from(recurrenceRuns)
+      .innerJoin(transactions, eq(transactions.id, recurrenceRuns.transactionId))
+      .where(and(eq(recurrenceRuns.userId, userId), eq(transactions.userId, userId),
+        eq(recurrenceRuns.outcome, "confirmed"), eq(transactions.state, "confirmed"), isNull(transactions.deletedAt)));
 
-  return new Set(
-    [...linked.map((row) => `recurrence:${row.recurrenceId}:${row.competence}`), ...rows
-      .map((row) => row.fingerprint)
-      .filter((value): value is string => Boolean(value?.startsWith("recurrence:")))],
-  );
+    return new Set(
+      [...linked.map((row) => `recurrence:${row.recurrenceId}:${row.competence}`), ...rows
+        .map((row) => row.fingerprint)
+        .filter((value): value is string => Boolean(value?.startsWith("recurrence:")))],
+    );
+  });
 }
 
 export type RunRecord = {

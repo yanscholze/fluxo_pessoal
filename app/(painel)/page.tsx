@@ -29,7 +29,7 @@ export default async function FluxoAi({ searchParams }: { searchParams?: Promise
           </summary>
           <div className="mt-3 max-w-measure-lg">
             <p className="mb-4 text-body-sm text-ink-muted">Extraia os dados de uma foto e confira antes de registrar. Nada é lançado automaticamente.</p>
-            {state.configured ? <ReceiptReader remaining={state.receipt.remaining} /> : <p className="text-body-sm text-ink-muted">Configure seu provedor em <Link className="text-accent underline" href="/configuracoes?aba=integracoes">Configurações → Integrações</Link>.</p>}
+            {state.configured ? <ReceiptReader remaining={state.receipt.remaining} /> : <p className="text-body-sm text-ink-muted">Configure seu provedor em <Link prefetch={false} className="text-accent underline" href="/configuracoes?aba=integracoes">Configurações → Integrações</Link>.</p>}
           </div>
         </details>
       </Panel>

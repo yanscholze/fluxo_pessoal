@@ -542,6 +542,21 @@ export type EstadoDoAssistente = {
   readonly configured: boolean;
   readonly advice: { readonly remaining: number; readonly limit: number };
   readonly receipt: { readonly remaining: number; readonly limit: number };
+  readonly analysis?: MetadadosDaAnalise;
+};
+
+export type MetadadosDaAnalise = {
+  readonly state: "ready" | "fallback" | "rules";
+  readonly generatedAt: string | null;
+  readonly status: "ready" | "stale" | "updating" | "empty" | "error";
+  readonly stale: boolean;
+  readonly updating: boolean;
+  readonly lastError: string | null;
+  readonly retryAfter: string | null;
+};
+export type AnaliseFinanceira = MetadadosDaAnalise & {
+  readonly insights: readonly InsightFinanceiro[];
+  readonly suggestions: readonly string[];
 };
 
 export const fetchAssistente = (c: Credenciais) => buscar<EstadoDoAssistente>("/api/v1/assistant", c);

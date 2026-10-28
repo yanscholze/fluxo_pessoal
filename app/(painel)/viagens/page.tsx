@@ -71,7 +71,7 @@ function CartaoDeViagem({ viagem, teto }: { viagem: TripView; teto: number }) {
 
   return (
     <section className="glass-panel cursor-pointer p-6 transition-transform hover:-translate-y-1">
-      <Link href={`/viagens?viagem=${viagem.id}`} className="block w-full text-left">
+      <Link prefetch={false} href={`/viagens?viagem=${viagem.id}`} className="block w-full text-left">
         <div className="mb-12 flex justify-between">
           <Plane className="size-5 text-accent" aria-hidden />
           <ArrowRight className="size-4 text-ink-subtle" aria-hidden />

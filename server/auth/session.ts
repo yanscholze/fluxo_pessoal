@@ -17,6 +17,7 @@ import { SESSION_COOKIE } from "../../core/kernel/session-cookie.ts";
 import { newId } from "../../core/kernel/id.ts";
 import { getDatabase } from "../db/client.ts";
 import { sessions, users } from "../db/schema/index.ts";
+import { measureStage } from "../observability/request-metrics.ts";
 
 export type SessionKind = "web" | "device";
 
@@ -117,6 +118,10 @@ export async function issueSession(input: {
  * borda decide se isso é 401 ou navegação anônima.
  */
 export async function resolveSession(token: string | null, now: Date = new Date()): Promise<AuthenticatedUser | null> {
+  return measureStage("auth", () => resolveSessionRecord(token, now));
+}
+
+async function resolveSessionRecord(token: string | null, now: Date): Promise<AuthenticatedUser | null> {
   if (!token) return null;
 
   const database = getDatabase();

@@ -60,7 +60,7 @@ export function SectionTabs({
         }
         nextParams.set("aba", tab.value);
         return (
-          <Link
+          <Link prefetch={false}
             key={tab.value}
             href={`${basePath}?${nextParams.toString()}`}
             scroll={false}

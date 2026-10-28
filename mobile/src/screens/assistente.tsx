@@ -1,11 +1,11 @@
 /** Fluxo IA: context is prepared and conversation history is stored by the server. */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, FlatList, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { Alert, AppState, KeyboardAvoidingView, Platform, Pressable, FlatList, TextInput, View } from "react-native";
 import { CaretLeft, ClockCounterClockwise, Plus, Sparkle, Trash } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { call } from "../net/client.ts";
-import type { EstadoDoAssistente, MensagemDoAssistente, RespostaDoAssistente } from "../net/views.ts";
+import type { AnaliseFinanceira, EstadoDoAssistente, MensagemDoAssistente, RespostaDoAssistente } from "../net/views.ts";
 import { useConnectedSession } from "../state/session.tsx";
 import { familiaDoPeso } from "../ui/fonts.ts";
 import { ScreenGlow } from "../ui/mockup.tsx";
@@ -13,6 +13,69 @@ import { Body, Button, Card, Notice, Small, Texto } from "../ui/primitives.tsx";
 import { radius, space, type, usePalette } from "../ui/theme.ts";
 
 type Props = { onVoltar?: () => void; notificationId?: string; onConfigurar?: () => void };
+
+function useSavedAnalysis(status: EstadoDoAssistente | null, setStatus: Dispatch<SetStateAction<EstadoDoAssistente | null>>) {
+  const { credentials } = useConnectedSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const running = useRef(false);
+  const reading = useRef(false);
+  const version = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
+  const retryAt = status?.analysis?.lastError && status.analysis.retryAfter ? Date.parse(status.analysis.retryAfter) : 0;
+  const cooldown = Number.isFinite(retryAt) && retryAt > now;
+
+  useEffect(() => () => {
+    version.current++;
+    activeRequest.current?.abort();
+  }, [credentials]);
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(retryAt - Date.now() + 100, 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [cooldown, retryAt]);
+
+  const readSaved = useCallback(async (signal: AbortSignal) => {
+    if (reading.current || AppState.currentState !== "active") return;
+    reading.current = true;
+    const current = version.current;
+    try {
+      const { insights, suggestions, ...analysis } = await call<AnaliseFinanceira>("/api/v1/assistant/analysis", { ...credentials, signal });
+      if (!signal.aborted && current === version.current) setStatus((old) => old ? { ...old, insights, suggestions, analysis } : old);
+    } catch { /* Offline polling keeps the saved insights. */ }
+    finally { reading.current = false; }
+  }, [credentials, setStatus]);
+
+  useEffect(() => {
+    if (!status?.analysis?.updating && !status?.analysis?.stale) return;
+    const controller = new AbortController();
+    const timer = setInterval(() => void readSaved(controller.signal), status?.analysis?.updating ? 15_000 : 60_000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [status?.analysis?.updating, status?.analysis?.stale, readSaved]);
+
+  async function refresh() {
+    if (running.current || !status || status.analysis?.updating || cooldown) return;
+    running.current = true;
+    const request = new AbortController();
+    activeRequest.current = request;
+    const current = version.current;
+    setBusy(true);
+    setError(null);
+    try {
+      const { insights, suggestions, ...analysis } = await call<AnaliseFinanceira>("/api/v1/assistant/analysis", { ...credentials, method: "POST", timeoutMs: 50_000, signal: request.signal });
+      if (request.signal.aborted || current !== version.current) return;
+      version.current++;
+      setStatus((old) => old ? { ...old, insights, suggestions, analysis } : old);
+      setNow(Date.now());
+    } catch {
+      if (!request.signal.aborted && current === version.current) setError("Não foi possível atualizar a análise. O último resultado foi mantido. Tente novamente em instantes.");
+    } finally { if (activeRequest.current === request) activeRequest.current = null; running.current = false; setBusy(false); }
+  }
+
+  return { busy, error, cooldown, refresh };
+}
 
 export function AssistenteScreen({ onVoltar, notificationId, onConfigurar }: Props) {
   const palette = usePalette();
@@ -30,6 +93,7 @@ export function AssistenteScreen({ onVoltar, notificationId, onConfigurar }: Pro
   const [error, setError] = useState<string | null>(null);
   const scroll = useRef<FlatList<MensagemDoAssistente>>(null);
   const input = useRef<TextInput>(null);
+  const analysis = useSavedAnalysis(status, setStatus);
 
   const load = useCallback(async (id?: string, notice?: string, signal?: AbortSignal) => {
     const epoch = ++requestEpoch.current;
@@ -128,6 +192,11 @@ export function AssistenteScreen({ onVoltar, notificationId, onConfigurar }: Pro
           {!status?.configured && !loading ? <Card><Body>Conecte seu provedor para conversar sobre suas finanças. Os avisos essenciais e o restante do Fluxo continuam disponíveis.</Body>{onConfigurar ? <Button label="Configurar integração" variant="secondary" onPress={onConfigurar} style={{ marginTop: space.sm }} /> : <Small style={{ marginTop: space.sm }}>Acesse Configurações → Integrações.</Small>}</Card> : null}
           {status?.conversations?.length ? <View><Pressable accessibilityRole="button" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen(!historyOpen)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><ClockCounterClockwise size={18} color={palette.inkSubtle} /><Body muted>Conversas anteriores</Body></Pressable>{historyOpen ? <Card style={{ padding: 8 }}>{status.conversations.map((conversation) => <Pressable key={conversation.id} accessibilityRole="button" accessibilityState={{ selected: conversation.id === conversationId }} disabled={busy || loading} onPress={() => void load(conversation.id)} style={{ minHeight: 48, padding: 12, borderRadius: radius.md, backgroundColor: conversation.id === conversationId ? palette.accentWash : "transparent" }}><Body numberOfLines={2}>{conversation.title}</Body></Pressable>)}</Card> : null}</View> : null}
           {loading ? <Small>Carregando sua conversa…</Small> : null}
+          {status ? <View style={{ gap: 8, marginVertical: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}><Body strong style={{ flex: 1 }}>Análise financeira</Body><Button label="Atualizar análise" variant="ghost" busy={analysis.busy} disabled={analysis.busy || status.analysis?.updating || analysis.cooldown} onPress={() => void analysis.refresh()} /></View>
+            <View accessibilityLiveRegion="polite"><Small>{analysisStatus(status, analysis.busy, analysis.cooldown)}</Small></View>
+            {analysis.error ? <Notice tone="caution">{analysis.error}</Notice> : null}
+          </View> : null}
           {!messages.length && !loading ? <>
             {status?.insights?.slice(0, 2).map((insight) => <Card key={insight.key} style={{ padding: 14 }}><Body strong>{insight.title}</Body><Small style={{ marginTop: 5 }}>{insight.body}</Small><Button label="Conversar sobre isso" disabled={disabled || busy} variant="ghost" onPress={() => { setQuestion(insight.question); input.current?.focus(); }} style={{ marginTop: 6, alignSelf: "flex-start", paddingHorizontal: 0 }} /></Card>)}
             <View style={{ paddingVertical: 18, gap: 10 }}><Sparkle size={30} color={palette.accent} /><Texto style={[type.heading, { color: palette.ink }]}>O que gostaria de entender?</Texto><Body muted>Posso explicar seus gastos e compromissos e ajudar a planejar uma reserva com os dados registrados no Fluxo.</Body></View>
@@ -145,6 +214,18 @@ export function AssistenteScreen({ onVoltar, notificationId, onConfigurar }: Pro
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function analysisStatus(state: EstadoDoAssistente, busy: boolean, cooldown: boolean): string {
+  if (busy || state.analysis?.updating) return "Atualizando análise… O último resultado continua disponível.";
+  if (!state.insights?.length && !state.analysis?.generatedAt) return state.analysis?.lastError ? "Análise financeira ainda não disponível. Tente atualizar mais tarde." : "Análise financeira ainda não disponível.";
+  if (state.analysis?.lastError) return cooldown ? "A atualização encontrou um problema. O último resultado foi mantido; tente novamente mais tarde." : "A atualização encontrou um problema. O último resultado foi mantido.";
+  if (state.analysis?.stale) return "Atualização pendente. Estes são os últimos insights disponíveis.";
+  if (state.analysis?.generatedAt) {
+    const date = new Date(state.analysis.generatedAt);
+    if (!Number.isNaN(date.getTime())) return `Atualizado em ${date.toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}.`;
+  }
+  return state.insights?.length ? "Insights salvos a partir dos seus registros." : "Análise financeira ainda não disponível.";
 }
 
 function Message({ message }: { message: MensagemDoAssistente }) {

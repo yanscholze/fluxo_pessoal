@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, lt } from "drizzle-orm";
 import { newId } from "../../core/kernel/id.ts";
 import { DomainError } from "../../core/kernel/errors.ts";
 import { getDatabase } from "../db/client.ts";
-import { aiAnalyses, aiConversations, aiLeases, aiMessages } from "../db/schema/ai-conversations.ts";
+import { aiAnalyses, aiConversations, aiLeases, aiMessages, financialRevisions } from "../db/schema/ai-conversations.ts";
 import { users } from "../db/schema/identity.ts";
 import type { Advice } from "../services/ai/coach.ts";
 
@@ -51,11 +51,31 @@ export async function cachedAnalysis(userId: string) {
   const [row] = await getDatabase().select().from(aiAnalyses).where(eq(aiAnalyses.userId, userId)).limit(1);
   return row ?? null;
 }
+/** Polling must not transfer the potentially much larger chat snapshot from D1. */
+export async function cachedAnalysisView(userId: string) {
+  const { contextJson, ...columns } = getTableColumns(aiAnalyses);
+  void contextJson;
+  const [row] = await getDatabase().select(columns).from(aiAnalyses).where(eq(aiAnalyses.userId, userId)).limit(1);
+  return row ?? null;
+}
 export async function saveAnalysis(value: typeof aiAnalyses.$inferInsert): Promise<void> {
   await getDatabase().insert(aiAnalyses).values(value).onConflictDoUpdate({ target: aiAnalyses.userId, set: value });
 }
+export async function financialRevision(userId: string): Promise<number> {
+  const [row] = await getDatabase().select({ revision: financialRevisions.revision }).from(financialRevisions)
+    .where(eq(financialRevisions.userId, userId)).limit(1);
+  return row?.revision ?? 0;
+}
+export async function analysisInProgress(userId: string, now: Date): Promise<boolean> {
+  const [row] = await getDatabase().select({ expiresAt: aiLeases.expiresAt }).from(aiLeases)
+    .where(and(eq(aiLeases.userId, userId), eq(aiLeases.scope, "analysis"))).limit(1);
+  return !!row && row.expiresAt > now.getTime();
+}
+export async function patchAnalysis(userId: string, values: Partial<typeof aiAnalyses.$inferInsert>): Promise<void> {
+  await getDatabase().update(aiAnalyses).set(values).where(eq(aiAnalyses.userId, userId));
+}
 export async function analysisUsers(limit = 20): Promise<string[]> {
   const rows = await getDatabase().select({ id: users.id }).from(users).leftJoin(aiAnalyses, eq(users.id, aiAnalyses.userId))
-    .orderBy(asc(aiAnalyses.generatedAt), asc(users.id)).limit(limit);
+    .orderBy(asc(aiAnalyses.checkedAt), asc(users.id)).limit(limit);
   return rows.map((row) => row.id);
 }

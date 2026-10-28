@@ -14,6 +14,7 @@ import { newId } from "../../core/kernel/id.ts";
 import type { LocalDate } from "../../core/time/local-date.ts";
 import type { Competence } from "../../core/time/competence.ts";
 import { getDatabase } from "../db/client.ts";
+import { memoFinancialRead } from "../services/financial-read-scope.ts";
 import { ledgerEntries, transactions } from "../db/schema/index.ts";
 import { partyColumns, toLedgerEntry, toTransaction } from "./mappers.ts";
 
@@ -28,9 +29,11 @@ import { partyColumns, toLedgerEntry, toTransaction } from "./mappers.ts";
  * um saldo de arrasto, não duplicar a regra.
  */
 export async function loadLedger(userId: string): Promise<LedgerEntry[]> {
-  const database = getDatabase();
-  const rows = await database.select().from(ledgerEntries).where(eq(ledgerEntries.userId, userId));
-  return rows.map(toLedgerEntry);
+  return memoFinancialRead(JSON.stringify(["ledger", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database.select().from(ledgerEntries).where(eq(ledgerEntries.userId, userId));
+    return rows.map(toLedgerEntry);
+  });
 }
 
 export type TransactionMeta = {
@@ -47,20 +50,22 @@ export type TransactionMeta = {
  * consulta este índice pelo `transactionId`.
  */
 export async function transactionIndex(userId: string): Promise<Map<string, TransactionMeta>> {
-  const database = getDatabase();
-  const rows = await database
-    .select({
-      id: transactions.id,
-      categoryId: transactions.categoryId,
-      description: transactions.description,
-      kind: transactions.kind,
-    })
-    .from(transactions)
-    .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)));
+  return memoFinancialRead(JSON.stringify(["transaction-index", userId]), async () => {
+    const database = getDatabase();
+    const rows = await database
+      .select({
+        id: transactions.id,
+        categoryId: transactions.categoryId,
+        description: transactions.description,
+        kind: transactions.kind,
+      })
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)));
 
-  return new Map(
-    rows.map((row) => [row.id, { categoryId: row.categoryId, description: row.description, kind: row.kind }]),
-  );
+    return new Map(
+      rows.map((row) => [row.id, { categoryId: row.categoryId, description: row.description, kind: row.kind }]),
+    );
+  });
 }
 
 /** Recorte do índice com apenas a categoria, no formato que o domínio espera. */
@@ -81,28 +86,30 @@ export type TransactionQuery = {
 };
 
 export async function listTransactions(userId: string, query: TransactionQuery = {}): Promise<Transaction[]> {
-  const database = getDatabase();
-  const filters = [eq(transactions.userId, userId), isNull(transactions.deletedAt)];
-  if (query.from) filters.push(gte(transactions.occurredOn, query.from));
-  if (query.to) filters.push(lte(transactions.occurredOn, query.to));
-  if (query.competence) filters.push(eq(transactions.competence, query.competence));
-  if (query.cardId) {
-    const doCartao = or(
-      eq(transactions.originCardId, query.cardId),
-      eq(transactions.destinationCardId, query.cardId),
-    );
-    if (doCartao) filters.push(doCartao);
-  }
-  if (query.states?.length) filters.push(inArray(transactions.state, [...query.states]));
+  return memoFinancialRead(JSON.stringify(["transactions", userId, query.from ?? null, query.to ?? null, query.competence ?? null, query.cardId ?? null, query.limit ?? 500, query.states ?? null]), async () => {
+    const database = getDatabase();
+    const filters = [eq(transactions.userId, userId), isNull(transactions.deletedAt)];
+    if (query.from) filters.push(gte(transactions.occurredOn, query.from));
+    if (query.to) filters.push(lte(transactions.occurredOn, query.to));
+    if (query.competence) filters.push(eq(transactions.competence, query.competence));
+    if (query.cardId) {
+      const doCartao = or(
+        eq(transactions.originCardId, query.cardId),
+        eq(transactions.destinationCardId, query.cardId),
+      );
+      if (doCartao) filters.push(doCartao);
+    }
+    if (query.states?.length) filters.push(inArray(transactions.state, [...query.states]));
 
-  const rows = await database
-    .select()
-    .from(transactions)
-    .where(and(...filters))
-    .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
-    .limit(query.limit ?? 500);
+    const rows = await database
+      .select()
+      .from(transactions)
+      .where(and(...filters))
+      .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
+      .limit(query.limit ?? 500);
 
-  return rows.map(toTransaction);
+    return rows.map(toTransaction);
+  });
 }
 
 export async function findTransaction(userId: string, transactionId: string): Promise<Transaction | null> {

@@ -1,5 +1,9 @@
 "use client";
 
+// Vinext currently classifies static-shaped authenticated paths as prefetchable,
+// even with force-dynamic pages. Keep Link prefetch disabled: navigation must
+// not compute every financial screen while the user is opening just one.
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -120,7 +124,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
         "w-[16.5rem] lg:w-[4.75rem]",
       )}>
         <div className="sidebar-brand flex h-16 shrink-0 items-center gap-3 px-3">
-          <Link href="/" className="flex items-center gap-3" aria-label="Fluxo — início">
+          <Link prefetch={false} href="/" className="flex items-center gap-3" aria-label="Fluxo — início">
             <span className="brand-mark" aria-hidden><span className="brand-mark__dot brand-mark__dot--a" /><span className="brand-mark__dot brand-mark__dot--b" /></span>
             <span className="sidebar-label text-2xl font-semibold tracking-tight text-ink">Fluxo</span>
           </Link>
@@ -133,8 +137,8 @@ export function Shell({ userName, children }: { userName: string; children: Reac
           </div>)}
         </div>
         <div className="flex shrink-0 items-center justify-center gap-3 border-t border-line px-3 py-3 lg:hidden">
-          <Link href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span></Link>
-          <Link href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
+          <Link prefetch={false} href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span></Link>
+          <Link prefetch={false} href="/configuracoes" className="fluxo-top-icon flex size-11 items-center justify-center text-ink-muted" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
           <BotaoDeTema inDrawer />
         </div>
       </nav>
@@ -148,9 +152,9 @@ export function Shell({ userName, children }: { userName: string; children: Reac
             <button type="button" onClick={() => { setConsulta(""); setBuscaAberta(true); }} className="fluxo-search flex h-11 items-center gap-2 border border-line px-3 text-caption text-ink-muted transition-colors hover:border-accent-edge hover:text-ink" aria-label="Buscar uma área do app"><Search size={17} aria-hidden /><span className="hidden sm:inline">Pesquisar...</span><kbd className="ml-auto hidden text-label text-ink-subtle lg:inline">⌘ K</kbd></button>
             <NotificationCenter />
             <InstallApp className="fluxo-top-icon hidden h-11 items-center px-3 lg:inline-flex" />
-            <Link href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
+            <Link prefetch={false} href="/configuracoes" className="fluxo-top-icon hidden size-11 items-center justify-center text-ink-muted transition-colors hover:text-accent sm:flex" aria-label="Configurações"><Settings size={18} aria-hidden /></Link>
             <BotaoDeTema />
-            <Link href="/configuracoes" className="fluxo-profile hidden items-center gap-2 px-2 py-1 sm:flex" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span><span className="max-w-28 truncate text-body-sm font-semibold text-ink">{userName}</span></Link>
+            <Link prefetch={false} href="/configuracoes" className="fluxo-profile hidden items-center gap-2 px-2 py-1 sm:flex" aria-label={`Conta de ${userName}`}><span className="fluxo-avatar">{iniciais(userName)}</span><span className="max-w-28 truncate text-body-sm font-semibold text-ink">{userName}</span></Link>
           </div>
         </header>
         <main id="conteudo" className="min-w-0 pb-24 lg:pb-0">{children}</main>
@@ -160,7 +164,7 @@ export function Shell({ userName, children }: { userName: string; children: Reac
         <label htmlFor="buscar-area" className="sr-only">Buscar área</label>
         <Input id="buscar-area" value={consulta} onChange={(event) => setConsulta(event.target.value)} placeholder="Metas, assinaturas, aparelhos…" autoComplete="off" />
         <ul className="mt-3 max-h-[55dvh] space-y-1 overflow-y-auto">
-          {resultados.map((item) => <li key={item.href}><Link href={item.href} onClick={() => { fecharBusca(); setMenuAberto(false); }} className="flex min-h-11 items-center gap-3 rounded-md px-3 text-body-sm text-ink-muted hover:bg-accent-wash hover:text-accent"><item.icon size={17} aria-hidden /><span className="flex-1">{item.label}</span><ArrowRight size={14} aria-hidden /></Link></li>)}
+          {resultados.map((item) => <li key={item.href}><Link prefetch={false} href={item.href} onClick={() => { fecharBusca(); setMenuAberto(false); }} className="flex min-h-11 items-center gap-3 rounded-md px-3 text-body-sm text-ink-muted hover:bg-accent-wash hover:text-accent"><item.icon size={17} aria-hidden /><span className="flex-1">{item.label}</span><ArrowRight size={14} aria-hidden /></Link></li>)}
         </ul>
         {!resultados.length ? <p className="py-6 text-center text-body-sm text-ink-muted">Nenhuma área encontrada. Tente outro nome.</p> : null}
       </Dialog>
@@ -172,7 +176,7 @@ function rotaAtiva(href: string, pathname: string) { return href === "/" ? pathn
 function ItemDeNavegacao({ item, pathname }: { item: NavItem; pathname: string }) {
   const ativo = rotaAtiva(item.href, pathname);
   const Icone = item.icon;
-  return <Link href={item.href} aria-current={ativo ? "page" : undefined} title={item.label} className={join("nav-item relative flex min-h-9 items-center gap-3 rounded-md px-3 py-1.5 text-body-sm transition-colors", ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-inset hover:text-ink")}>
+  return <Link prefetch={false} href={item.href} aria-current={ativo ? "page" : undefined} title={item.label} className={join("nav-item relative flex min-h-9 items-center gap-3 rounded-md px-3 py-1.5 text-body-sm transition-colors", ativo ? "bg-accent-wash font-medium text-accent" : "text-ink-muted hover:bg-surface-inset hover:text-ink")}>
     {ativo ? <span className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent" aria-hidden /> : null}
     <Icone size={20} strokeWidth={1.9} className="shrink-0" aria-hidden /><span className="sidebar-label leading-snug">{item.label}</span>
   </Link>;

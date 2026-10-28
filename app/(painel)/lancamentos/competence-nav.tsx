@@ -21,10 +21,10 @@ export function CompetenceNav({
 
   return (
     <div className="flex items-center gap-1.5">
-      <Link href={href(anterior)} className={classe} rel="prev">
+      <Link prefetch={false} href={href(anterior)} className={classe} rel="prev">
         ← {competenceShort(anterior)}
       </Link>
-      <Link href={href(proxima)} className={classe} rel="next">
+      <Link prefetch={false} href={href(proxima)} className={classe} rel="next">
         {competenceShort(proxima)} →
       </Link>
     </div>
