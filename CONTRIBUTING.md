@@ -35,6 +35,8 @@ npm run validate:ai-critical-path
 
 O CI executa os mesmos checks sem chave Gemini real, sem secrets de produção e sem publicar automaticamente. Os jobs **Segredos** e **Qualidade** são as verificações exigidas para integrar à `main`. A revisão não exige aprovação de outra pessoa, pois este projeto pode ser mantido por um único autor; as verificações e o PR continuam obrigatórios.
 
+O CI roda em PRs e em pushes na `main`. Branches de trabalho abrem PR cedo para receber os checks. Isso evita duas execuções com os mesmos nomes no mesmo commit, cujo cancelamento deixaria um check obrigatório bloqueando o merge apesar de a outra execução passar.
+
 Antes de criar um commit, confira também o que está efetivamente no índice:
 
 ```bash
