@@ -161,7 +161,7 @@ function CartaoDeConta({ conta, total }: { conta: AccountView; total: number }) 
           <Icone className="size-5" aria-hidden />
         </div>
         <div className="flex items-start gap-1">
-          <EditAccount accountId={conta.id} name={conta.name} color={conta.color} />
+          <EditAccount accountId={conta.id} name={conta.name} kind={conta.kind} color={conta.color} />
           <BalanceCheck
             accountId={conta.id}
             accountName={conta.name}
