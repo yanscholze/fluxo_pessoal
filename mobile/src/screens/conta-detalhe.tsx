@@ -21,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
+import { includesInFreeToSpend, type AccountKind } from "@fluxo/core/domain/account/types.ts";
 import type { ContaView } from "../net/views.ts";
 import { ContaEditarScreen } from "./conta-editar.tsx";
 import { useLedger } from "../state/ledger.tsx";
@@ -98,7 +99,13 @@ export function ContaDetalheScreen({ conta, onClose }: { conta: ContaView; onClo
           </Figure>
           {!conta.includeInTotals ? (
             <Small style={{ marginTop: 2 }}>Fora do total do patrimônio.</Small>
-          ) : null}
+          ) : (
+            <Small style={{ marginTop: 2 }}>
+              {includesInFreeToSpend({ kind: conta.kind as AccountKind, includeInFreeToSpend: conta.includeInFreeToSpend })
+                ? "Incluída no disponível e no Livre para gastar."
+                : "Fora do disponível e do Livre para gastar; continua no patrimônio."}
+            </Small>
+          )}
         </Card>
 
         <Card>

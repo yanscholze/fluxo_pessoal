@@ -4,6 +4,7 @@
  */
 
 import { accountBalance } from "../../../../core/domain/ledger/balance.ts";
+import { includesInFreeToSpend } from "../../../../core/domain/account/types.ts";
 import { todayIn } from "../../../../core/time/local-date.ts";
 import { requireUser } from "../../../../server/auth/session.ts";
 import { read } from "../../../../server/http/input.ts";
@@ -30,6 +31,7 @@ export const GET = handle(async (request: Request) => {
       currency: account.currency,
       color: account.color,
       includeInTotals: account.includeInTotals,
+      includeInFreeToSpend: includesInFreeToSpend(account),
       goalCents: account.goalAmount,
       balanceCents: accountBalance(entries, account.id, today, account.openingBalance),
     })),
@@ -50,6 +52,7 @@ export const POST = handle(async (request: Request) => {
     goalAmount: input.optionalMoney("goalAmount"),
     monthlyYieldBasisPoints: input.optionalInteger("monthlyYieldBasisPoints", { min: 0, max: 100_000 }),
     includeInTotals: input.boolean("includeInTotals", true),
+    includeInFreeToSpend: input.optionalBoolean("includeInFreeToSpend") ?? undefined,
     color: input.optionalString("color", { max: 9 }),
   };
 

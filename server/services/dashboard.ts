@@ -7,7 +7,7 @@
  * entre si na versão anterior.
  */
 
-import { liquidAccounts } from "../../core/domain/account/types.ts";
+import { includesInFreeToSpend, liquidAccounts } from "../../core/domain/account/types.ts";
 import { activeCompetence, daysUntilClosing, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import {
   CONSUMPTION,
@@ -71,6 +71,7 @@ export type AccountSummary = {
   readonly balanceCents: number;
   readonly goalCents: number | null;
   readonly includeInTotals: boolean;
+  readonly includeInFreeToSpend: boolean;
 };
 
 export type InvoiceSummary = {
@@ -517,6 +518,7 @@ function summarizeAccounts(
     balanceCents: accountBalance(entries, account.id, today, account.openingBalance),
     goalCents: account.goalAmount,
     includeInTotals: account.includeInTotals,
+    includeInFreeToSpend: includesInFreeToSpend(account),
   }));
 }
 

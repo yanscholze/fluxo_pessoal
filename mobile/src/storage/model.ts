@@ -23,6 +23,8 @@ export type LocalAccount = {
   readonly openingBalance: Cents;
   /** Fora dos totais, a conta não entra em saldo nem em livre para gastar. */
   readonly includeInTotals: boolean;
+  /** Escolha explícita; ausente em dados antigos mantém o padrão pelo tipo. */
+  readonly includeInFreeToSpend?: boolean;
   readonly color: string | null;
   readonly archivedAt: string | null;
 };

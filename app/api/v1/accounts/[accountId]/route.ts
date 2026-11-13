@@ -35,6 +35,7 @@ export const PATCH = handle(async (request: Request) => {
   const goalAmount = input.optionalMoney("goalAmount");
   const monthlyYieldBasisPoints = input.optionalInteger("monthlyYieldBasisPoints", { min: 0, max: 100_000 });
   const includeInTotals = input.optionalBoolean("includeInTotals");
+  const includeInFreeToSpend = input.optionalBoolean("includeInFreeToSpend");
   /*
    * O saldo de abertura é corrigível.
    *
@@ -55,6 +56,7 @@ export const PATCH = handle(async (request: Request) => {
     ...(goalAmount !== null ? { goalAmount } : {}),
     ...(monthlyYieldBasisPoints !== null ? { monthlyYieldBasisPoints } : {}),
     ...(includeInTotals !== null ? { includeInTotals } : {}),
+    ...(includeInFreeToSpend !== null ? { includeInFreeToSpend } : {}),
     ...(openingBalance !== null ? { openingBalance } : {}),
   });
 

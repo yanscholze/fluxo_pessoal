@@ -12,9 +12,9 @@ import type { LocalDate } from "../../time/local-date.ts";
 /**
  * Natureza da conta.
  *
- * A distinção que importa é entre **gastável** e **reservado**: investimento é
- * patrimônio, mas não é dinheiro pensado para gastar, e por isso não entra no
- * "livre para gastar".
+ * Descreve a natureza da conta. A escolha de usar seu saldo no "livre para
+ * gastar" é independente: um investimento pode guardar dinheiro do dia a dia,
+ * e uma conta corrente pode manter uma reserva que não deve ser gasta.
  */
 export type AccountKind = "checking" | "savings" | "cash" | "benefit" | "investment";
 
@@ -46,6 +46,12 @@ export type Account = {
    * para gastar". Serve para contas usadas só como anotação.
    */
   readonly includeInTotals: boolean;
+  /**
+   * Escolha explícita de incluir o saldo e as previsões no livre para gastar.
+   * Ausente em dados antigos: preserva a seleção histórica pelo tipo da conta.
+   * Não substitui includeInTotals, moeda ou estado de arquivamento.
+   */
+  readonly includeInFreeToSpend?: boolean;
   /** Conta protegida não pode ser excluída (ex.: a reserva de emergência). */
   readonly isProtected: boolean;
   readonly color: string;
@@ -53,20 +59,15 @@ export type Account = {
   readonly archivedAt: string | null;
 };
 
-/** Contas cujo dinheiro está disponível para gastar no dia a dia. */
+/** Padrão histórico, usado apenas quando não há uma escolha explícita. */
 const SPENDABLE_KINDS: readonly AccountKind[] = ["checking", "cash", "benefit"];
 
-/**
- * Dinheiro de verdade: o que paga qualquer coisa.
- *
- * Benefício fica de fora porque não é fungível. Vale-alimentação compra comida
- * e nada mais — somá-lo ao saldo da conta produz um "livre para gastar" que
- * promete um dinheiro que não paga aluguel nem fatura.
- */
-const MONEY_KINDS: readonly AccountKind[] = ["checking", "cash"];
+export function includesInFreeToSpend(account: Pick<Account, "kind" | "includeInFreeToSpend">): boolean {
+  return account.includeInFreeToSpend ?? SPENDABLE_KINDS.includes(account.kind);
+}
 
 export function isSpendable(account: Account): boolean {
-  return SPENDABLE_KINDS.includes(account.kind);
+  return includesInFreeToSpend(account);
 }
 
 export function isInvestment(account: Account): boolean {
@@ -80,8 +81,8 @@ export function isActive(account: Account): boolean {
 /**
  * Contas que compõem o "saldo líquido" — a base do livre para gastar.
  *
- * Só conta corrente, dinheiro e benefício, em reais, marcadas para entrar nos
- * totais e não arquivadas. Poupança e investimento ficam de fora de propósito.
+ * Usa a escolha de cada conta, mantendo o recorte por reais, participação nos
+ * totais e estado ativo. Dados antigos sem a escolha mantêm o padrão pelo tipo.
  */
 export function liquidAccounts(accounts: readonly Account[]): Account[] {
   return accounts.filter(
@@ -97,7 +98,7 @@ export function liquidAccounts(accounts: readonly Account[]): Account[] {
  * o que fazia o "livre para gastar" prometer mais do que existe.
  */
 export function moneyAccounts(accounts: readonly Account[]): Account[] {
-  return liquidAccounts(accounts).filter((account) => MONEY_KINDS.includes(account.kind));
+  return liquidAccounts(accounts).filter((account) => account.kind !== "benefit");
 }
 
 export function benefitAccounts(accounts: readonly Account[]): Account[] {

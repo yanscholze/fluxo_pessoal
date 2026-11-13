@@ -8,6 +8,7 @@
  */
 
 import { competenceForPurchase } from "@fluxo/core/domain/card/invoice-cycle.ts";
+import { includesInFreeToSpend, type AccountKind } from "@fluxo/core/domain/account/types.ts";
 import { newId } from "@fluxo/core/kernel/id.ts";
 import { cents } from "@fluxo/core/kernel/money.ts";
 import { competenceOf } from "@fluxo/core/time/competence.ts";
@@ -291,20 +292,23 @@ function wireShape(registro: LocalTransaction): Record<string, unknown> {
 export async function listAccounts(): Promise<LocalAccount[]> {
   const database = await openDatabase();
   const linhas = await database.getAllAsync<
-    Omit<LocalAccount, "openingBalance" | "includeInTotals"> & {
+    Omit<LocalAccount, "openingBalance" | "includeInTotals" | "includeInFreeToSpend"> & {
       openingBalanceCents: number;
       includeInTotals: number;
+      includeInFreeToSpend: number;
     }
   >(
     `SELECT id, name, kind, currency, opening_balance_cents AS openingBalanceCents,
-            include_in_totals AS includeInTotals, color, archived_at AS archivedAt
+            include_in_totals AS includeInTotals,
+            include_in_free_to_spend AS includeInFreeToSpend, color, archived_at AS archivedAt
        FROM accounts WHERE archived_at IS NULL ORDER BY name`,
   );
-  return linhas.map(({ openingBalanceCents, includeInTotals, ...conta }) => ({
+  return linhas.map(({ openingBalanceCents, includeInTotals, includeInFreeToSpend, ...conta }) => ({
     ...conta,
     openingBalance: cents(openingBalanceCents),
     // O SQLite guarda booleano como inteiro; a conversão acontece na borda.
     includeInTotals: includeInTotals !== 0,
+    includeInFreeToSpend: includeInFreeToSpend !== 0,
   }));
 }
 
@@ -432,12 +436,13 @@ export async function applyServerCatalog(catalog: {
     for (const conta of catalog.accounts) {
       await transacao.runAsync(
         `INSERT INTO accounts
-           (id, name, kind, currency, opening_balance_cents, include_in_totals, color, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           (id, name, kind, currency, opening_balance_cents, include_in_totals, include_in_free_to_spend, color, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, kind = excluded.kind, currency = excluded.currency,
            opening_balance_cents = excluded.opening_balance_cents,
            include_in_totals = excluded.include_in_totals,
+           include_in_free_to_spend = excluded.include_in_free_to_spend,
            color = excluded.color, archived_at = excluded.archived_at`,
         [
           String(conta.id),
@@ -448,6 +453,10 @@ export async function applyServerCatalog(catalog: {
           // Ausente é `true`: um servidor antigo que não manda o campo não pode
           // fazer as contas sumirem do saldo do aparelho.
           conta.includeInTotals === false ? 0 : 1,
+          includesInFreeToSpend({
+            kind: String(conta.kind ?? "checking") as AccountKind,
+            includeInFreeToSpend: typeof conta.includeInFreeToSpend === "boolean" ? conta.includeInFreeToSpend : undefined,
+          }) ? 1 : 0,
           (conta.color as string | null) ?? null,
           (conta.archivedAt as string | null) ?? null,
         ],

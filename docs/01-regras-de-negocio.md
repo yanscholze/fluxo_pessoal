@@ -98,37 +98,40 @@ nunca previstos).
 
 ### Livre para gastar
 
-É o **menor saldo projetado** do horizonte:
+É a sobra consolidada do ciclo:
 
 ```
-percorre a linha do tempo a partir do saldo de hoje,
-somando cada receita prevista e subtraindo cada compromisso
-na data em que ele acontece — inclusive o pagamento de cada
-fatura em aberto, na data do vencimento.
-A folga é o ponto mais baixo dessa curva.
+saldo disponível + entradas previstas do ciclo
+− faturas em aberto ajustadas pelas exclusões
+− recorrências, assinaturas e demais saídas previstas do ciclo
 ```
 
-**Não** é `saldo + entradas − saídas` do período. Essa soma ignora a ordem dos
-fatos, e a ordem é o problema inteiro: com R$ 3.000 na conta, R$ 6.000 de
-salário no dia 8 e R$ 1.950 de aluguel no dia 10, a soma responde R$ 7.050 — e
-gastar R$ 7.050 no dia 5 deixa a conta negativa até o dia 8. Dinheiro que entra
-depois de uma conta vencer não paga essa conta.
-
-O horizonte vai até o fim do **ciclo de fatura** do cartão de referência ou até
-o último vencimento em aberto, o que for mais longe — é o que garante que o
-salário que cai antes do vencimento seja contado junto com a fatura, em vez de
-um dos dois ficar de fora por acaso do calendário.
+O período é o **ciclo de fatura** do cartão principal, de um fechamento ao
+seguinte; sem cartão, usa o mês civil. As faturas ativa e anteriores ainda em
+aberto continuam sendo obrigações. O total é uma projeção do ciclo, não uma
+garantia de liquidez em cada dia; o fluxo futuro mostra os vencimentos.
 
 O resultado pode ser **negativo**: significa que os compromissos já assumidos
 não cabem no que existe mais o que está por entrar.
 
-"Saldo líquido" soma apenas contas corrente / dinheiro / benefício em BRL, e
-ignora contas marcadas como fora dos totais. Investimento não entra: não é
-dinheiro pensado para gastar.
+Cada conta tem duas escolhas independentes do seu **tipo**:
+
+- **Somar no saldo total e no patrimônio**: controla sua participação geral.
+- **Incluir no Livre para gastar**: inclui seu saldo e suas previsões na folga.
+
+Uma conta de investimento pode conter dinheiro de uso diário e entrar no
+livre; uma conta corrente pode guardar uma reserva e ficar fora dele. Contas
+fora dos totais, arquivadas ou em outra moeda não entram no livre. O V.A
+participa do total e continua detalhado à parte. Alterar o tipo não muda uma
+escolha já salva. A atualização de bancos anteriores preserva a seleção antiga
+até o usuário decidir mudá-la.
 
 Fatura em aberto conta **só o que existe no razão**. Uma assinatura recorrente
 ainda não lançada é gasto futuro, não dívida de hoje: somá-la criaria um saldo
-devedor sem lançamento para quitar, que nenhum pagamento zera.
+devedor sem lançamento para quitar, que nenhum pagamento zera. A previsão da
+assinatura compromete o livre separadamente, uma única vez. Categorias marcadas
+para não pesar continuam excluídas das previsões e da parcela considerada das
+faturas.
 
 ### Reserva de emergência
 

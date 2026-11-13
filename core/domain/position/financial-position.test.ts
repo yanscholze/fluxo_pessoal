@@ -398,6 +398,89 @@ describe("bolsos separados: dinheiro e benefício", () => {
   });
 });
 
+describe("escolha de contas no Livre para gastar", () => {
+  const hoje = localDate("2026-08-05");
+  const contas = [
+    conta({ id: CONTA, kind: "checking", openingBalance: cents(100_000), includeInFreeToSpend: true }),
+    conta({ id: "aplicacao-diaria", kind: "investment", openingBalance: cents(200_000), includeInFreeToSpend: true }),
+    conta({ id: RESERVA, kind: "checking", openingBalance: cents(300_000), includeInFreeToSpend: false }),
+    conta({ id: "vale", kind: "benefit", openingBalance: cents(50_000), includeInFreeToSpend: true }),
+  ];
+
+  it("inclui o investimento escolhido e exclui a conta corrente reservada sem duplicar patrimônio", () => {
+    const input = { accounts: contas, cards: [], entries: [], today: hoje };
+    const position = computeFinancialPosition(input);
+
+    assert.equal(position.currentBalance, cents(350_000));
+    assert.equal(position.freeToSpend.amount, cents(350_000));
+    assert.equal(position.benefitFreeToSpend.amount, cents(50_000));
+    assert.equal(computeFreeToSpend(input, "money").amount, cents(300_000));
+    assert.equal(position.investments, cents(300_000));
+    assert.equal(position.totalAssets, cents(650_000));
+    assert.equal(position.netWorth, cents(650_000));
+  });
+
+  it("usa a escolha também nas entradas e despesas previstas", () => {
+    const entries = razao(
+      lancamento({ id: "entrada-aplicacao", kind: "income", amount: cents(20_000), state: "planned",
+        origin: accountParty("aplicacao-diaria"), occurredOn: localDate("2026-08-10") }),
+      lancamento({ id: "saida-aplicacao", kind: "expense", amount: cents(5_000), state: "planned",
+        origin: accountParty("aplicacao-diaria"), occurredOn: localDate("2026-08-11") }),
+      lancamento({ id: "entrada-reserva", kind: "income", amount: cents(90_000), state: "planned",
+        origin: accountParty(RESERVA), occurredOn: localDate("2026-08-10") }),
+      lancamento({ id: "saida-reserva", kind: "expense", amount: cents(40_000), state: "planned",
+        origin: accountParty(RESERVA), occurredOn: localDate("2026-08-11") }),
+    );
+    const position = computeFinancialPosition({ accounts: contas, cards: [], entries, today: hoje });
+
+    assert.equal(position.freeToSpend.pendingIncome, cents(20_000));
+    assert.equal(position.freeToSpend.otherCommitments, cents(5_000));
+    assert.equal(position.freeToSpend.amount, cents(365_000));
+    assert.equal(position.totalAssets, cents(650_000), "previsão não muda patrimônio atual");
+  });
+
+  it("trocar a natureza da conta não altera uma escolha explícita", () => {
+    const before = computeFinancialPosition({ accounts: contas, cards: [], entries: [], today: hoje });
+    const changed = contas.map((account) => ({
+      ...account,
+      kind: account.id === "aplicacao-diaria" ? "cash" as const : account.id === RESERVA ? "investment" as const : account.kind,
+    }));
+
+    assert.deepEqual(computeFinancialPosition({ accounts: changed, cards: [], entries: [], today: hoje }), before);
+  });
+
+  for (const state of ["confirmed", "planned"] as const) {
+    it(`transferência ${state} entre contas incluídas é neutra`, () => {
+      const transfer = lancamento({ id: `transfer-${state}`, kind: "transfer", amount: cents(25_000), state,
+        categoryId: null, origin: accountParty(CONTA), destination: accountParty("aplicacao-diaria") });
+      const before = computeFinancialPosition({ accounts: contas, cards: [], entries: [], today: hoje });
+      const after = computeFinancialPosition({ accounts: contas, cards: [], entries: razao(transfer), today: hoje });
+
+      assert.equal(after.freeToSpend.amount, before.freeToSpend.amount);
+      assert.equal(after.currentBalance, before.currentBalance);
+      assert.equal(after.totalAssets, before.totalAssets);
+      assert.equal(after.netWorth, before.netWorth);
+    });
+
+    for (const direction of ["reserve", "release"] as const) {
+      it(`transferência ${state} para ${direction === "reserve" ? "fora" : "dentro"} da folga considera apenas a perna incluída`, () => {
+        const transfer = lancamento({ id: `${direction}-${state}`, kind: "transfer", amount: cents(25_000), state,
+          categoryId: null,
+          origin: accountParty(direction === "reserve" ? CONTA : RESERVA),
+          destination: accountParty(direction === "reserve" ? RESERVA : CONTA) });
+        const before = computeFinancialPosition({ accounts: contas, cards: [], entries: [], today: hoje });
+        const after = computeFinancialPosition({ accounts: contas, cards: [], entries: razao(transfer), today: hoje });
+        const delta = direction === "reserve" ? -25_000 : 25_000;
+
+        assert.equal(after.freeToSpend.amount, before.freeToSpend.amount + delta);
+        assert.equal(after.currentBalance, before.currentBalance + (state === "confirmed" ? delta : 0));
+        assert.equal(after.totalAssets, before.totalAssets);
+        assert.equal(after.netWorth, before.netWorth);
+      });
+    }
+  }
+});
+
 describe("categoria fora do livre para gastar", () => {
   /*
    * A marcação existia mas só alcançava previsto em conta: a fatura entrava

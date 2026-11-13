@@ -9,7 +9,7 @@
 
 import { and, count, eq, isNull, max, or } from "drizzle-orm";
 
-import { SUPPORTED_CURRENCIES, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
+import { SUPPORTED_CURRENCIES, includesInFreeToSpend, type AccountKind, type CurrencyCode } from "../../core/domain/account/types.ts";
 import { assertValidCycle, type CycleConfig, scheduleFor } from "../../core/domain/card/invoice-cycle.ts";
 import { conflict, duplicate, notFound, validationError } from "../../core/kernel/errors.ts";
 import { bytesFromDataUrl } from "../../core/kernel/data-url.ts";
@@ -43,6 +43,7 @@ export type AccountInput = {
   readonly goalAmount?: Cents | null;
   readonly monthlyYieldBasisPoints?: number | null;
   readonly includeInTotals?: boolean;
+  readonly includeInFreeToSpend?: boolean;
   readonly color?: string | null;
 };
 
@@ -84,6 +85,7 @@ export async function createAccount(userId: string, input: AccountInput, now: Da
     goalCents: (input.goalAmount ?? null) as number | null,
     monthlyYieldBasisPoints: input.monthlyYieldBasisPoints ?? 0,
     includeInTotals: input.includeInTotals ?? true,
+    includeInFreeToSpend: includesInFreeToSpend({ kind: input.kind, includeInFreeToSpend: input.includeInFreeToSpend }),
     color: input.color ?? "#6b7280",
     sortOrder: (order?.value ?? -1) + 1,
   });
@@ -118,6 +120,7 @@ export async function updateAccount(
         ? { monthlyYieldBasisPoints: input.monthlyYieldBasisPoints ?? 0 }
         : {}),
       ...(input.includeInTotals !== undefined ? { includeInTotals: input.includeInTotals } : {}),
+      ...(input.includeInFreeToSpend !== undefined ? { includeInFreeToSpend: input.includeInFreeToSpend } : {}),
       ...(input.color !== undefined ? { color: input.color ?? "#6b7280" } : {}),
       updatedAt: now.toISOString(),
     })

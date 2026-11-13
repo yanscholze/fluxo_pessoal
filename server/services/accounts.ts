@@ -6,7 +6,7 @@
  * alguém gastar dinheiro que ainda não recebeu.
  */
 
-import { liquidAccounts } from "../../core/domain/account/types.ts";
+import { includesInFreeToSpend, liquidAccounts } from "../../core/domain/account/types.ts";
 import { CONSUMPTION, accountBalance, flow, projectedAccountBalance } from "../../core/domain/ledger/balance.ts";
 import type { Cents } from "../../core/kernel/money.ts";
 import { type Competence, competenceOf, range, shift } from "../../core/time/competence.ts";
@@ -22,6 +22,7 @@ export type AccountView = {
   readonly currency: string;
   readonly color: string;
   readonly includeInTotals: boolean;
+  readonly includeInFreeToSpend: boolean;
   readonly isProtected: boolean;
   readonly balanceCents: number;
   /** Saldo somando o que já está previsto até o fim do mês. */
@@ -83,6 +84,7 @@ export async function buildAccountsView(userId: string, now: Date = new Date()):
       currency: account.currency,
       color: account.color,
       includeInTotals: account.includeInTotals,
+      includeInFreeToSpend: includesInFreeToSpend(account),
       isProtected: account.isProtected,
       balanceCents: saldo,
       projectedCents: projectedAccountBalance(entries, account.id, fimDoMes, account.openingBalance),

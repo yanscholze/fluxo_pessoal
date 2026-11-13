@@ -42,6 +42,7 @@ import conversasIa from "./migrations/0026_ai-conversations.sql?raw";
 import notificacoes from "./migrations/0027_notifications.sql?raw";
 import inteligenciaPersistida from "./migrations/0028_persisted-financial-intelligence.sql?raw";
 import pontosDeNotificacao from "./migrations/0029_notification-checkpoints.sql?raw";
+import escolhaDoSaldo from "./migrations/0030_account-free-to-spend.sql?raw";
 
 type Migration = {
   readonly id: number;
@@ -135,6 +136,7 @@ const TODO_O_SQL: readonly string[] = [
   notificacoes,
   inteligenciaPersistida,
   pontosDeNotificacao,
+  escolhaDoSaldo,
 ];
 
 /**
@@ -233,6 +235,7 @@ const MIGRATIONS: readonly Migration[] = [
   { id: 27, name: "notificacoes", run: fromSql(notificacoes) },
   { id: 28, name: "inteligencia-financeira-persistida", run: fromSql(inteligenciaPersistida) },
   { id: 29, name: "pontos-de-notificacao", run: fromSql(pontosDeNotificacao) },
+  { id: 30, name: "account-free-to-spend", run: fromSql(escolhaDoSaldo) },
 ];
 
 let applied: Promise<void> | null = null;

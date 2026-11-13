@@ -26,6 +26,7 @@ type AccountRow = {
   goalCents: number | null;
   monthlyYieldBasisPoints: number;
   includeInTotals: boolean;
+  includeInFreeToSpend: boolean;
   isProtected: boolean;
   color: string;
   sortOrder: number;
@@ -45,6 +46,7 @@ export function toAccount(row: AccountRow): Account {
     goalAmount: row.goalCents === null ? null : cents(row.goalCents),
     monthlyYieldBasisPoints: row.monthlyYieldBasisPoints,
     includeInTotals: row.includeInTotals,
+    includeInFreeToSpend: row.includeInFreeToSpend,
     isProtected: row.isProtected,
     color: row.color,
     sortOrder: row.sortOrder,

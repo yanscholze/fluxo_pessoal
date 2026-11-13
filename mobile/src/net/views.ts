@@ -235,6 +235,8 @@ export type ContaView = {
   readonly color: string;
   readonly balanceCents: number;
   readonly includeInTotals: boolean;
+  /** Ausente somente em respostas de versões anteriores do servidor. */
+  readonly includeInFreeToSpend?: boolean;
 };
 
 export type MetaView = {

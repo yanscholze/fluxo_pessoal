@@ -20,6 +20,8 @@ export function NewAccount() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [issues, setIssues] = useState<Record<string, string>>({});
+  const [nosTotais, setNosTotais] = useState(true);
+  const [noLivre, setNoLivre] = useState(true);
 
   async function enviar(evento: React.FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -39,7 +41,8 @@ export function NewAccount() {
         openingBalance: dados.get("openingBalance") || "0",
         openedOn: dados.get("openedOn") || null,
         goalAmount: dados.get("goalAmount") || null,
-        includeInTotals: dados.get("includeInTotals") === "on",
+        includeInTotals: nosTotais,
+        includeInFreeToSpend: noLivre,
       }),
     });
 
@@ -143,12 +146,23 @@ export function NewAccount() {
           </Campo>
 
           <label className="flex items-start gap-2.5">
-            <input name="includeInTotals" type="checkbox" defaultChecked className="mt-0.5" />
+            <input name="includeInTotals" type="checkbox" checked={nosTotais} onChange={(evento) => setNosTotais(evento.target.checked)} className="mt-0.5" />
             <span className="text-body-sm text-ink">
               Somar nos totais
               <span className="mt-0.5 block text-caption text-ink-subtle">
                 Desmarque para contas usadas só como anotação — elas ficam fora do saldo total e do livre
                 para gastar.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2.5">
+            <input name="includeInFreeToSpend" type="checkbox" checked={noLivre} disabled={!nosTotais} onChange={(evento) => setNoLivre(evento.target.checked)} className="mt-0.5" />
+            <span className="text-body-sm text-ink">
+              Incluir no Livre para gastar
+              <span className="mt-0.5 block text-caption text-ink-subtle">
+                Escolha se o saldo e as previsões desta conta ficam disponíveis para gastar,
+                independentemente do tipo. Para reservas, desmarque esta opção.
               </span>
             </span>
           </label>
