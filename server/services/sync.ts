@@ -393,6 +393,7 @@ async function pullCatalog(userId: string, cursor: SyncCursor | null): Promise<S
       // gastar. Sem este sinalizador o aplicativo somaria contas que o site
       // deixa de fora, e os dois mostrariam saldos diferentes.
       includeInTotals: conta.includeInTotals,
+      includeInFreeToSpend: conta.includeInFreeToSpend,
       color: conta.color,
       archivedAt: conta.archivedAt,
     })),

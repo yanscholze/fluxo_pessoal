@@ -129,7 +129,8 @@ export function FreeToSpend({
             />
             <p className="mt-3 border-t border-line pt-3 text-caption text-ink-subtle">
               Saldo disponível + entradas previstas − faturas em aberto − contas
-              previstas. Categorias marcadas para não pesar ficam fora da conta.
+              previstas. Contas escolhidas para ficar fora do livre e categorias
+              marcadas para não pesar não entram nessa conta.
             </p>
           </div>
         </details>

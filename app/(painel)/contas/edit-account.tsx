@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Editar uma conta: nome, tipo e cor.
+ * Editar uma conta: identidade e participação nos saldos.
  *
- * O tipo decide se o saldo é de uso corrente ou reserva. Corrigir a
- * classificação usa o mesmo cadastro, sem recriar conta ou lançamentos.
+ * O usuário escolhe se o saldo participa dos totais e do livre para gastar,
+ * independentemente do tipo, sem recriar conta ou lançamentos.
  *
  * Cadastrar era possível; corrigir, não — nem aqui, nem no celular. Um nome
  * digitado errado ficava errado, e a única saída seria apagar a conta e perder
@@ -29,7 +29,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Button, Field, Input, Select } from "../../ui/controls.tsx";
+import { Button, Checkbox, Field, Input, Select } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/dialog.tsx";
 import { Pencil } from "../../ui/icons.tsx";
 import { Notice, join } from "../../ui/primitives.tsx";
@@ -52,17 +52,23 @@ export function EditAccount({
   name,
   kind,
   color,
+  includeInTotals,
+  includeInFreeToSpend,
 }: {
   accountId: string;
   name: string;
   kind: string;
   color: string;
+  includeInTotals: boolean;
+  includeInFreeToSpend: boolean;
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [nome, setNome] = useState(name);
   const [tipo, setTipo] = useState(kind);
   const [cor, setCor] = useState(color || CORES[8]);
+  const [nosTotais, setNosTotais] = useState(includeInTotals);
+  const [noLivre, setNoLivre] = useState(includeInFreeToSpend);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -79,7 +85,7 @@ export function EditAccount({
       const resposta = await fetch(`/api/v1/accounts/${accountId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: nome.trim(), kind: tipo, color: cor }),
+        body: JSON.stringify({ name: nome.trim(), kind: tipo, color: cor, includeInTotals: nosTotais, includeInFreeToSpend: noLivre }),
       });
 
       if (!resposta.ok) {
@@ -107,6 +113,8 @@ export function EditAccount({
           setNome(name);
           setTipo(kind);
           setCor(color || CORES[8]);
+          setNosTotais(includeInTotals);
+          setNoLivre(includeInFreeToSpend);
           setErro(null);
           setAberto(true);
         }}
@@ -142,7 +150,7 @@ export function EditAccount({
           <Field
             label="Tipo da conta"
             htmlFor={`conta-tipo-${accountId}`}
-            hint="Conta corrente, dinheiro e benefício entram no Livre para gastar quando incluídos nos totais. Poupança e investimento ficam reservados, fora desse valor."
+            hint="O tipo identifica a conta. A participação nos saldos é uma escolha separada, abaixo."
           >
             <Select
               id={`conta-tipo-${accountId}`}
@@ -157,6 +165,25 @@ export function EditAccount({
               <option value="investment">Investimento</option>
             </Select>
           </Field>
+
+          <div className="space-y-3 rounded-md border border-line p-3">
+            <Checkbox
+              label="Somar no saldo total e no patrimônio"
+              hint="Desmarque para deixar esta conta fora dos totais do Fluxo."
+              checked={nosTotais}
+              disabled={enviando}
+              onChange={(evento) => setNosTotais(evento.target.checked)}
+            />
+            <Checkbox
+              label="Incluir no Livre para gastar"
+              hint={nosTotais
+                ? "Inclui o saldo e as previsões desta conta, independentemente do tipo. Desmarque para manter esse dinheiro reservado."
+                : "Ative a participação nos totais para incluir esta conta no Livre para gastar."}
+              checked={noLivre}
+              disabled={!nosTotais || enviando}
+              onChange={(evento) => setNoLivre(evento.target.checked)}
+            />
+          </div>
 
           <Field
             label="Cor"

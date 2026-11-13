@@ -49,7 +49,11 @@ export function AccountsPanel({ accounts }: { accounts: Dashboard["accounts"] })
                 subtitle={tipo?.label ?? account.institution}
                 value={money(account.balanceCents, { currency: account.currency })}
                 valueTone={account.balanceCents < 0 ? "negative" : "neutral"}
-                badge={account.includeInTotals ? undefined : <Badge tone="neutral">fora dos totais</Badge>}
+                badge={!account.includeInTotals
+                  ? <Badge tone="neutral">fora dos totais</Badge>
+                  : !account.includeInFreeToSpend
+                    ? <Badge tone="neutral">fora do livre</Badge>
+                    : undefined}
               />
             );
           })}

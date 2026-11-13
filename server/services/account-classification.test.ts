@@ -7,10 +7,10 @@ import { ambiente, zerar } from "../testing/cenario.ts";
 
 const NOW = new Date("2026-11-05T12:00:00Z");
 
-describe("classificação de conta e Livre para gastar", () => {
+describe("escolha da conta no Livre para gastar", () => {
   beforeEach(() => zerar());
 
-  it("reclassifica dinheiro de uso diário sem criar lançamentos nem alterar o patrimônio", async () => {
+  it("inclui e exclui o saldo sem depender do tipo nem criar lançamentos", async () => {
     const { createAccount, createCategory, updateAccount } = await import("./catalog.ts");
     const { recordTransaction } = await import("./transactions.ts");
     const { createRecurrence } = await import("./recurrences.ts");
@@ -69,9 +69,11 @@ describe("classificação de conta e Livre para gastar", () => {
     assert.equal(before.position.investmentsCents, 280_000);
     assert.equal(before.position.totalAssetsCents, 330_000);
 
-    await updateAccount(owner.userId, accountId, { kind: "checking" }, NOW);
+    await updateAccount(owner.userId, accountId, { includeInFreeToSpend: true }, NOW);
 
     const after = await buildDashboard(owner.userId, NOW);
+    assert.equal(after.accounts.find((account) => account.id === accountId)?.kind, "investment", "mantém o tipo original");
+    assert.equal(after.accounts.find((account) => account.id === accountId)?.includeInFreeToSpend, true);
     assert.equal(after.accounts.find((account) => account.id === accountId)?.balanceCents, 280_000);
     assert.equal(after.freeToSpend.liquidBalanceCents, 330_000, "usa o saldo real, incluindo o histórico existente");
     assert.equal(after.freeToSpend.pendingIncomeCents, 70_000, "a recorrência entra uma vez; a previsão excluída não entra");
@@ -81,10 +83,12 @@ describe("classificação de conta e Livre para gastar", () => {
     assert.equal(after.position.investmentsCents, 0);
     assert.equal(after.position.totalAssetsCents, before.position.totalAssetsCents);
     assert.equal(after.position.netWorthCents, before.position.netWorthCents);
-    assert.deepEqual(await loadLedger(owner.userId), ledgerBefore, "reclassificar não move dinheiro");
+    assert.deepEqual(await loadLedger(owner.userId), ledgerBefore, "alterar a escolha não move dinheiro");
     assert.deepEqual(await listTransactions(owner.userId), transactionsBefore, "não gera ajustes de saldo nem duplica recebimentos");
 
-    await updateAccount(owner.userId, accountId, { kind: "investment" }, NOW);
+    await updateAccount(owner.userId, accountId, { kind: "checking" }, NOW);
+    assert.deepEqual((await buildDashboard(owner.userId, NOW)).freeToSpend, after.freeToSpend, "editar o tipo preserva a escolha explícita");
+    await updateAccount(owner.userId, accountId, { includeInFreeToSpend: false }, NOW);
     const restored = await buildDashboard(owner.userId, NOW);
     assert.deepEqual(restored.freeToSpend, before.freeToSpend, "voltar à reserva retira saldo e previsão da folga");
     assert.deepEqual(restored.position, before.position);
@@ -92,7 +96,7 @@ describe("classificação de conta e Livre para gastar", () => {
     assert.deepEqual(await listTransactions(owner.userId), transactionsBefore);
   });
 
-  it("preserva a escolha de excluir uma conta dos totais ao mudar seu tipo", async () => {
+  it("preserva a exclusão global dos totais mesmo com participação no livre marcada", async () => {
     const { createAccount, updateAccount } = await import("./catalog.ts");
     const { buildDashboard } = await import("./dashboard.ts");
     const owner = await ambiente(50_000);
@@ -102,7 +106,7 @@ describe("classificação de conta e Livre para gastar", () => {
     }, NOW);
     const before = await buildDashboard(owner.userId, NOW);
 
-    await updateAccount(owner.userId, accountId, { kind: "checking" }, NOW);
+    await updateAccount(owner.userId, accountId, { includeInFreeToSpend: true }, NOW);
 
     const after = await buildDashboard(owner.userId, NOW);
     assert.equal(after.accounts.find((account) => account.id === accountId)?.includeInTotals, false);
@@ -110,7 +114,7 @@ describe("classificação de conta e Livre para gastar", () => {
     assert.deepEqual(after.position, before.position);
   });
 
-  it("não permite reclassificar uma conta pertencente a outro usuário", async () => {
+  it("não permite alterar a participação de uma conta pertencente a outro usuário", async () => {
     const { signUp } = await import("./auth.ts");
     const { createAccount, updateAccount } = await import("./catalog.ts");
     const { findAccount } = await import("../repositories/catalog.ts");
@@ -124,7 +128,7 @@ describe("classificação de conta e Livre para gastar", () => {
     }, NOW);
     const before = await findAccount(owner.userId, accountId);
 
-    await assert.rejects(() => updateAccount(other.id, accountId, { kind: "checking" }, NOW), /Conta/);
+    await assert.rejects(() => updateAccount(other.id, accountId, { includeInFreeToSpend: true }, NOW), /Conta/);
 
     assert.deepEqual(await findAccount(owner.userId, accountId), before);
     assert.equal(await findAccount(other.id, accountId), null);

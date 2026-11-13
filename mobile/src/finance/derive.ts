@@ -184,6 +184,7 @@ function toDomainAccount(conta: LocalAccount, userId: string): Account {
     goalAmount: null,
     monthlyYieldBasisPoints: 0,
     includeInTotals: conta.includeInTotals,
+    includeInFreeToSpend: conta.includeInFreeToSpend,
     isProtected: false,
     color: conta.color ?? "#000000",
     sortOrder: 0,

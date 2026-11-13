@@ -6,7 +6,7 @@
  * dois estaria errado e o usuário não teria como saber qual.
  */
 
-import { isInvestment, liquidAccounts } from "../../core/domain/account/types.ts";
+import { includesInFreeToSpend, liquidAccounts } from "../../core/domain/account/types.ts";
 import { activeCompetence, dueDateFor } from "../../core/domain/card/invoice-cycle.ts";
 import { CONSUMPTION, accountBalance, flow, invoiceTotals, overdueCompetences } from "../../core/domain/ledger/balance.ts";
 import { computeFinancialPosition } from "../../core/domain/position/financial-position.ts";
@@ -136,10 +136,10 @@ function computeReserve(
   competence: Competence,
   today: LocalDate,
 ): HealthView["reserve"] {
-  // A reserva é o que está em conta de investimento ou poupança: o dinheiro da
-  // conta corrente é o do mês, não a reserva.
+  // O usuário escolhe o que fica reservado. Uma conta remunerada pode ser
+  // dinheiro de uso diário e uma conta corrente pode guardar a reserva.
   const reservado = accounts
-    .filter((account) => isInvestment(account) && account.includeInTotals && account.currency === "BRL")
+    .filter((account) => !includesInFreeToSpend(account) && account.includeInTotals && account.currency === "BRL")
     .reduce((soma, account) => soma + accountBalance(entries, account.id, today, account.openingBalance), 0);
 
   const essenciais = new Set(

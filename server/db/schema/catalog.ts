@@ -31,6 +31,8 @@ export const accounts = sqliteTable(
     goalCents: integer("goal_cents"),
     monthlyYieldBasisPoints: integer("monthly_yield_basis_points").notNull().default(0),
     includeInTotals: integer("include_in_totals", { mode: "boolean" }).notNull().default(true),
+    /** Escolha do usuário, independente do tipo da conta. */
+    includeInFreeToSpend: integer("include_in_free_to_spend", { mode: "boolean" }).notNull().default(false),
     isProtected: integer("is_protected", { mode: "boolean" }).notNull().default(false),
     color: text("color").notNull().default("#6b7280"),
     sortOrder: integer("sort_order").notNull().default(0),

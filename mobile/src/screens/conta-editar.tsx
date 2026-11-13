@@ -22,10 +22,11 @@
  */
 
 import { useState } from "react";
-import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Switch, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { cents, parseMoney } from "@fluxo/core/kernel/money.ts";
+import { includesInFreeToSpend, type AccountKind } from "@fluxo/core/domain/account/types.ts";
 import { todayIn } from "@fluxo/core/time/local-date.ts";
 import { call } from "../net/client.ts";
 import type { ContaView } from "../net/views.ts";
@@ -62,6 +63,11 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
 
   const [nome, setNome] = useState(conta.name);
   const [cor, setCor] = useState(conta.color || CORES[8]);
+  const [incluirNosTotais, setIncluirNosTotais] = useState(conta.includeInTotals);
+  const livreGravado = includesInFreeToSpend({
+    kind: conta.kind as AccountKind, includeInFreeToSpend: conta.includeInFreeToSpend,
+  });
+  const [incluirNoLivre, setIncluirNoLivre] = useState(livreGravado);
   const [real, setReal] = useState((conta.balanceCents / 100).toFixed(2).replace(".", ","));
 
   const [salvando, setSalvando] = useState(false);
@@ -69,7 +75,8 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
   const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<string | null>(null);
 
-  const mudouIdentidade = nome.trim() !== conta.name || cor !== (conta.color || CORES[8]);
+  const mudouConta = nome.trim() !== conta.name || cor !== (conta.color || CORES[8]) ||
+    incluirNosTotais !== conta.includeInTotals || incluirNoLivre !== livreGravado;
 
   /*
    * A cor escolhida no site entra na fileira.
@@ -98,7 +105,7 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
   const diferenca = informado === null ? 0 : informado - conta.balanceCents;
   const entrada = diferenca > 0;
 
-  async function salvarIdentidade() {
+  async function salvarConta() {
     if (nome.trim().length === 0) {
       setErro("A conta precisa de um nome.");
       return;
@@ -112,7 +119,10 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
         baseUrl: credentials.baseUrl,
         token: credentials.token,
         method: "PATCH",
-        body: { name: nome.trim(), color: cor },
+        body: {
+          name: nome.trim(), color: cor,
+          includeInTotals: incluirNosTotais, includeInFreeToSpend: incluirNoLivre,
+        },
       });
       await synchronize();
       setFeito("Conta atualizada.");
@@ -229,11 +239,48 @@ export function ContaEditarScreen({ conta, onClose }: { conta: ContaView; onClos
             })}
           </View>
 
+          <View style={{ marginTop: space.lg, gap: space.md }}>
+            <Label>Participação nos cálculos</Label>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 48 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Body>Incluir nos totais</Body>
+                <Small>Participa do saldo e do patrimônio. Desativar também retira a conta do Livre para gastar.</Small>
+              </View>
+              <Switch
+                accessibilityLabel="Incluir conta nos totais"
+                value={incluirNosTotais}
+                onValueChange={setIncluirNosTotais}
+                disabled={salvando}
+                trackColor={{ false: palette.surfaceInset, true: palette.accent }}
+                style={{ minHeight: 48 }}
+              />
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 48 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Body>Incluir no Livre para gastar</Body>
+                <Small>
+                  {incluirNosTotais
+                    ? "Conta o saldo disponível e os movimentos previstos, sem mudar o tipo da conta."
+                    : "Ative a participação nos totais para alterar esta opção. A escolha anterior é preservada."}
+                </Small>
+              </View>
+              <Switch
+                accessibilityLabel="Incluir conta no Livre para gastar"
+                accessibilityHint={!incluirNosTotais ? "Ative Incluir conta nos totais para alterar." : undefined}
+                value={incluirNoLivre}
+                onValueChange={setIncluirNoLivre}
+                disabled={salvando || !incluirNosTotais}
+                trackColor={{ false: palette.surfaceInset, true: palette.accent }}
+                style={{ minHeight: 48 }}
+              />
+            </View>
+          </View>
+
           <View style={{ marginTop: space.lg }}>
             <Button
               label={salvando ? "Salvando…" : "Salvar"}
-              onPress={() => void salvarIdentidade()}
-              disabled={salvando || !mudouIdentidade}
+              onPress={() => void salvarConta()}
+              disabled={salvando || !mudouConta}
               busy={salvando}
             />
           </View>

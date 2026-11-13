@@ -146,6 +146,16 @@ const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE cards ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    id: 2,
+    name: "participacao-da-conta-no-livre",
+    sql: `
+      ALTER TABLE accounts ADD COLUMN include_in_free_to_spend INTEGER NOT NULL DEFAULT 0;
+      -- Preserva o resultado anterior até chegar uma escolha do servidor.
+      UPDATE accounts SET include_in_free_to_spend =
+        CASE WHEN kind IN ('checking', 'cash', 'benefit') THEN 1 ELSE 0 END;
+    `,
+  },
 ];
 
 let handle: SQLite.SQLiteDatabase | null = null;

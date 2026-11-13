@@ -43,9 +43,6 @@ const TIPO: Record<string, { label: string; icon: LucideIcon }> = {
   investment: { label: "Investimento", icon: TrendingUp },
 };
 
-/** Poupança e investimento são patrimônio, não dinheiro de gasto do dia a dia. */
-const RESERVA = new Set(["savings", "investment"]);
-
 export default async function Contas() {
   const user = await currentUser();
   // O desvio de quem não tem sessão acontece em `proxy.ts`, como resposta
@@ -90,7 +87,7 @@ export default async function Contas() {
               key={conta.id}
               conta={conta}
               total={
-                RESERVA.has(conta.kind) ? view.totals.investedCents : view.totals.spendableCents
+                conta.includeInFreeToSpend ? view.totals.spendableCents : view.totals.investedCents
               }
             />
           ))}
@@ -161,7 +158,14 @@ function CartaoDeConta({ conta, total }: { conta: AccountView; total: number }) 
           <Icone className="size-5" aria-hidden />
         </div>
         <div className="flex items-start gap-1">
-          <EditAccount accountId={conta.id} name={conta.name} kind={conta.kind} color={conta.color} />
+          <EditAccount
+            accountId={conta.id}
+            name={conta.name}
+            kind={conta.kind}
+            color={conta.color}
+            includeInTotals={conta.includeInTotals}
+            includeInFreeToSpend={conta.includeInFreeToSpend}
+          />
           <BalanceCheck
             accountId={conta.id}
             accountName={conta.name}
@@ -173,6 +177,13 @@ function CartaoDeConta({ conta, total }: { conta: AccountView; total: number }) 
       <p className="truncate text-body-sm font-medium text-ink">{conta.name}</p>
       <p className="truncate text-caption text-ink-subtle">
         {conta.institution} · {tipo.label}
+      </p>
+      <p className="mt-1 text-caption text-ink-subtle">
+        {!conta.includeInTotals
+          ? "Fora dos totais"
+          : conta.includeInFreeToSpend && conta.currency === "BRL"
+            ? "Incluída no Livre para gastar"
+            : "Fora do Livre para gastar"}
       </p>
       <p className="tabular mt-5 text-2xl font-medium text-ink">{money(conta.balanceCents)}</p>
 
