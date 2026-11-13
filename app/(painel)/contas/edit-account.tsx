@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * Editar uma conta: nome e cor.
+ * Editar uma conta: nome, tipo e cor.
+ *
+ * O tipo decide se o saldo é de uso corrente ou reserva. Corrigir a
+ * classificação usa o mesmo cadastro, sem recriar conta ou lançamentos.
  *
  * Cadastrar era possível; corrigir, não — nem aqui, nem no celular. Um nome
  * digitado errado ficava errado, e a única saída seria apagar a conta e perder
@@ -26,7 +29,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Button, Field, Input } from "../../ui/controls.tsx";
+import { Button, Field, Input, Select } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/dialog.tsx";
 import { Pencil } from "../../ui/icons.tsx";
 import { Notice, join } from "../../ui/primitives.tsx";
@@ -47,15 +50,18 @@ const CORES = [
 export function EditAccount({
   accountId,
   name,
+  kind,
   color,
 }: {
   accountId: string;
   name: string;
+  kind: string;
   color: string;
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [nome, setNome] = useState(name);
+  const [tipo, setTipo] = useState(kind);
   const [cor, setCor] = useState(color || CORES[8]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -69,31 +75,41 @@ export function EditAccount({
     setEnviando(true);
     setErro(null);
 
-    const resposta = await fetch(`/api/v1/accounts/${accountId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: nome.trim(), color: cor }),
-    });
+    try {
+      const resposta = await fetch(`/api/v1/accounts/${accountId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: nome.trim(), kind: tipo, color: cor }),
+      });
 
-    setEnviando(false);
+      if (!resposta.ok) {
+        const corpo = (await resposta.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        setErro(corpo?.error?.message ?? `O servidor respondeu ${resposta.status}.`);
+        return;
+      }
 
-    if (!resposta.ok) {
-      const corpo = (await resposta.json().catch(() => null)) as {
-        error?: { message?: string };
-      } | null;
-      setErro(corpo?.error?.message ?? `O servidor respondeu ${resposta.status}.`);
-      return;
+      setAberto(false);
+      router.refresh();
+    } catch {
+      setErro("Não foi possível salvar. Confira sua conexão e tente novamente.");
+    } finally {
+      setEnviando(false);
     }
-
-    setAberto(false);
-    router.refresh();
   }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setAberto(true)}
+        onClick={() => {
+          setNome(name);
+          setTipo(kind);
+          setCor(color || CORES[8]);
+          setErro(null);
+          setAberto(true);
+        }}
         aria-label={`Editar ${name}`}
         className="rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
       >
@@ -121,6 +137,25 @@ export function EditAccount({
               autoFocus
               onChange={(evento) => setNome(evento.target.value)}
             />
+          </Field>
+
+          <Field
+            label="Tipo da conta"
+            htmlFor={`conta-tipo-${accountId}`}
+            hint="Conta corrente, dinheiro e benefício entram no Livre para gastar quando incluídos nos totais. Poupança e investimento ficam reservados, fora desse valor."
+          >
+            <Select
+              id={`conta-tipo-${accountId}`}
+              value={tipo}
+              disabled={enviando}
+              onChange={(evento) => setTipo(evento.target.value)}
+            >
+              <option value="checking">Conta corrente</option>
+              <option value="savings">Poupança</option>
+              <option value="cash">Dinheiro</option>
+              <option value="benefit">Benefício</option>
+              <option value="investment">Investimento</option>
+            </Select>
           </Field>
 
           <Field
