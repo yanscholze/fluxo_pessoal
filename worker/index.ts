@@ -3,6 +3,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { ensureMigrated } from "../server/db/migrator.ts";
 import { runScheduledFinancialAnalyses } from "../server/services/ai/analysis.ts";
+import { runScheduledCardSubscriptions } from "../server/services/subscription-posting.ts";
 import { attachRequestMetrics, logRequestMetrics, withRequestMetrics } from "../server/observability/request-metrics.ts";
 
 interface Env {
@@ -33,6 +34,12 @@ const worker = {
     ctx.waitUntil((async () => {
       try {
         await ensureMigrated();
+        try {
+          const subscriptions = await runScheduledCardSubscriptions(new Date());
+          if (subscriptions.failed) console.warn("Fluxo subscriptions", { processed: subscriptions.processed, failed: subscriptions.failed });
+        } catch {
+          console.warn("Fluxo subscriptions", { code: "subscription_scheduling_failed" });
+        }
         const outcome = await runScheduledFinancialAnalyses(new Date());
         if (outcome.failed) console.warn("Fluxo scheduled", { processed: outcome.processed, failed: outcome.failed });
       } catch {

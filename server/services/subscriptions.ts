@@ -208,6 +208,7 @@ export async function createSubscription(
 }
 
 export type SubscriptionPatch = {
+  readonly startsOn?: LocalDate | null;
   readonly description?: string | null;
   readonly amount?: Cents | null;
   readonly scheduleDay?: number | null;
@@ -303,6 +304,7 @@ export async function updateSubscription(
   }
 
   const campos: Record<string, unknown> = { updatedAt: now.toISOString() };
+  if (patch.startsOn) campos.startsOn = patch.startsOn;
   if (patch.description) campos.description = patch.description.trim();
   if (patch.amount !== null && patch.amount !== undefined) campos.amountCents = patch.amount;
   if (patch.scheduleDay !== null && patch.scheduleDay !== undefined) campos.scheduleDay = patch.scheduleDay;
@@ -357,11 +359,13 @@ export async function setSubscriptionLabel(
 // ---------------------------------------------------------------------------
 
 export type SubscriptionRow = {
+  readonly startsOn: LocalDate;
   readonly id: string;
   readonly description: string;
   readonly amountCents: number;
   /** Custo mensal equivalente: a anual dividida por doze. */
   readonly monthlyCents: number;
+  /** Valor anual exato, sem reconstruir a cobrança pelo mensal arredondado. */
   readonly yearlyCents: number;
   readonly interval: "monthly" | "yearly";
   readonly scheduleDay: number;
@@ -446,6 +450,7 @@ export async function buildSubscriptionsReport(
         description: recurrences.description,
         amountCents: recurrences.amountCents,
         interval: recurrences.interval,
+        startsOn: recurrences.startsOn,
         scheduleDay: recurrences.scheduleDay,
         isActive: recurrences.isActive,
         cardId: recurrences.cardId,
@@ -481,8 +486,9 @@ export async function buildSubscriptionsReport(
         description: linha.description,
         amountCents: linha.amountCents,
         monthlyCents: mensal,
-        yearlyCents: mensal * 12,
+        yearlyCents: linha.interval === "yearly" ? linha.amountCents : linha.amountCents * 12,
         interval: linha.interval,
+        startsOn: linha.startsOn as LocalDate,
         scheduleDay: linha.scheduleDay,
         isActive: linha.isActive,
         cardId: linha.cardId,
@@ -498,19 +504,24 @@ export async function buildSubscriptionsReport(
   // total do mês nunca bater com o extrato.
   const ativas = subscriptions.filter((assinatura) => assinatura.isActive);
   const totalMensal = ativas.reduce((soma, assinatura) => soma + assinatura.monthlyCents, 0);
+  const totalAnual = ativas.reduce((soma, assinatura) => soma + assinatura.yearlyCents, 0);
 
-  const agrupado = new Map<string | null, { monthly: number; count: number }>();
+  const agrupado = new Map<string | null, { monthly: number; yearly: number; count: number }>();
   for (const assinatura of ativas) {
     const chave = assinatura.label?.id ?? null;
-    const atual = agrupado.get(chave) ?? { monthly: 0, count: 0 };
-    agrupado.set(chave, { monthly: atual.monthly + assinatura.monthlyCents, count: atual.count + 1 });
+    const atual = agrupado.get(chave) ?? { monthly: 0, yearly: 0, count: 0 };
+    agrupado.set(chave, {
+      monthly: atual.monthly + assinatura.monthlyCents,
+      yearly: atual.yearly + assinatura.yearlyCents,
+      count: atual.count + 1,
+    });
   }
 
   const byLabel: LabelTotal[] = [...agrupado]
     .map(([id, valores]) => ({
       label: id ? (porId.get(id) ?? null) : null,
       monthlyCents: valores.monthly,
-      yearlyCents: valores.monthly * 12,
+      yearlyCents: valores.yearly,
       count: valores.count,
       sharePercent: totalMensal > 0 ? (valores.monthly / totalMensal) * 100 : 0,
     }))
@@ -552,7 +563,7 @@ export async function buildSubscriptionsReport(
       .sort((esquerda, direita) => direita.monthlyCents - esquerda.monthlyCents),
     totals: {
       monthlyCents: totalMensal,
-      yearlyCents: totalMensal * 12,
+      yearlyCents: totalAnual,
       activeCount: ativas.length,
       pausedCount: subscriptions.length - ativas.length,
     },

@@ -10,6 +10,8 @@
 import { type Recurrence, matchesCapture } from "../../core/domain/recurrence/schedule.ts";
 import { listRecurrences } from "../repositories/recurrences.ts";
 import { confirmOccurrence } from "./recurrences.ts";
+import { findPostedSubscriptionCharge } from "./subscription-posting.ts";
+import { claimLease, releaseLease } from "../repositories/ai.ts";
 import { competenceForPurchase } from "../../core/domain/card/invoice-cycle.ts";
 import { guessCategory } from "../../core/domain/capture/categorize.ts";
 import {
@@ -26,7 +28,7 @@ import { newId } from "../../core/kernel/id.ts";
 import { type Cents, cents } from "../../core/kernel/money.ts";
 import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, localDate, todayIn } from "../../core/time/local-date.ts";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, ne } from "drizzle-orm";
 
 import { getDatabase } from "../db/client.ts";
 import {
@@ -39,7 +41,7 @@ import {
 import { reconcileCaptures } from "./reconciliation.ts";
 import { findAccount, findCard, listAccounts, listCards, listCategories } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
-import { saveTransactionBatch } from "../repositories/ledger.ts";
+import { findTransaction, saveTransactionBatch } from "../repositories/ledger.ts";
 import { earningForPurchase } from "./rewards.ts";
 import { recordTransaction } from "./transactions.ts";
 
@@ -440,7 +442,28 @@ async function recorrenciaCasada(
   return null;
 }
 
+async function assertCaptureIdentity(userId: string, captureId: string, transactionId: string): Promise<void> {
+  const [previousCapture] = await getDatabase().select({ id: captureEvents.id }).from(captureEvents)
+    .where(and(eq(captureEvents.userId, userId), eq(captureEvents.transactionId, transactionId),
+      eq(captureEvents.status, "confirmado"), ne(captureEvents.id, captureId))).limit(1);
+  if (previousCapture) {
+    throw conflict("Esta assinatura já foi vinculada a outra notificação. Confira se é reenvio ou cobrança em dobro. A nova captura continua pendente; uma cobrança adicional real deve ser registrada como novo lançamento.");
+  }
+}
+
 export async function confirmCapture(
+  userId: string,
+  captureId: string,
+  input: ConfirmInput,
+  now: Date = new Date(),
+): Promise<{ transactionId: string; competence: Competence }> {
+  const lease = await claimLease(userId, "card-subscriptions", now);
+  if (!lease) throw conflict("As cobranças estão sendo sincronizadas. Tente confirmar novamente em instantes.");
+  try { return await confirmCaptureUnlocked(userId, captureId, input, now); }
+  finally { await releaseLease(lease); }
+}
+
+async function confirmCaptureUnlocked(
   userId: string,
   captureId: string,
   input: ConfirmInput,
@@ -454,6 +477,12 @@ export async function confirmCapture(
     .limit(1);
 
   if (!evento) throw notFound("Sugestão", captureId);
+  // A retry of the same decision returns its existing fact. A distinct event
+  // below must still be reviewed independently, even when service/value match.
+  if (evento.status === "confirmado" && evento.transactionId) {
+    const existing = await findTransaction(userId, evento.transactionId);
+    if (existing) return { transactionId: existing.id, competence: existing.competence };
+  }
   if (evento.status !== "pendente") throw conflict("Esta sugestão já foi resolvida");
 
   const amount = input.amount ?? cents(evento.amountCents);
@@ -473,6 +502,10 @@ export async function confirmCapture(
    */
   const casada = await recorrenciaCasada(userId, `${evento.rawText} ${evento.description}`);
   if (casada?.veredito === "pagamento") {
+    if ((input.cardId && input.cardId !== casada.rule.cardId) ||
+        (input.accountId && input.accountId !== casada.rule.accountId)) {
+      throw conflict("A origem escolhida difere da recorrência reconhecida. Revise a conta ou cartão antes de confirmar esta captura.");
+    }
     const competenciaDaRegra = competenceOf(occurredOn);
     const baixa = await confirmOccurrence(
       userId,
@@ -481,13 +514,18 @@ export async function confirmCapture(
       { amount, occurredOn },
       now,
     );
+    if (baixa.alreadyConfirmed && baixa.amountCents !== amount) {
+      throw conflict("Esta ocorrência já possui um lançamento com valor diferente. Confira o valor no extrato e revise a cobrança existente antes de confirmar esta captura.");
+    }
+    await assertCaptureIdentity(userId, captureId, baixa.transactionId);
 
     await database
       .update(captureEvents)
       .set({ status: "confirmado", transactionId: baixa.transactionId })
       .where(and(eq(captureEvents.userId, userId), eq(captureEvents.id, captureId)));
 
-    return { transactionId: baixa.transactionId, competence: competenciaDaRegra };
+    const confirmed = await findTransaction(userId, baixa.transactionId);
+    return { transactionId: baixa.transactionId, competence: confirmed?.competence ?? competenciaDaRegra };
   }
 
   const origem = await resolveOrigin(userId, evento, input);
@@ -531,6 +569,22 @@ export async function confirmCapture(
 
   const competence =
     origem.card !== null ? competenceForPurchase(origem.card, occurredOn) : competenceOf(occurredOn);
+
+  if (origem.card && evento.kind === "expense") {
+    const existingId = await findPostedSubscriptionCharge(userId, {
+      cardId: origem.card.id, description: input.description ?? evento.description,
+      amountCents: amount, occurredOn,
+    });
+    if (existingId) {
+      await assertCaptureIdentity(userId, captureId, existingId);
+      const existing = await findTransaction(userId, existingId);
+      if (existing) {
+        await database.update(captureEvents).set({ status: "confirmado", transactionId: existingId })
+          .where(and(eq(captureEvents.userId, userId), eq(captureEvents.id, captureId)));
+        return { transactionId: existingId, competence: existing.competence };
+      }
+    }
+  }
 
   if (origem.card) {
     await ensureInvoices({

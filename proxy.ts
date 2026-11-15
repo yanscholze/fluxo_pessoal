@@ -28,6 +28,17 @@ import { SESSION_COOKIE } from "./core/kernel/session-cookie.ts";
 
 export function proxy(request: NextRequest) {
   if (request.cookies.has(SESSION_COOKIE)) {
+    if (request.nextUrl.pathname.replace(/\/$/, "") === "/planejamento") {
+      const tab = request.nextUrl.searchParams.get("aba");
+      const path = tab === "assinaturas" ? "/assinaturas"
+        : tab === "parcelamentos" || tab === "parcelas" ? "/parcelamentos" : null;
+      if (path) {
+        const destination = new URL(request.url);
+        destination.pathname = path;
+        destination.searchParams.delete("aba");
+        return NextResponse.redirect(destination);
+      }
+    }
     const legacyRoutes: Record<string, { path: string; tab?: string; hash?: string }> = {
       "/investimentos": { path: "/patrimonio", tab: "investimentos" },
       "/metas": { path: "/patrimonio", tab: "metas" },

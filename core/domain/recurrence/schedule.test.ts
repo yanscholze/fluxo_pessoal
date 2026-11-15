@@ -79,6 +79,37 @@ describe("agendamento de recorrência", () => {
     });
   });
 
+  describe("assinatura no cartão em dia fixo", () => {
+    const assinatura = (overrides: Partial<Recurrence> = {}) => regra({
+      role: "subscription", accountId: null, cardId: "cartao-1", ...overrides,
+    });
+
+    it("cobra no sábado cadastrado sem avançar ou recuar", () => {
+      assert.equal(occurrenceDate(assinatura({ scheduleDay: 15 }), competence("2026-08")), "2026-08-15");
+      assert.equal(occurrenceDate(assinatura({ scheduleDay: 15, dayAdjustment: "previous" }), competence("2026-08")), "2026-08-15");
+    });
+
+    it("mantém a cobrança no feriado", () => {
+      assert.equal(occurrenceDate(assinatura({ scheduleDay: 7 }), competence("2026-09")), "2026-09-07");
+    });
+
+    it("limita o dia ao fim do mês sem mover a cobrança para o mês seguinte", () => {
+      assert.equal(occurrenceDate(assinatura({ scheduleDay: 31 }), competence("2026-02")), "2026-02-28");
+      assert.equal(occurrenceDate(assinatura({ scheduleDay: 31 }), competence("2026-04")), "2026-04-30");
+    });
+
+    it("preserva o ajuste de dia útil das assinaturas em conta", () => {
+      const emConta = regra({ role: "subscription", scheduleDay: 15 });
+      assert.equal(occurrenceDate(emConta, competence("2026-08")), "2026-08-17");
+      assert.equal(occurrenceDate({ ...emConta, dayAdjustment: "previous" }, competence("2026-08")), "2026-08-14");
+      assert.equal(occurrenceDate({ ...emConta, scheduleDay: 7 }, competence("2026-09")), "2026-09-08");
+    });
+
+    it("preserva regras explícitas de N-ésimo dia útil", () => {
+      assert.equal(occurrenceDate(assinatura({ scheduleMode: "business_day_of_month", scheduleDay: 5 }), competence("2026-08")), "2026-08-07");
+    });
+  });
+
   describe("valor", () => {
     it("mantém o valor fixo", () => {
       assert.equal(occurrenceAmount(regra(), competence("2026-08")), 180000);

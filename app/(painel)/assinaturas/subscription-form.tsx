@@ -19,6 +19,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { parseMoney } from "../../../core/kernel/money.ts";
 
 import { Button, Field, Input, MoneyInput, Select } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/dialog.tsx";
@@ -37,6 +38,7 @@ export type Assinatura = {
   readonly accountId: string | null;
   readonly categoryId: string | null;
   readonly labelId: string | null;
+  readonly startsOn?: string;
 };
 
 export type Opcoes = {
@@ -48,7 +50,7 @@ export type Opcoes = {
 
 /** Converte "89,90" no inteiro de centavos que a API espera. */
 export function centavosDe(texto: string): number {
-  return Math.round(Number(texto.trim().replace(/\./g, "").replace(",", ".")) * 100);
+  return parseMoney(texto) ?? Number.NaN;
 }
 
 function reais(centavos: number): string {
@@ -85,6 +87,7 @@ export function SubscriptionForm({
   const [classificacao, setClassificacao] = useState(assinatura?.labelId ?? "");
   const [categoria, setCategoria] = useState(assinatura?.categoryId ?? "");
   const [intervalo, setIntervalo] = useState<"monthly" | "yearly">(assinatura?.interval ?? "monthly");
+  const [inicio, setInicio] = useState(assinatura?.startsOn ?? "");
 
   /**
    * Classificações criadas aqui dentro.
@@ -109,9 +112,10 @@ export function SubscriptionForm({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: nomeDoRotulo }),
-    });
+    }).catch(() => null);
 
     setSalvandoRotulo(false);
+    if (!resposta) { setErro("Não foi possível conectar. Confira a conexão e tente novamente."); return; }
 
     if (!resposta.ok) {
       const dados = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -127,6 +131,10 @@ export function SubscriptionForm({
   }
 
   async function salvar() {
+    if (!nome.trim() || !Number.isSafeInteger(centavosDe(valor)) || centavosDe(valor) <= 0 || !origem) {
+      setErro("Informe o nome, um valor maior que zero e a origem da cobrança.");
+      return;
+    }
     setEnviando(true);
     setErro(null);
 
@@ -137,6 +145,7 @@ export function SubscriptionForm({
       amount: centavosDe(valor),
       scheduleDay: Number(dia),
       interval: intervalo,
+      ...(inicio ? { startsOn: inicio } : {}),
       ...(tipo === "cartao" ? { cardId: id } : { accountId: id }),
       // String vazia é intencional na edição: significa "tirar a classificação".
       ...(editando ? { labelId: classificacao, categoryId: categoria } : {}),
@@ -151,9 +160,10 @@ export function SubscriptionForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(corpo),
       },
-    );
+    ).catch(() => null);
 
     setEnviando(false);
+    if (!resposta) { setErro("Não foi possível conectar. Confira a conexão e tente novamente."); return; }
 
     if (!resposta.ok) {
       const dados = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -177,7 +187,7 @@ export function SubscriptionForm({
       open={open}
       onClose={onClose}
       title={editando ? "Editar assinatura" : "Nova assinatura"}
-      description="O cartão escolhido é o que será debitado — e é ele que decide em qual fatura a cobrança cai."
+      description="Escolha a conta ou o cartão da assinatura. No cartão, o ciclo determina em qual fatura a cobrança entra."
       footer={
         <Button variant="primary" busy={enviando} onClick={salvar} disabled={!origem}>
           {editando ? "Salvar" : "Cadastrar"}
@@ -185,6 +195,11 @@ export function SubscriptionForm({
       }
     >
       <div className="space-y-4">
+        <Notice tone="info">
+          {origem.startsWith("cartao:")
+            ? "No cartão, o Fluxo lança a cobrança automaticamente na data cadastrada, inclusive em fins de semana e feriados. Não é necessário dar baixa."
+            : "Em conta, confirme o pagamento ou vincule um lançamento já existente para dar baixa sem duplicar."}
+        </Notice>
         <Field label="Nome" htmlFor="assinatura-nome">
           <Input
             id="assinatura-nome"
@@ -222,6 +237,10 @@ export function SubscriptionForm({
             </Select>
           </Field>
         </div>
+
+        <Field label="Começar em" htmlFor="assinatura-inicio" hint="Opcional no cadastro: em branco, começa hoje. Nas anuais, esta data define o mês da cobrança; o dia segue o definido no formulário.">
+          <Input id="assinatura-inicio" type="date" value={inicio} onChange={(evento) => setInicio(evento.target.value)} />
+        </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Debitado em" htmlFor="assinatura-origem">

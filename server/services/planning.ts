@@ -14,8 +14,6 @@ import {
   type Recurrence,
   type RecurrenceRole,
   nextOccurrence,
-  occurrenceAmount,
-  occurrenceDate,
   occurrenceKey,
   occurrencesBetween,
 } from "../../core/domain/recurrence/schedule.ts";
@@ -103,6 +101,9 @@ function scheduleLabel(rule: Recurrence): string {
   if (rule.scheduleMode === "business_day_of_month") {
     return `${rule.scheduleDay}º dia útil`;
   }
+  if (rule.role === "subscription" && rule.cardId) {
+    return `dia ${rule.scheduleDay}, sem ajuste de dia útil`;
+  }
   const ajuste = rule.dayAdjustment === "previous" ? "dia útil anterior" : "próximo dia útil";
   return `dia ${rule.scheduleDay}, ajustado para o ${ajuste}`;
 }
@@ -126,7 +127,10 @@ export async function buildPlanningView(userId: string, now: Date = new Date()):
   const categoryName = new Map(categories.map((category) => [category.id, category.name]));
 
   const recurrences: RecurrenceView[] = rules.map((rule) => {
-    const proxima = nextOccurrence(rule, today);
+    const proxima = rule.role === "subscription"
+      ? occurrencesBetween(rule, competence, shift(competence, 24))
+        .find((item) => item.date >= today && !confirmedKeys.has(occurrenceKey(rule.id, item.competence))) ?? null
+      : nextOccurrence(rule, today);
     const daCompetencia = occurrencesBetween(rule, competence, competence)[0];
     const jaConfirmada = daCompetencia
       ? confirmedKeys.has(occurrenceKey(rule.id, daCompetencia.competence))
@@ -222,22 +226,27 @@ export async function buildPlanningView(userId: string, now: Date = new Date()):
   const limite = addDays(today, 7);
   const proximasCobrancas: UpcomingCharge[] = assinaturas
     .flatMap((rule) =>
-      occurrencesBetween(rule, competence, shift(competence, 2)).map((ocorrencia) => ({
-        recurrenceId: rule.id,
-        description: rule.description,
-        date: ocorrencia.date,
-        amountCents: ocorrencia.amount,
-      })),
+      occurrencesBetween(rule, competence, shift(competence, 2))
+        .filter((ocorrencia) => !confirmedKeys.has(occurrenceKey(rule.id, ocorrencia.competence)))
+        .map((ocorrencia) => ({
+          recurrenceId: rule.id,
+          description: rule.description,
+          date: ocorrencia.date,
+          amountCents: ocorrencia.amount,
+        })),
     )
     .filter((cobranca) => cobranca.date >= today && cobranca.date <= addDays(today, UPCOMING_DAYS))
     .sort((left, right) => left.date.localeCompare(right.date));
 
-  const mensal = assinaturas
-    .filter((rule) => rule.interval === "monthly")
-    .reduce((soma, rule) => soma + occurrenceAmount(rule, competence), 0);
-  const anual = assinaturas
-    .filter((rule) => rule.interval === "yearly")
-    .reduce((soma, rule) => soma + occurrenceAmount(rule, competenceOf(occurrenceDate(rule, competence))), 0);
+  // Custo cadastrado, como no relatório: a anual tem equivalente mensal,
+  // mas o custo anual preserva o valor cheio, sem perder seus centavos.
+  // A agenda e as projeções acima continuam usando a cobrança real por data.
+  const mensal = assinaturas.reduce(
+    (soma, rule) => soma + (rule.interval === "yearly" ? Math.round(rule.amount / 12) : rule.amount), 0,
+  );
+  const anual = assinaturas.reduce(
+    (soma, rule) => soma + (rule.interval === "yearly" ? rule.amount : rule.amount * 12), 0,
+  );
 
   return {
     today,
@@ -247,8 +256,7 @@ export async function buildPlanningView(userId: string, now: Date = new Date()):
     subscriptions: {
       activeCount: assinaturas.length,
       monthlyCents: mensal,
-      // Custo anual: doze vezes o que é mensal, mais o que já é anual.
-      yearlyCents: mensal * 12 + anual,
+      yearlyCents: anual,
       next7DaysCents: proximasCobrancas
         .filter((cobranca) => cobranca.date <= limite)
         .reduce((soma, cobranca) => soma + cobranca.amountCents, 0),

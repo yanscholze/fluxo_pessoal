@@ -41,9 +41,14 @@ export function SubscriptionActions({
     setEnviando(true);
     setErro(null);
 
-    const resposta = await fetch(`/api/v1/recurrences/${assinatura.id}`, init);
+    const resposta = await fetch(`/api/v1/recurrences/${assinatura.id}`, init).catch(() => null);
 
     setEnviando(false);
+
+    if (!resposta) {
+      setErro("Não foi possível conectar. Confira a conexão e tente novamente.");
+      return false;
+    }
 
     if (!resposta.ok) {
       const corpo = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };

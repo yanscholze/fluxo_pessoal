@@ -33,6 +33,7 @@ export const PATCH = handle(async (request: Request) => {
     amount: input.optionalMoney("amount"),
     scheduleDay: input.optionalInteger("scheduleDay", { min: 1, max: 31 }),
     interval: input.optionalChoice("interval", ["monthly", "yearly"] as const),
+    startsOn: input.optionalDate("startsOn"),
     amountMode: input.optionalChoice("amountMode", ["fixed", "per_business_day"] as const),
     scheduleMode: input.optionalChoice("scheduleMode", [
       "day_of_month",
@@ -61,6 +62,7 @@ export const PATCH = handle(async (request: Request) => {
     campos.amount !== null ||
     campos.scheduleDay !== null ||
     campos.interval !== null ||
+    campos.startsOn !== null ||
     campos.amountMode !== null ||
     campos.scheduleMode !== null ||
     campos.cardId !== null ||
