@@ -33,6 +33,7 @@ export const POST = handle(async (request: Request) => {
     categoryId: input.optionalReference("categoryId"),
     labelId: input.optionalReference("labelId"),
     interval: input.optionalChoice("interval", ["monthly", "yearly"] as const) ?? undefined,
+    startsOn: input.optionalDate("startsOn"),
   };
   input.done();
 

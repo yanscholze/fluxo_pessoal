@@ -9,6 +9,7 @@ import { date, money, percent, relativeDay } from "../../ui/format.ts";
 import { Calendar, Check, Layers, Repeat, Wallet } from "../../ui/icons.tsx";
 import { Stack } from "../../ui/page-frame.tsx";
 import { Badge, Empty, Notice, Panel, PanelHeader } from "../../ui/primitives.tsx";
+import { ConfirmOccurrence } from "../planejamento/confirm-occurrence.tsx";
 import { LabelsPanel } from "./labels-panel.tsx";
 import { NewSubscription } from "./new-subscription.tsx";
 import { SubscriptionActions } from "./subscription-actions.tsx";
@@ -39,25 +40,26 @@ export default async function Assinaturas() {
   // renderização — que o Vite transmite como erro para todas as abas.
   if (!user) return null;
 
+  const now = new Date();
   const [view, relatorio, contas, cartoes, categorias] = await Promise.all([
-    buildPlanningView(user.id),
-    buildSubscriptionsReport(user.id),
+    buildPlanningView(user.id, now),
+    buildSubscriptionsReport(user.id, now),
     listAccounts(user.id),
     listCards(user.id),
     listCategories(user.id),
   ]);
   const { subscriptions } = view;
 
-  const assinaturas = view.recurrences
-    .filter((recorrencia) => recorrencia.role === "subscription")
-    .sort((esquerda, direita) => direita.amountCents - esquerda.amountCents);
-
   // O relatório é a fonte da edição: ele sabe o cartão, a conta, a categoria e
   // a classificação de cada assinatura, que é o que o formulário precisa.
   const detalheDe = new Map(relatorio.subscriptions.map((assinatura) => [assinatura.id, assinatura]));
+  const assinaturas = view.recurrences
+    .filter((recorrencia) => recorrencia.role === "subscription")
+    .sort((esquerda, direita) =>
+      (detalheDe.get(direita.id)?.monthlyCents ?? 0) - (detalheDe.get(esquerda.id)?.monthlyCents ?? 0));
 
   const opcoes: Opcoes = {
-    cards: cartoes.map((cartao) => ({ id: cartao.id, name: cartao.name })),
+    cards: cartoes.filter((cartao) => cartao.kind === "credit").map((cartao) => ({ id: cartao.id, name: cartao.name })),
     accounts: contas
       .filter((conta) => conta.archivedAt === null)
       .map((conta) => ({ id: conta.id, name: conta.name })),
@@ -68,7 +70,12 @@ export default async function Assinaturas() {
   };
 
   const ativas = assinaturas.filter((assinatura) => assinatura.isActive);
-  const total = ativas.reduce((soma, assinatura) => soma + assinatura.amountCents, 0);
+  const total = relatorio.totals.monthlyCents;
+  const baixasManuais = ativas.filter((assinatura) => assinatura.accountId && !assinatura.cardId && assinatura.pending !== null);
+  const classificacoes = relatorio.labels.map((rotulo) => ({
+    ...rotulo,
+    count: relatorio.byLabel.find((linha) => linha.label?.id === rotulo.id)?.count ?? 0,
+  }));
 
   const proximas: TimelineItem[] = subscriptions.upcoming.map((cobranca, indice) => ({
     id: `${cobranca.recurrenceId}-${cobranca.date}-${indice}`,
@@ -83,7 +90,7 @@ export default async function Assinaturas() {
   return (
     <>
       <SectionIntro
-        description="O que é cobrado todo mês sem você decidir nada. O custo anual está ao lado do mensal de propósito."
+        description="Cadastre e organize suas assinaturas. Confira o custo mensal equivalente, o custo anual e as cobranças em conta ou no cartão."
         actions={
           <NewSubscription opcoes={opcoes} />
         }
@@ -95,16 +102,16 @@ export default async function Assinaturas() {
             metrics={[
               {
                 label: "Por mês",
-                value: money(subscriptions.monthlyCents),
+                value: money(relatorio.totals.monthlyCents),
                 tone: "caution",
                 icon: Repeat,
-                hint: `${subscriptions.activeCount} assinatura${subscriptions.activeCount === 1 ? "" : "s"} ativa${subscriptions.activeCount === 1 ? "" : "s"}`,
+                hint: `${relatorio.totals.activeCount} ativas · ${relatorio.totals.pausedCount} pausadas`,
               },
               {
                 label: "Por ano",
-                value: money(subscriptions.yearlyCents),
+                value: money(relatorio.totals.yearlyCents),
                 icon: Calendar,
-                hint: "O mesmo gasto, na escala em que ele pesa",
+                hint: "Doze cobranças mensais, uma cobrança anual",
               },
               {
                 label: "Próximos 7 dias",
@@ -113,17 +120,44 @@ export default async function Assinaturas() {
                 icon: Wallet,
                 hint:
                   subscriptions.next7DaysCents > 0
-                    ? "Sai da conta nesta semana"
+                    ? "Cobranças previstas nesta semana"
                     : "Nada cobrado nesta semana",
               },
               {
                 label: "Maior assinatura",
-                value: ativas[0] ? money(ativas[0].amountCents) : "—",
+                value: ativas[0] ? money(detalheDe.get(ativas[0].id)?.monthlyCents ?? 0) : "—",
                 icon: Layers,
                 hint: ativas[0] ? ativas[0].description : "nenhuma ativa",
               },
             ]}
           />
+
+          {baixasManuais.length ? (
+            <Panel>
+              <PanelHeader
+                title="Assinaturas em conta aguardando baixa"
+                icon={Wallet}
+                hint="Vincule o débito que já entrou no extrato ou registre a cobrança que ainda falta. No cartão, o lançamento é automático na data cadastrada."
+              />
+              <ul className="space-y-3">
+                {baixasManuais.map((assinatura) => assinatura.pending ? (
+                  <li key={assinatura.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-body-sm font-medium text-ink">{assinatura.description}</p>
+                      <p className="mt-1 text-caption text-ink-subtle">{assinatura.originName} · {date(assinatura.pending.date)} · {money(assinatura.pending.amountCents)}</p>
+                    </div>
+                    <ConfirmOccurrence
+                      recurrenceId={assinatura.id}
+                      competence={assinatura.pending.competence}
+                      amountCents={assinatura.pending.amountCents}
+                      description={assinatura.description}
+                      scheduledFor={assinatura.pending.date}
+                    />
+                  </li>
+                ) : null)}
+              </ul>
+            </Panel>
+          ) : null}
 
           <div className="grid gap-5 xl:grid-cols-3">
             <Panel className="xl:col-span-2">
@@ -160,6 +194,10 @@ export default async function Assinaturas() {
                         {assinatura.scheduleLabel}
                         {assinatura.categoryName ? ` · ${assinatura.categoryName}` : ""}
                       </span>
+                      <span className="mt-1 block text-caption text-ink-subtle">
+                        {assinatura.cardId ? "Automática · cobrança no cartão" : "Débito em conta · baixa manual"}
+                        {detalheDe.get(assinatura.id)?.interval === "yearly" ? " · cobrança anual" : ""}
+                      </span>
                     </Td>
 
                     <Td hideBelow="md">
@@ -191,12 +229,12 @@ export default async function Assinaturas() {
                       <span
                         className={`tabular text-body font-medium ${assinatura.isActive ? "text-ink" : "text-ink-subtle"}`}
                       >
-                        {money(assinatura.amountCents)}
+                        {money(detalheDe.get(assinatura.id)?.monthlyCents ?? 0)}
                       </span>
                     </Td>
 
                     <Td align="right" hideBelow="sm" className="tabular text-body-sm text-ink-muted">
-                      {money(assinatura.amountCents * 12)}
+                      {money(detalheDe.get(assinatura.id)?.yearlyCents ?? 0)}
                     </Td>
 
                     <Td align="right">
@@ -218,6 +256,7 @@ export default async function Assinaturas() {
                               accountId: detalhe.accountId,
                               categoryId: detalhe.categoryId,
                               labelId: detalhe.label?.id ?? null,
+                              startsOn: detalhe.startsOn,
                             }}
                           />
                         );
@@ -231,7 +270,7 @@ export default async function Assinaturas() {
                 <div className="mt-4">
                   <Notice tone="caution" icon={Calendar}>
                     Manter estas assinaturas por um ano custa{" "}
-                    <span className="tabular font-semibold">{money(subscriptions.yearlyCents)}</span>.
+                    <span className="tabular font-semibold">{money(relatorio.totals.yearlyCents)}</span>.
                   </Notice>
                 </div>
               ) : null}
@@ -245,7 +284,7 @@ export default async function Assinaturas() {
                     <DonutChart
                       slices={ativas.map((assinatura, i) => ({
                         label: assinatura.description,
-                        value: assinatura.amountCents,
+                        value: detalheDe.get(assinatura.id)?.monthlyCents ?? 0,
                         color: VIZ[i % VIZ.length],
                       }))}
                       size={148}
@@ -267,12 +306,40 @@ export default async function Assinaturas() {
                             {assinatura.description}
                           </span>
                           <span className="tabular shrink-0 text-caption text-ink-subtle">
-                            {percent(total > 0 ? (assinatura.amountCents / total) * 100 : 0)}
+                            {percent(total > 0 ? ((detalheDe.get(assinatura.id)?.monthlyCents ?? 0) / total) * 100 : 0)}
                           </span>
                         </li>
                       ))}
                     </ul>
                   </div>
+                </Panel>
+              ) : null}
+
+              {relatorio.byLabel.length ? (
+                <Panel>
+                  <PanelHeader title="Custo por classificação" icon={Layers} hint="Somente assinaturas ativas" />
+                  <ul className="space-y-3">
+                    {relatorio.byLabel.map((grupo) => (
+                      <li key={grupo.label?.id ?? "sem-classificacao"} className="flex flex-wrap items-baseline justify-between gap-2 text-body-sm">
+                        <span className="min-w-0 break-words text-ink">{grupo.label?.name ?? "Sem classificação"}</span>
+                        <span className="tabular text-right text-ink-muted">{money(grupo.monthlyCents)}/mês<span className="block text-caption text-ink-subtle">{money(grupo.yearlyCents)}/ano</span></span>
+                      </li>
+                    ))}
+                  </ul>
+                </Panel>
+              ) : null}
+
+              {relatorio.byCard.length ? (
+                <Panel>
+                  <PanelHeader title="Onde é cobrado" icon={Wallet} hint="Custo mensal equivalente por cartão ou débito em conta" />
+                  <ul className="space-y-3">
+                    {relatorio.byCard.map((grupo) => (
+                      <li key={grupo.cardId ?? "debito-em-conta"} className="flex flex-wrap items-baseline justify-between gap-2 text-body-sm">
+                        <span className="min-w-0 break-words text-ink">{grupo.cardName}</span>
+                        <span className="tabular text-ink-muted">{money(grupo.monthlyCents)}/mês</span>
+                      </li>
+                    ))}
+                  </ul>
                 </Panel>
               ) : null}
 
@@ -293,15 +360,7 @@ export default async function Assinaturas() {
                 )}
               </Panel>
 
-              <LabelsPanel
-                labels={relatorio.labels.map((rotulo) => ({
-                  id: rotulo.id,
-                  name: rotulo.name,
-                  color: rotulo.color,
-                  count:
-                    relatorio.byLabel.find((linha) => linha.label?.id === rotulo.id)?.count ?? 0,
-                }))}
-              />
+              <LabelsPanel labels={classificacoes} />
 
               <Panel>
                 <PanelHeader
@@ -309,6 +368,9 @@ export default async function Assinaturas() {
                   icon={Check}
                   hint="Não passam pela fila de captura"
                 />
+                {relatorio.recognized.some((cobranca) => cobranca.expectedCents !== null) ? (
+                  <Notice tone="caution">Há cobrança com valor diferente do cadastrado. Confira o lançamento e atualize o valor da assinatura; diferenças pendentes não geram outra cobrança automaticamente.</Notice>
+                ) : null}
                 {relatorio.recognized.length ? (
                   <ul className="space-y-2.5">
                     {relatorio.recognized.map((cobranca) => (
@@ -348,13 +410,16 @@ export default async function Assinaturas() {
           </div>
         </Stack>
       ) : (
-        <Panel>
-          <Empty
-            icon={Repeat}
-            title="Nenhuma assinatura cadastrada"
-            hint="Use “Nova assinatura” para cadastrar a primeira: o cartão escolhido é o que será debitado, e a classificação é o que separa streaming de IA no relatório do mês."
-          />
-        </Panel>
+        <div className="grid gap-5 xl:grid-cols-3">
+          <Panel className="xl:col-span-2">
+            <Empty
+              icon={Repeat}
+              title="Nenhuma assinatura cadastrada"
+              hint="Use “Nova assinatura” para escolher o serviço, o valor, a conta ou cartão e a classificação."
+            />
+          </Panel>
+          <LabelsPanel labels={classificacoes} />
+        </div>
       )}
     </>
   );

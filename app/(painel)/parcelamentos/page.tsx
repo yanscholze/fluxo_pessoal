@@ -1,6 +1,7 @@
 import { buildInstallmentsView, type PlanView } from "../../../server/services/installments.ts";
 import { listCategories } from "../../../server/repositories/catalog.ts";
 import { currentUser } from "../../auth-context.ts";
+import { CommitmentTabs } from "../../ui/commitment-tabs.tsx";
 import { moneyCompact, money } from "../../ui/format.ts";
 import { Donut, PanelHeading } from "../../ui/mesa.tsx";
 import { Empty } from "../../ui/primitives.tsx";
@@ -38,6 +39,7 @@ export default async function Parcelamentos() {
 
   return (
     <div className="content-area">
+      <CommitmentTabs active="parcelamentos" />
       {view.active.length ? (
         <>
           <div className="grid gap-5 xl:grid-cols-[1fr_1.6fr]">

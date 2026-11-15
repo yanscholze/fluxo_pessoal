@@ -29,7 +29,7 @@ import {
 } from "../../time/competence.ts";
 import { type LocalDate, day as dayOf, fromParts, lastDayOfMonth, month } from "../../time/local-date.ts";
 
-/** O papel muda como a recorrência é apresentada — nunca como é agendada. */
+/** O papel identifica a regra e distingue a cobrança civil de assinatura no cartão. */
 export type RecurrenceRole = "standard" | "salary" | "benefit" | "subscription";
 
 /**
@@ -40,7 +40,7 @@ export type RecurrenceRole = "standard" | "salary" | "benefit" | "subscription";
 export type AmountMode = "fixed" | "per_business_day";
 
 /**
- * `day_of_month`: dia fixo, ajustado ao dia útil.
+ * `day_of_month`: dia fixo, ajustado ao dia útil; assinatura no cartão usa o dia civil.
  * `business_day_of_month`: o N-ésimo dia útil — o caso do salário.
  */
 export type ScheduleMode = "day_of_month" | "business_day_of_month";
@@ -140,6 +140,9 @@ export function occurrenceDate(rule: Recurrence, competence: Competence): LocalD
   const referencia = firstDay(competence);
   const ultimoDia = dayOf(lastDayOfMonth(referencia));
   const nominal = fromParts(ano, mes, Math.min(rule.scheduleDay, ultimoDia));
+  // Cobrança automática no cartão usa o dia civil cadastrado, inclusive em
+  // fim de semana ou feriado. O ajuste bancário continua valendo para conta.
+  if (rule.role === "subscription" && rule.cardId) return nominal;
   return adjustToBusinessDay(nominal, rule.dayAdjustment);
 }
 

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
 import { cents } from "../../core/kernel/money.ts";
+import { localDate } from "../../core/time/local-date.ts";
 import { ambiente, zerar } from "../testing/cenario.ts";
 
 const AGORA = new Date("2026-09-10T12:00:00Z");
@@ -90,6 +91,152 @@ describe("relatório de assinaturas", () => {
     const relatorio = await buildSubscriptionsReport(alvo.userId, AGORA);
     assert.equal(relatorio.totals.monthlyCents, 0);
     assert.equal(relatorio.totals.pausedCount, 1);
+  });
+
+  it("preserva os centavos anuais sem multiplicar o mensal arredondado", async () => {
+    const { createLabel, createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const { setRecurrenceActive } = await import("./recurrences.ts");
+    const alvo = await ambiente();
+    const labelId = await createLabel(alvo.userId, { name: "Software" }, AGORA);
+    const anual = await createSubscription(alvo.userId, {
+      description: "Licença anual", amount: cents(12_001), scheduleDay: 1,
+      cardId: alvo.cartaoId, interval: "yearly", labelId,
+    }, AGORA);
+    const segundaAnual = await createSubscription(alvo.userId, {
+      description: "Outra licença anual", amount: cents(12_501), scheduleDay: 2,
+      cardId: alvo.cartaoId, interval: "yearly", labelId,
+    }, AGORA);
+    await createSubscription(alvo.userId, {
+      description: "Serviço mensal", amount: cents(3_000), scheduleDay: 5,
+      accountId: alvo.contaId, labelId,
+    }, AGORA);
+
+    const report = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(report.subscriptions.find((item) => item.id === anual)?.monthlyCents, 1_000);
+    assert.equal(report.subscriptions.find((item) => item.id === anual)?.yearlyCents, 12_001);
+    assert.equal(report.subscriptions.find((item) => item.id === segundaAnual)?.monthlyCents, 1_042);
+    assert.equal(report.totals.monthlyCents, 5_042);
+    assert.equal(report.totals.yearlyCents, 60_502);
+    assert.equal(report.byLabel.find((group) => group.label?.id === labelId)?.yearlyCents, 60_502);
+
+    await setRecurrenceActive(alvo.userId, segundaAnual, false, AGORA);
+    const paused = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(paused.totals.monthlyCents, 4_000);
+    assert.equal(paused.totals.yearlyCents, 48_001);
+    assert.equal(paused.byLabel.find((group) => group.label?.id === labelId)?.yearlyCents, 48_001);
+  });
+
+  it("descreve o dia fixo do cartão sem prometer ajuste para dia útil", async () => {
+    const { createSubscription } = await import("./subscriptions.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const alvo = await ambiente();
+    const now = new Date("2026-08-10T12:00:00Z");
+    const card = await createSubscription(alvo.userId, {
+      description: "Cobrança no cartão", amount: cents(2_000), scheduleDay: 15,
+      cardId: alvo.cartaoId, startsOn: localDate("2026-08-01"),
+    }, now);
+    const account = await createSubscription(alvo.userId, {
+      description: "Cobrança em conta", amount: cents(3_000), scheduleDay: 15,
+      accountId: alvo.contaId, startsOn: localDate("2026-08-01"),
+    }, now);
+    const view = await buildPlanningView(alvo.userId, now);
+    const cardRow = view.recurrences.find((item) => item.id === card);
+    const accountRow = view.recurrences.find((item) => item.id === account);
+    assert.equal(cardRow?.next?.date, "2026-08-15");
+    assert.match(cardRow?.scheduleLabel ?? "", /sem ajuste de dia útil/u);
+    assert.equal(accountRow?.next?.date, "2026-08-17");
+    assert.match(accountRow?.scheduleLabel ?? "", /próximo dia útil/u);
+  });
+
+  it("mantém o custo equivalente do planejamento igual ao relatório sem amortizar as cobranças previstas", async () => {
+    const { createSubscription, buildSubscriptionsReport } = await import("./subscriptions.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const { setRecurrenceActive } = await import("./recurrences.ts");
+    const { buildDashboard } = await import("./dashboard.ts");
+    const { loadLedger } = await import("../repositories/ledger.ts");
+    const alvo = await ambiente();
+    const annual = await createSubscription(alvo.userId, {
+      description: "Licença anual com centavos", amount: cents(12_001), scheduleDay: 15,
+      cardId: alvo.cartaoId, interval: "yearly", startsOn: localDate("2026-09-01"),
+    }, AGORA);
+    await createSubscription(alvo.userId, {
+      description: "Serviço mensal", amount: cents(2_400), scheduleDay: 20,
+      accountId: alvo.contaId, startsOn: localDate("2026-09-01"),
+    }, AGORA);
+
+    const first = await buildPlanningView(alvo.userId, AGORA);
+    const firstReport = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(first.subscriptions.monthlyCents, 3_400);
+    assert.equal(first.subscriptions.yearlyCents, 40_801);
+    assert.equal(first.subscriptions.monthlyCents, firstReport.totals.monthlyCents);
+    assert.equal(first.subscriptions.yearlyCents, firstReport.totals.yearlyCents);
+    assert.equal(first.subscriptions.upcoming.find((item) => item.recurrenceId === annual)?.amountCents, 12_001,
+      "equivalent monthly cost does not replace the full amount due");
+
+    await createSubscription(alvo.userId, {
+      description: "Outra anual com centavos", amount: cents(12_005), scheduleDay: 16,
+      cardId: alvo.cartaoId, interval: "yearly", startsOn: localDate("2026-09-01"),
+    }, AGORA);
+    const paused = await createSubscription(alvo.userId, {
+      description: "Anual pausada", amount: cents(99_999), scheduleDay: 17,
+      cardId: alvo.cartaoId, interval: "yearly", startsOn: localDate("2026-09-01"),
+    }, AGORA);
+    await setRecurrenceActive(alvo.userId, paused, false, AGORA);
+    const beforeDashboard = await buildDashboard(alvo.userId, AGORA);
+    const beforeLedger = await loadLedger(alvo.userId);
+    const view = await buildPlanningView(alvo.userId, AGORA);
+    const report = await buildSubscriptionsReport(alvo.userId, AGORA);
+    assert.equal(view.subscriptions.activeCount, 3);
+    assert.equal(view.subscriptions.monthlyCents, 4_400, "round each annual subscription before summing monthly equivalents");
+    assert.equal(view.subscriptions.yearlyCents, 52_806, "retain exact annual cents instead of multiplying rounded monthly values");
+    assert.equal(view.subscriptions.monthlyCents, report.totals.monthlyCents);
+    assert.equal(view.subscriptions.yearlyCents, report.totals.yearlyCents);
+    assert.equal(view.subscriptions.next7DaysCents, 24_006, "the upcoming calendar still uses the actual full charges");
+    assert.deepEqual((await buildDashboard(alvo.userId, AGORA)).freeToSpend, beforeDashboard.freeToSpend);
+    assert.deepEqual(await loadLedger(alvo.userId), beforeLedger);
+  });
+
+  it("retira ocorrências já realizadas da agenda e conserva as próximas cobranças previstas", async () => {
+    const { createSubscription } = await import("./subscriptions.ts");
+    const { postDueCardSubscriptions } = await import("./subscription-posting.ts");
+    const { confirmOccurrence } = await import("./recurrences.ts");
+    const { buildPlanningView } = await import("./planning.ts");
+    const { competence } = await import("../../core/time/competence.ts");
+    const alvo = await ambiente();
+    const startsOn = localDate("2026-09-01");
+    const postedToday = await createSubscription(alvo.userId, {
+      description: "Cartão já cobrado hoje", amount: cents(10_324), scheduleDay: 10,
+      cardId: alvo.cartaoId, startsOn,
+    }, AGORA);
+    const prepaid = await createSubscription(alvo.userId, {
+      description: "Conta paga antecipadamente", amount: cents(1_500), scheduleDay: 16,
+      accountId: alvo.contaId, startsOn,
+    }, AGORA);
+    const futureCard = await createSubscription(alvo.userId, {
+      description: "Próxima cobrança no cartão", amount: cents(2_200), scheduleDay: 12,
+      cardId: alvo.cartaoId, startsOn,
+    }, AGORA);
+    const futureAccount = await createSubscription(alvo.userId, {
+      description: "Próximo débito em conta", amount: cents(3_300), scheduleDay: 15,
+      accountId: alvo.contaId, startsOn,
+    }, AGORA);
+    await postDueCardSubscriptions(alvo.userId, AGORA);
+    await confirmOccurrence(alvo.userId, prepaid, competence("2026-09"), {
+      occurredOn: localDate("2026-09-09"),
+    }, AGORA);
+
+    const view = await buildPlanningView(alvo.userId, AGORA);
+    assert.ok(!view.subscriptions.upcoming.some((item) => item.recurrenceId === postedToday && item.date === "2026-09-10"));
+    assert.ok(!view.subscriptions.upcoming.some((item) => item.recurrenceId === prepaid && item.date === "2026-09-16"));
+    assert.ok(view.subscriptions.upcoming.some((item) => item.recurrenceId === futureCard && item.amountCents === 2_200));
+    assert.ok(view.subscriptions.upcoming.some((item) => item.recurrenceId === futureAccount && item.amountCents === 3_300));
+    assert.equal(view.subscriptions.next7DaysCents, 5_500, "a paid occurrence is not charged again in the pending calendar");
+    assert.equal(view.recurrences.find((item) => item.id === postedToday)?.next?.date, "2026-10-10",
+      "the next-charge table also skips the card occurrence already posted today");
+    assert.equal(view.recurrences.find((item) => item.id === prepaid)?.next?.date, "2026-10-16",
+      "prepayment advances the displayed next account charge without changing the schedule");
+    assert.ok(view.subscriptions.upcoming.some((item) => item.recurrenceId === postedToday && item.date === "2026-10-10"),
+      "settlement applies to the current occurrence, not to future months");
   });
 
   it("recusa assinatura sem cartão nem conta", async () => {

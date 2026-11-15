@@ -24,13 +24,15 @@ import { newId } from "../../core/kernel/id.ts";
 import { abs, cents } from "../../core/kernel/money.ts";
 import { type Competence, competenceOf } from "../../core/time/competence.ts";
 import { type LocalDate, localDate } from "../../core/time/local-date.ts";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import { getDatabase } from "../db/client.ts";
 import { categorizationRules, importBatches, importItems, transactions } from "../db/schema/index.ts";
+import { claimLease, releaseLease } from "../repositories/ai.ts";
 import { findAccount, findCard, listAccounts } from "../repositories/catalog.ts";
 import { ensureInvoices } from "../repositories/invoices.ts";
 import { saveTransactionBatch } from "../repositories/ledger.ts";
+import { findPostedSubscriptionCharges } from "./subscription-posting.ts";
 
 export type StartImportInput = {
   readonly filename: string;
@@ -196,12 +198,22 @@ async function resolveTarget(userId: string, input: StartImportInput): Promise<I
 /** Impressões digitais já conhecidas, para o veredito de duplicidade. */
 async function knownFingerprints(userId: string): Promise<Set<string>> {
   const database = getDatabase();
-  const rows = await database
-    .select({ fingerprint: transactions.fingerprint })
-    .from(transactions)
-    .where(eq(transactions.userId, userId));
+  const [rows, aliases] = await Promise.all([
+    database
+      .select({ fingerprint: transactions.fingerprint })
+      .from(transactions)
+      .where(eq(transactions.userId, userId)),
+    // The bank's fingerprint remains an alias when its line is linked to an
+    // automatic subscription charge. Never replace the occurrence's identity.
+    database
+      .select({ fingerprint: importItems.fingerprint })
+      .from(importItems)
+      .innerJoin(importBatches, eq(importBatches.id, importItems.batchId))
+      .where(and(eq(importItems.userId, userId), eq(importBatches.userId, userId),
+        eq(importBatches.status, "committed"), isNotNull(importItems.transactionId))),
+  ]);
 
-  return new Set(rows.map((row) => row.fingerprint).filter((value): value is string => Boolean(value)));
+  return new Set([...rows, ...aliases].map((row) => row.fingerprint).filter((value): value is string => Boolean(value)));
 }
 
 export async function listBatches(userId: string): Promise<BatchSummary[]> {
@@ -353,6 +365,22 @@ export async function commitBatch(
   batchId: string,
   now: Date = new Date(),
 ): Promise<{ created: number; skipped: number }> {
+  // Serialize against the card-subscription scheduler. Otherwise both paths
+  // could see no matching transaction and create the same charge concurrently.
+  const lease = await claimLease(userId, "card-subscriptions", now);
+  if (!lease) throw conflict("As assinaturas desta conta estão sendo atualizadas. Aguarde e tente confirmar a importação novamente.");
+  try {
+    return await commitBatchUnlocked(userId, batchId, now);
+  } finally {
+    await releaseLease(lease);
+  }
+}
+
+async function commitBatchUnlocked(
+  userId: string,
+  batchId: string,
+  now: Date,
+): Promise<{ created: number; skipped: number }> {
   const database = getDatabase();
   const found = await findBatch(userId, batchId);
   if (!found) throw notFound("Lote de importação", batchId);
@@ -385,8 +413,51 @@ export async function commitBatch(
     ).map((item) => [item.id, item.fingerprint]),
   );
 
+  // Resolve the entire accepted set before any financial write. A reprice or
+  // ambiguous match leaves the batch available for review, without a partial
+  // import. Installments are separate purchases and never subscription matches.
+  const linked = new Map<string, string>();
+  const linkedTransactions = new Set<string>();
+  if (card) {
+    const candidates = aceitas.filter((item) => item.kind === "expense" && !item.installment);
+    const matches = await findPostedSubscriptionCharges(userId, candidates.map((item) => ({
+        cardId: card.id, description: item.description,
+        amountCents: Math.abs(item.amountCents), occurredOn: item.occurredOn,
+    })));
+    const matchedIds = [...new Set(matches.filter((id): id is string => id !== null))];
+    const knownAliases = matchedIds.length ? await database
+      .select({ transactionId: importItems.transactionId, fingerprint: importItems.fingerprint })
+      .from(importItems)
+      .innerJoin(importBatches, eq(importBatches.id, importItems.batchId))
+      .where(and(eq(importItems.userId, userId), eq(importBatches.userId, userId),
+        eq(importBatches.status, "committed"), inArray(importItems.transactionId, matchedIds))) : [];
+    const aliasesByTransaction = new Map<string, Set<string>>();
+    for (const alias of knownAliases) {
+      if (!alias.transactionId) continue;
+      const aliases = aliasesByTransaction.get(alias.transactionId) ?? new Set<string>();
+      aliases.add(alias.fingerprint);
+      aliasesByTransaction.set(alias.transactionId, aliases);
+    }
+    for (const [index, item] of candidates.entries()) {
+      const transactionId = matches[index];
+      if (transactionId) {
+        if (linkedTransactions.has(transactionId)) {
+          throw conflict("Mais de uma linha do extrato corresponde à mesma cobrança de assinatura. Confira se houve cobrança em dobro antes de confirmar o lote.");
+        }
+        // A second unknown bank identity might be a genuine double charge.
+        // Compare the complete fingerprint, never FITID alone: issuers reuse it.
+        const aliases = aliasesByTransaction.get(transactionId);
+        if (aliases?.size && !aliases.has(fingerprintById.get(item.id) ?? "")) {
+          throw conflict("Esta assinatura já foi vinculada a uma cobrança bancária diferente. Confira se a nova linha é repetição ou cobrança em dobro antes de confirmar o lote.");
+        }
+        linked.set(item.id, transactionId);
+        linkedTransactions.add(transactionId);
+      }
+    }
+  }
+
   const competences = new Set<Competence>();
-  const lote = aceitas.map((item) => {
+  const lote = aceitas.filter((item) => !linked.has(item.id)).map((item) => {
     const competence = card
       ? competenceForPurchase(card, item.occurredOn)
       : competenceOf(item.occurredOn);
@@ -424,11 +495,15 @@ export async function commitBatch(
     await ensureInvoices({ userId, cardId: card.id, cycle: card, competences: [...competences] });
   }
 
-  await saveTransactionBatch(lote.map(({ transaction, options }) => ({ transaction, options })));
+  if (lote.length) await saveTransactionBatch(lote.map(({ transaction, options }) => ({ transaction, options })));
 
   await database.batch([
     ...lote.map(({ itemId, transaction }) =>
       database.update(importItems).set({ transactionId: transaction.id }).where(eq(importItems.id, itemId)),
+    ),
+    ...[...linked].map(([itemId, transactionId]) =>
+      database.update(importItems).set({ transactionId, verdict: "duplicado", decision: "ignorar" })
+        .where(and(eq(importItems.userId, userId), eq(importItems.batchId, batchId), eq(importItems.id, itemId))),
     ),
     database
       .update(importBatches)

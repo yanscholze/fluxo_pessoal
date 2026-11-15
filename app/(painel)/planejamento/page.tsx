@@ -1,6 +1,7 @@
 import { buildDashboard } from "../../../server/services/dashboard.ts";
 import { buildPlanningView } from "../../../server/services/planning.ts";
 import { currentUser } from "../../auth-context.ts";
+import { CommitmentTabs } from "../../ui/commitment-tabs.tsx";
 import { money } from "../../ui/format.ts";
 import { Gauge, TrendingDown, TrendingUp } from "../../ui/icons.tsx";
 import { MetricTile, PanelHeading } from "../../ui/mesa.tsx";
@@ -37,6 +38,7 @@ export default async function Compromissos() {
 
   return (
     <div className="content-area">
+      <CommitmentTabs active="recorrencias" />
       <div className="grid gap-5 md:grid-cols-3">
         <MetricTile
           tom="positive"

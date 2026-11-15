@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { NotificationCenter } from "./ai/notification-center.tsx";
 import { BottomNav } from "./bottom-nav.tsx";
+import { COMMITMENT_AREAS } from "./commitment-areas.ts";
 import { InstallApp } from "./install-app.tsx";
 import { Dialog } from "./dialog.tsx";
 import { Input } from "./controls.tsx";
@@ -48,9 +49,8 @@ export const NAV: readonly NavGroup[] = [
 const SETTINGS: NavItem = { href: "/configuracoes", label: "Configurações", icon: Settings };
 const ATALHOS = [
   ...NAV.flatMap((grupo) => grupo.items), SETTINGS,
-  { href: "/planejamento?aba=parcelamentos", label: "Parcelamentos", icon: Repeat },
-  { href: "/planejamento?aba=recorrencias", label: "Recorrências", icon: Repeat },
-  { href: "/planejamento?aba=assinaturas", label: "Assinaturas", icon: Repeat },
+  ...COMMITMENT_AREAS.filter((area) => area.href !== "/planejamento").map((area) => ({ ...area, icon: Repeat })),
+  { href: "/planejamento", label: "Recorrências", icon: Repeat },
   { href: "/patrimonio?aba=investimentos", label: "Investimentos", icon: BarChart3 },
   { href: "/patrimonio?aba=metas", label: "Metas", icon: BarChart3 },
   { href: "/patrimonio?aba=saude", label: "Saúde financeira", icon: BarChart3 },
@@ -73,7 +73,8 @@ export function Shell({ userName, children }: { userName: string; children: Reac
     setBuscaAberta(false);
   }
   const grupo = NAV.find((g) => g.items.some((item) => rotaAtiva(item.href, pathname)));
-  const atual = grupo?.items.find((item) => rotaAtiva(item.href, pathname)) ?? SETTINGS;
+  const subarea = COMMITMENT_AREAS.find((area) => area.href === pathname && area.href !== "/planejamento");
+  const atual = subarea ? { ...subarea, icon: Repeat } : grupo?.items.find((item) => rotaAtiva(item.href, pathname)) ?? SETTINGS;
   const resultados = ATALHOS.filter((item) => normalizar(item.label).includes(normalizar(consulta)));
 
   useEffect(() => {
@@ -172,7 +173,10 @@ export function Shell({ userName, children }: { userName: string; children: Reac
   );
 }
 function normalizar(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
-function rotaAtiva(href: string, pathname: string) { return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`); }
+function rotaAtiva(href: string, pathname: string) {
+  if (href === "/planejamento" && COMMITMENT_AREAS.some((area) => pathname === area.href)) return true;
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
 function ItemDeNavegacao({ item, pathname }: { item: NavItem; pathname: string }) {
   const ativo = rotaAtiva(item.href, pathname);
   const Icone = item.icon;

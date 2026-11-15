@@ -165,6 +165,12 @@ export const categorizationRules = sqliteTable(
  * que torna a execução **idempotente**: a chave natural é
  * `(recurrence_id, competence)`, então rodar duas vezes não duplica nada.
  */
+export const subscriptionPostingCheckpoints = sqliteTable("subscription_posting_checkpoints", {
+  userId: text("user_id").primaryKey().notNull().references(() => users.id, { onDelete: "cascade" }),
+  checkedAt: text("checked_at").notNull(),
+  lastRuleId: text("last_rule_id"),
+});
+
 export const recurrenceRuns = sqliteTable(
   "recurrence_runs",
   {
